@@ -1,0 +1,12 @@
+.git
+.gitignore
+__pycache__
+*.pyc
+.venv
+build/
+dist/
+*.spec
+test_*.py
+DEPLOY.md
+HOSTING.md
+README.md

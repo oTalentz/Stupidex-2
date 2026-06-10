@@ -9,10 +9,15 @@ requires-python = ">=3.11"
 dependencies = [
     "textual",
     "litellm",
+    "flask",
 ]
 
 [project.scripts]
 stupidex = "stupidex.main:main"
+stupidex-web = "stupidex.web:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+stupidex = ["static/**/*", "*.tcss"]

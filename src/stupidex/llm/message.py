@@ -1,23 +1,22 @@
+"""Core message and tool call data classes."""
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from rich.markdown import Markdown
-from rich.panel import Panel
 
-
-class MessageRole(Enum):
+class MessageRole(str, Enum):
+    SYSTEM = "system"
     USER = "user"
     ASSISTANT = "assistant"
-    SYSTEM = "system"
     TOOL = "tool"
 
 
-class MessageType(Enum):
+class MessageType(str, Enum):
     TEXT = "text"
     THINKING = "thinking"
     TOOL_CALL = "tool_call"
     TOOL_RESULT = "tool_result"
+
 
 @dataclass
 class Usage:
@@ -25,29 +24,54 @@ class Usage:
     completion_tokens: int
     total_tokens: int
 
+    def to_dict(self) -> dict:
+        return {
+            "prompt_tokens": self.prompt_tokens,
+            "completion_tokens": self.completion_tokens,
+            "total_tokens": self.total_tokens,
+        }
+
+
 @dataclass
-class Message:
+class ToolCall:
+    id: str
+    name: str
+    arguments: str
+    result: str | None = None
+    error: bool = False
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "arguments": self.arguments,
+            "error": self.error,
+        }
+
+
+@dataclass
+class ChatMessage:
+    """A message in a session, stored in the DB and exchanged with the LLM."""
     role: MessageRole
-    content: str
+    content: str = ""
     type: MessageType = MessageType.TEXT
+    tool_calls: list[ToolCall] = field(default_factory=list)
+    tool_call_id: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
     usage: Usage | None = None
 
-    def to_dict(self) -> dict[str, str]:
-        """Convert to LLM API format."""
-        return {"role": self.role.value, "content": self.content}
-
-    def render(self) -> Panel | Markdown:
-        """Render for display."""
-        match self.type:
-            case MessageType.THINKING:
-                return Panel(Markdown(f"*{self.content}*"), style="dim")
-            case MessageType.TOOL_CALL:
-                tool = self.metadata.get("tool_name", "unknown")
-                return Panel(Markdown(f"`{tool}`"), title="Tool Call", style="blue")
-            case MessageType.TOOL_RESULT:
-                return Panel(self.content, title="Tool Result", style="blue")
-            case _:
-                if self.role == MessageRole.USER:
-                    return Panel(Markdown(self.content), style="green")
-                return Panel(Markdown(self.content)) # Default style for assistant and system messages
+    def to_litellm(self) -> dict[str, Any]:
+        """OpenAI-compatible dict for litellm."""
+        msg: dict[str, Any] = {"role": self.role.value, "content": self.content}
+        if self.tool_calls:
+            msg["tool_calls"] = [
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {"name": tc.name, "arguments": tc.arguments},
+                }
+                for tc in self.tool_calls
+            ]
+        if self.role == MessageRole.TOOL and self.tool_call_id:
+            msg["tool_call_id"] = self.tool_call_id
+        return msg

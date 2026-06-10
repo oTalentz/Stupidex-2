@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stupidex</title>
+    <link rel="stylesheet" href="/static/style.css" />
+    <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.10.0/lib/core.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.10.0/lib/languages/python.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.10.0/lib/languages/javascript.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.10.0/lib/languages/json.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.10.0/lib/languages/bash.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.10.0/styles/github-dark.min.css" />
+    <script>
+        // Apply theme before CSS loads to avoid flash
+        (function() {
+            try {
+                var t = localStorage.getItem('stupidex-theme');
+                if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
+            } catch (e) {}
+        })();
+    </script>
+    <script>hljs.configure({ ignoreUnescapedHTML: true });</script>
+</head>
+<body>
+    <div id="app">
+        <aside id="sidebar">
+            <div class="sidebar-header">
+                <button id="new-chat-btn" class="primary-btn block">
+                    <span class="plus">+</span> Nova conversa
+                </button>
+                <div class="search-wrap">
+                    <input id="search-input" type="text" placeholder="Buscar conversas…" />
+                </div>
+            </div>
+            <nav id="session-list" class="session-list" aria-label="Conversas"></nav>
+            <div class="sidebar-footer">
+                <button id="open-settings" class="ghost-btn block">
+                    <span class="icon">⚙</span> Configurações
+                </button>
+            </div>
+        </aside>
+
+        <!-- Workspace panel (replaces old folders) -->
+        <aside id="workspace-panel" class="workspace-panel">
+            <div class="panel-header">
+                <span class="panel-title">Workspace</span>
+                <button id="ws-refresh" class="icon-btn small" title="Atualizar">⟳</button>
+            </div>
+            <div id="workspace-list" class="workspace-list"></div>
+            <div class="panel-divider"></div>
+            <div id="tree-container" class="tree-container"></div>
+            <div class="panel-divider"></div>
+            <div class="panel-actions">
+                <button id="upload-btn" class="ghost-btn block" title="Enviar arquivos">
+                    <span>📤</span> Upload
+                </button>
+                <button id="clone-btn" class="ghost-btn block" title="Clonar repositório Git">
+                    <span>⎘</span> Git clone
+                </button>
+                <button id="new-ws-btn" class="ghost-btn block" title="Criar workspace vazio">
+                    <span>+</span> Novo
+                </button>
+            </div>
+            <input id="file-input" type="file" multiple webkitdirectory style="display:none" />
+        </aside>
+
+        <main id="main">
+            <header id="topbar">
+                <div class="topbar-left">
+                    <span class="logo">S</span>
+                    <span class="title" id="session-title">Stupidex</span>
+                </div>
+                <div class="topbar-right">
+                    <button id="theme-toggle" class="icon-btn" title="Alternar tema" aria-label="Alternar tema">
+                        <span class="theme-icon-dark">☾</span>
+                        <span class="theme-icon-light">☀</span>
+                    </button>
+                    <span id="provider-badge" class="badge">deepseek-v4-flash</span>
+                    <span id="model-badge" class="badge subtle">deepseek-v4-flash</span>
+                </div>
+            </header>
+
+            <section id="messages" class="messages"></section>
+
+            <footer id="composer">
+                <div id="status" class="status hidden"></div>
+                <form id="form" autocomplete="off">
+                    <textarea id="input" placeholder="Pergunte algo ou peça uma alteração…  (Shift+Enter para nova linha)" rows="1"></textarea>
+                    <div class="composer-actions">
+                        <button id="stop-btn" type="button" class="icon-btn hidden" title="Parar">■</button>
+                        <button id="send-btn" type="submit" class="primary-btn" title="Enviar">
+                            <span>Enviar</span>
+                            <span class="arrow">↑</span>
+                        </button>
+                    </div>
+                </form>
+                <div class="composer-hint">Stupidex pode cometer erros. Verifique informações importantes.</div>
+            </footer>
+        </main>
+    </div>
+
+    <!-- Drop overlay -->
+    <div id="drop-overlay" class="drop-overlay hidden">
+        <div class="drop-box">
+            <div class="drop-icon">📂</div>
+            <div class="drop-text">Solte arquivos ou pastas aqui</div>
+        </div>
+    </div>
+
+    <!-- File viewer modal -->
+    <div id="file-modal" class="modal hidden" role="dialog" aria-modal="true">
+        <div class="modal-content" style="max-width:900px">
+            <div class="modal-header">
+                <h2 id="file-modal-title">file.txt</h2>
+                <button id="close-file" class="icon-btn" aria-label="Fechar">&times;</button>
+            </div>
+            <div class="modal-body" style="max-height:70vh">
+                <pre><code id="file-modal-content"></code></pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- Git clone modal -->
+    <div id="clone-modal" class="modal hidden" role="dialog" aria-modal="true">
+        <div class="modal-content" style="max-width:520px">
+            <div class="modal-header">
+                <h2>Clonar repositório Git</h2>
+                <button id="close-clone" class="icon-btn" aria-label="Fechar">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="section-hint">Cole a URL HTTPS ou SSH do repositório. Exemplo: <code>https://github.com/usuario/projeto.git</code></p>
+                <label class="field">
+                    <span class="field-label">URL</span>
+                    <input id="clone-url" type="text" placeholder="https://github.com/usuario/projeto.git" />
+                </label>
+                <label class="field">
+                    <span class="field-label">Branch <span class="hint">(opcional)</span></span>
+                    <input id="clone-branch" type="text" placeholder="main" />
+                </label>
+                <label class="field">
+                    <span class="field-label">Nome do workspace <span class="hint">(opcional)</span></span>
+                    <input id="clone-name" type="text" placeholder="meu-projeto" />
+                </label>
+                <div id="clone-status" class="field-hint"></div>
+            </div>
+            <div class="modal-footer">
+                <button id="cancel-clone" class="ghost-btn">Cancelar</button>
+                <button id="confirm-clone" class="primary-btn">Clonar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings modal -->
+    <div id="settings-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="settings-title">Configurações</h2>
+                <button id="close-settings" class="icon-btn" aria-label="Fechar">&times;</button>
+            </div>
+            <div class="modal-body">
+                <section class="settings-section">
+                    <h3 class="section-title">Modelo</h3>
+                    <label class="field">
+                        <span class="field-label">Provedor</span>
+                        <select id="provider-select"></select>
+                    </label>
+                    <label class="field" id="api-key-field">
+                        <span class="field-label">
+                            API Key
+                            <span class="hint" id="api-key-hint"></span>
+                        </span>
+                        <div class="api-key-row">
+                            <input id="api-key-input" type="password" placeholder="sk-..." autocomplete="off" />
+                            <button type="button" id="toggle-key-visibility" class="ghost-btn">mostrar</button>
+                        </div>
+                        <span class="field-hint" id="api-key-status"></span>
+                    </label>
+                    <label class="field">
+                        <span class="field-label">Modelo customizado <span class="hint">(opcional)</span></span>
+                        <input id="model-input" type="text" placeholder="ex.: deepseek-v4-pro" autocomplete="off" />
+                    </label>
+                </section>
+            </div>
+            <div class="modal-footer">
+                <button id="cancel-settings" class="ghost-btn">Fechar</button>
+                <button id="save-settings" class="primary-btn">Salvar</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
