@@ -275,6 +275,8 @@ async function loadMessages(sid) {
 }
 
 function renderWelcome() {
+    const loading = document.querySelector(".messages-loading");
+    if (loading) loading.remove();
     els.messages.innerHTML = "";
     const wrap = document.createElement("div");
     wrap.className = "welcome";
@@ -335,6 +337,8 @@ function renderWelcome() {
 }
 
 function renderMessages(msgs) {
+    const loading = document.querySelector(".messages-loading");
+    if (loading) loading.remove();
     els.messages.innerHTML = "";
     if (!msgs.length) { renderWelcome(); return; }
     const inner = document.createElement("div");
@@ -1517,7 +1521,11 @@ async function bootApp() {
 (async function init() {
     if (await checkAuth()) {
         showApp();
-        await bootApp();
+        try {
+            await bootApp();
+        } catch (e) {
+            renderWelcome();
+        }
     } else {
         showLogin();
     }
