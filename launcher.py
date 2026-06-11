@@ -85,10 +85,6 @@ def _run_server(app, host: str, port: int) -> None:
             from gunicorn.app.wsgiapp import WSGIApplication
             from gunicorn import config as gconfig
 
-            # gunicorn's Config() has had multiple breaking changes across
-            # versions (kwargs removed, then set() semantics changed). The
-            # most reliable form is to instantiate with no args, then use
-            # set() — this works on every gunicorn >=19.
             cfg = gconfig.Config()
             cfg.set("bind", f"{host}:{port}")
             cfg.set("workers", 1)
@@ -96,27 +92,16 @@ def _run_server(app, host: str, port: int) -> None:
             cfg.set("timeout", 120)
             cfg.set("accesslog", "-")
             cfg.set("errorlog", "-")
+            # gunicorn's WSGIApplication calls load_config() which checks for
+            # self.app_uri / self.cfg.wsgi_app. We set the *importable* form
+            # here so gunicorn can import our already-loaded app.
+            cfg.set("wsgi_app", "stupidex.web:app")
+            cfg.set("default_proc_name", "stupidex")
             logging.info("Using gunicorn on %s:%d", host, port)
             WSGIApplication(cfg).run()
             return
         except (ImportError, TypeError) as e:
-            logging.warning("gunicorn not usable via WSGIApplication (%s), trying direct run()", e)
-            # Last-ditch: use the legacy gunicorn.app.run() entrypoint which
-            # accepts kwargs in all recent versions.
-            try:
-                from gunicorn.app import run as gunicorn_run  # type: ignore
-                sys.argv = [
-                    "gunicorn",
-                    f"--bind={host}:{port}",
-                    "--workers=1",
-                    "--threads=8",
-                    "--timeout=120",
-                    "stupidex.web:app",
-                ]
-                gunicorn_run.run()
-                return
-            except Exception as e2:
-                logging.error("gunicorn completely failed: %s", e2)
+            logging.warning("gunicorn not usable (%s), falling back", e)
 
     # Try waitress (works on Windows + Linux)
     try:
