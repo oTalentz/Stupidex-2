@@ -207,12 +207,15 @@ def add_cors(resp):
     resp.headers.setdefault("Referrer-Policy", "no-referrer")
     resp.headers.setdefault("X-XSS-Protection", "0")
     # CSP: same-origin by default; allow marked/highlight.js CDNs explicitly.
+    # NOTE: 'unsafe-inline' on script-src is required for the OAuth callback
+    # inline script that saves the token to localStorage. No user-generated
+    # content is ever placed in inline scripts, so this is safe.
     if "Content-Security-Policy" not in resp.headers:
         csp = (
             "default-src 'self'; "
             "img-src 'self' data: https:; "
             "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
-            "script-src 'self' https://cdn.jsdelivr.net; "
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
             "font-src 'self' data:; "
             "connect-src 'self'"
         )
