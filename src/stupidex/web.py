@@ -214,9 +214,9 @@ def add_cors(resp):
         csp = (
             "default-src 'self'; "
             "img-src 'self' data: https:; "
-            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; "
             "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
-            "font-src 'self' data:; "
+            "font-src 'self' data: https://cdn.jsdelivr.net https://fonts.gstatic.com; "
             "connect-src 'self'"
         )
         resp.headers["Content-Security-Policy"] = csp
