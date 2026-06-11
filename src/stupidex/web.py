@@ -36,6 +36,7 @@ Endpoints:
   GET  /api/workspaces/<id>/tree         → file tree
   GET  /api/workspaces/<id>/file?path=   → file content
 """
+
 import io
 import ipaddress
 import json
@@ -56,26 +57,35 @@ from pathlib import Path
 
 from flask import Flask, Response, jsonify, redirect, request, send_from_directory
 
-from . import db, workspaces as workspaces_module
+from . import db
+from . import workspaces as workspaces_module
 from .config import DATA_DIR, has_api_key, load_config, update_config
 from .llm.handle_input import build_context, stream_response
 from .llm.providers import DEFAULT_FALLBACK_ID, PROVIDERS, list_providers
 
 app = Flask(__name__, static_folder="static")
-app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50 MB upload limit (DoS hardening)
+app.config["MAX_CONTENT_LENGTH"] = (
+    50 * 1024 * 1024
+)  # 50 MB upload limit (DoS hardening)
 
 # CORS: when STUPIDEX_CORS is unset, allow only same-origin (no header).
 # Set to a comma-separated list of origins or "*" to allow any.
 _cors_env = os.environ.get("STUPIDEX_CORS", "").strip()
-CORS_ORIGINS = [o.strip() for o in _cors_env.split(",") if o.strip()] if _cors_env else []
+CORS_ORIGINS = (
+    [o.strip() for o in _cors_env.split(",") if o.strip()] if _cors_env else []
+)
 
 # Google OAuth
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
 GOOGLE_REDIRECT_URI = os.environ.get(
     "GOOGLE_REDIRECT_URI",
-    (os.environ.get("FRONTEND_URL") or os.environ.get("RENDER_EXTERNAL_URL") or "http://localhost:" + os.environ.get("PORT", "5000"))
-    + "/api/auth/google/callback"
+    (
+        os.environ.get("FRONTEND_URL")
+        or os.environ.get("RENDER_EXTERNAL_URL")
+        or "http://localhost:" + os.environ.get("PORT", "5000")
+    )
+    + "/api/auth/google/callback",
 )
 _GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 _GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -84,6 +94,8 @@ _GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 # Session-secret used to sign the OAuth `state` cookie (CSRF defense).
 # Auto-generated on first run and persisted to the data dir.
 _SECRET_FILE = DATA_DIR / ".flask_secret"
+
+
 def _load_or_create_secret() -> bytes:
     try:
         if _SECRET_FILE.exists():
@@ -99,6 +111,7 @@ def _load_or_create_secret() -> bytes:
         pass
     return secret
 
+
 app.secret_key = _load_or_create_secret()
 
 # In-memory rate limiter (per IP+user). Sliding window.
@@ -106,10 +119,10 @@ _RL_LOCK = threading.Lock()
 _RL_BUCKETS: dict[str, list[float]] = defaultdict(list)
 _RL_RULES: list[tuple[str, int, float]] = [
     # (name, max_requests, window_seconds)
-    ("auth",     10,  60.0),   # /api/auth/*   — login/register/logout
-    ("chat",     60,  60.0),   # /chat, /regenerate, /stop
-    ("upload",   20,  60.0),   # upload, clone
-    ("default", 240,  60.0),   # everything else
+    ("auth", 10, 60.0),  # /api/auth/*   — login/register/logout
+    ("chat", 60, 60.0),  # /chat, /regenerate, /stop
+    ("upload", 20, 60.0),  # upload, clone
+    ("default", 240, 60.0),  # everything else
 ]
 
 
@@ -151,12 +164,14 @@ _OAUTH_STATE_COOKIE = "stupidex_oauth_state"
 # Auth decorator
 # ============================================================
 
+
 def login_required(fn):
     """Validate Bearer token header against db.validate_token().
 
     On success, injects ``request.user`` as a ``db.User`` dataclass.
     Returns 401 JSON on missing/invalid/expired token.
     """
+
     @wraps(fn)
     def wrapper(*args, **kwargs):
         raw = request.headers.get("Authorization", "")
@@ -166,11 +181,13 @@ def login_required(fn):
             return jsonify({"error": "unauthorized"}), 401
         request.user = user
         return fn(*args, **kwargs)
+
     return wrapper
 
 
 def rate_limited(bucket: str):
     """Decorator: enforce rate limit on a route."""
+
     def deco(fn):
         @wraps(fn)
         def wrapper(*args, **kwargs):
@@ -179,13 +196,98 @@ def rate_limited(bucket: str):
                 resp.headers["Retry-After"] = "60"
                 return resp, 429
             return fn(*args, **kwargs)
+
         return wrapper
+
     return deco
+
+
+# ============================================================
+# IP Whitelisting for SquareCloud and private instances
+# ============================================================
+
+# Load allowed IPs from environment variable (comma-separated)
+_IP_WHITELIST_ENV = os.environ.get("STUPIDEX_ALLOWED_IPS", "").strip()
+_IP_WHITELIST = (
+    [ip.strip() for ip in _IP_WHITELIST_ENV.split(",") if ip.strip()]
+    if _IP_WHITELIST_ENV
+    else []
+)
+
+# If SquareCloud, automatically allow its IP ranges
+_SQUARECLOUD_PROXY_IPS = [
+    "167.248.133.0/24",
+    "167.248.134.0/24",
+    "167.248.135.0/24",
+]
+
+
+def _is_ip_allowed(remote_addr: str) -> bool:
+    """Check if the given IP address is in the whitelist or SquareCloud ranges."""
+    if not _IP_WHITELIST and not _SQUARECLOUD_PROXY_IPS:
+        return True  # No whitelist configured = allow all
+
+    try:
+        ip = ipaddress.ip_address(remote_addr)
+
+        # Check explicit whitelist
+        for allowed in _IP_WHITELIST:
+            try:
+                if ipaddress.ip_address(allowed) == ip:
+                    return True
+                # Check if it's a network
+                network = ipaddress.ip_network(allowed, strict=False)
+                if ip in network:
+                    return True
+            except ValueError:
+                # If it's not a valid IP/network, skip
+                continue
+
+        # Check SquareCloud proxy ranges
+        for cidr in _SQUARECLOUD_PROXY_IPS:
+            network = ipaddress.ip_network(cidr, strict=False)
+            if ip in network:
+                return True
+
+        return False
+    except ValueError:
+        # Invalid IP address format
+        return False
+
+
+# ============================================================
+# Global IP Whitelisting (applied to all API routes)
+# ============================================================
+
+
+@app.before_request
+def check_ip_whitelist():
+    """Global IP whitelist check for all requests."""
+    # Skip for static files and root
+    if request.path.startswith("/static/"):
+        return
+    if request.path == "/":
+        return
+
+    remote_addr = request.remote_addr or ""
+    forwarded_for = request.headers.get("X-Forwarded-For", "")
+    real_ip = request.headers.get("X-Real-IP", "")
+
+    if forwarded_for:
+        client_ip = forwarded_for.split(",")[0].strip()
+    elif real_ip:
+        client_ip = real_ip.strip()
+    else:
+        client_ip = remote_addr
+
+    if not _is_ip_allowed(client_ip):
+        return jsonify({"error": "IP not allowed"}), 403
 
 
 # ============================================================
 # CORS + security headers
 # ============================================================
+
 
 @app.after_request
 def add_cors(resp):
@@ -198,7 +300,9 @@ def add_cors(resp):
             resp.headers["Vary"] = "Origin"
             resp.headers["Access-Control-Allow-Credentials"] = "true"
         resp.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
-        resp.headers["Access-Control-Allow-Methods"] = "GET, POST, PATCH, DELETE, OPTIONS"
+        resp.headers["Access-Control-Allow-Methods"] = (
+            "GET, POST, PATCH, DELETE, OPTIONS"
+        )
         resp.headers["Access-Control-Max-Age"] = "600"
 
     # Security headers (no X-Frame-Options to keep iframe embedding iframes possible,
@@ -237,6 +341,7 @@ def preflight(_):
 # ============================================================
 # Static / health
 # ============================================================
+
 
 @app.route("/")
 def index():
@@ -278,24 +383,31 @@ def health():
 # Google OAuth
 # ============================================================
 
+
 @app.route("/api/auth/google", methods=["GET"])
 @rate_limited("auth")
 def auth_google():
     if not GOOGLE_CLIENT_ID:
-        return jsonify({"error": "Google OAuth not configured (set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)"}), 501
+        return jsonify(
+            {
+                "error": "Google OAuth not configured (set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)"
+            }
+        ), 501
 
     state = secrets.token_urlsafe(24)
     # CSRF: bind the state to a signed cookie. Callback must match.
     nonce = secrets.token_urlsafe(16)
-    params = urllib.parse.urlencode({
-        "client_id": GOOGLE_CLIENT_ID,
-        "redirect_uri": GOOGLE_REDIRECT_URI,
-        "response_type": "code",
-        "scope": "openid email profile",
-        "state": f"{state}.{nonce}",
-        "access_type": "offline",
-        "prompt": "select_account",
-    })
+    params = urllib.parse.urlencode(
+        {
+            "client_id": GOOGLE_CLIENT_ID,
+            "redirect_uri": GOOGLE_REDIRECT_URI,
+            "response_type": "code",
+            "scope": "openid email profile",
+            "state": f"{state}.{nonce}",
+            "access_type": "offline",
+            "prompt": "select_account",
+        }
+    )
     resp = redirect(f"{_GOOGLE_AUTH_URL}?{params}")
     # HttpOnly, SameSite=Lax — the cookie survives the OAuth redirect.
     resp.set_cookie(
@@ -323,27 +435,38 @@ def auth_google_callback():
     # CSRF: validate `state` against the cookie (constant-time compare).
     state_qs = request.args.get("state", "")
     state_cookie = request.cookies.get(_OAUTH_STATE_COOKIE, "")
-    if not state_qs or not state_cookie or not secrets.compare_digest(state_qs, state_cookie):
+    if (
+        not state_qs
+        or not state_cookie
+        or not secrets.compare_digest(state_qs, state_cookie)
+    ):
         return jsonify({"error": "invalid OAuth state (possible CSRF)"}), 400
 
     # Exchange code for access token
     try:
         token_req = urllib.request.Request(
             _GOOGLE_TOKEN_URL,
-            data=urllib.parse.urlencode({
-                "client_id": GOOGLE_CLIENT_ID,
-                "client_secret": GOOGLE_CLIENT_SECRET,
-                "code": code,
-                "grant_type": "authorization_code",
-                "redirect_uri": GOOGLE_REDIRECT_URI,
-            }).encode(),
+            data=urllib.parse.urlencode(
+                {
+                    "client_id": GOOGLE_CLIENT_ID,
+                    "client_secret": GOOGLE_CLIENT_SECRET,
+                    "code": code,
+                    "grant_type": "authorization_code",
+                    "redirect_uri": GOOGLE_REDIRECT_URI,
+                }
+            ).encode(),
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
         with urllib.request.urlopen(token_req, timeout=10) as resp:
             token_data = json.loads(resp.read())
         access_token = token_data.get("access_token")
         if not access_token:
-            return jsonify({"error": "failed to exchange code", "detail": token_data.get("error_description", "")}), 400
+            return jsonify(
+                {
+                    "error": "failed to exchange code",
+                    "detail": token_data.get("error_description", ""),
+                }
+            ), 400
     except Exception as e:
         return jsonify({"error": f"token exchange failed: {e}"}), 500
 
@@ -439,6 +562,7 @@ def auth_google_callback():
 # Auth endpoints (email/password)
 # ============================================================
 
+
 @app.route("/api/auth/register", methods=["POST"])
 @rate_limited("auth")
 def auth_register():
@@ -486,6 +610,7 @@ def auth_me():
 # Providers / Config
 # ============================================================
 
+
 @app.route("/api/providers", methods=["GET"])
 @login_required
 def providers():
@@ -496,13 +621,15 @@ def providers():
 @login_required
 def get_config():
     cfg = load_config()
-    return jsonify({
-        "provider": cfg.provider,
-        "model": cfg.model,
-        "custom_model": cfg.custom_model,
-        "has_api_key": bool(cfg.api_key),
-        "base_url": cfg.base_url,
-    })
+    return jsonify(
+        {
+            "provider": cfg.provider,
+            "model": cfg.model,
+            "custom_model": cfg.custom_model,
+            "has_api_key": bool(cfg.api_key),
+            "base_url": cfg.base_url,
+        }
+    )
 
 
 @app.route("/api/config", methods=["POST"])
@@ -522,31 +649,43 @@ def set_config():
     if api_key:
         update["api_key"] = api_key.strip()
     elif data.get("clear_api_key"):
-        from .config import load_config as _load, save_config as _save
+        from .config import load_config as _load
+        from .config import save_config as _save
+
         c = _load()
         c.pop("api_key", None)
         _save(c)
 
     cfg = update_config(**update)
-    return jsonify({
-        "ok": True,
-        "has_api_key": bool(cfg.api_key),
-        "provider": cfg.provider,
-        "model": cfg.model,
-        "custom_model": cfg.custom_model,
-    })
+    return jsonify(
+        {
+            "ok": True,
+            "has_api_key": bool(cfg.api_key),
+            "provider": cfg.provider,
+            "model": cfg.model,
+            "custom_model": cfg.custom_model,
+        }
+    )
 
 
 # ============================================================
 # Sessions
 # ============================================================
 
+
 @app.route("/api/sessions", methods=["GET"])
 @login_required
 @rate_limited("default")
 def sessions_list():
     include_archived = request.args.get("include_archived") == "1"
-    return jsonify([s.to_dict() for s in db.list_sessions(request.user.id, include_archived=include_archived)])
+    return jsonify(
+        [
+            s.to_dict()
+            for s in db.list_sessions(
+                request.user.id, include_archived=include_archived
+            )
+        ]
+    )
 
 
 @app.route("/api/sessions/search", methods=["GET"])
@@ -574,7 +713,9 @@ def sessions_create():
     # Per-user cap: 200 sessions
     existing = db.list_sessions(request.user.id, include_archived=True)
     if len(existing) >= 200:
-        return jsonify({"error": "session limit reached (200). Delete some first."}), 400
+        return jsonify(
+            {"error": "session limit reached (200). Delete some first."}
+        ), 400
     s = db.create_session(request.user.id, provider, model)
     return jsonify(s.to_dict())
 
@@ -648,12 +789,27 @@ def session_export(sid):
     # Sanitize title for filename
     safe_title = re.sub(r"[^\w\-\. ]+", "_", s.title or "session")[:80] or "session"
     if fmt == "json":
-        body = json.dumps({"session": s.to_dict(), "messages": [m.to_dict() for m in msgs]},
-                          indent=2, ensure_ascii=False)
-        return Response(body, mimetype="application/json",
-                        headers={"Content-Disposition": f'attachment; filename="{safe_title}.json"'})
+        body = json.dumps(
+            {"session": s.to_dict(), "messages": [m.to_dict() for m in msgs]},
+            indent=2,
+            ensure_ascii=False,
+        )
+        return Response(
+            body,
+            mimetype="application/json",
+            headers={
+                "Content-Disposition": f'attachment; filename="{safe_title}.json"'
+            },
+        )
     # Markdown
-    out = [f"# {s.title}", "", f"**Provider:** {s.provider}  ", f"**Model:** {s.model}  ", f"**Created:** {time.ctime(s.created_at)}", ""]
+    out = [
+        f"# {s.title}",
+        "",
+        f"**Provider:** {s.provider}  ",
+        f"**Model:** {s.model}  ",
+        f"**Created:** {time.ctime(s.created_at)}",
+        "",
+    ]
     for m in msgs:
         if m.role == "system" and m.metadata.get("error"):
             continue
@@ -674,7 +830,9 @@ def session_export(sid):
                     if tc.get("arguments"):
                         out.append("```json")
                         try:
-                            out.append(json.dumps(json.loads(tc["arguments"]), indent=2))
+                            out.append(
+                                json.dumps(json.loads(tc["arguments"]), indent=2)
+                            )
                         except Exception:
                             out.append(tc["arguments"])
                         out.append("```")
@@ -683,8 +841,11 @@ def session_export(sid):
                 out.append(m.content)
                 out.append("")
     body = "\n".join(out)
-    return Response(body, mimetype="text/markdown; charset=utf-8",
-                    headers={"Content-Disposition": f'attachment; filename="{safe_title}.md"'})
+    return Response(
+        body,
+        mimetype="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{safe_title}.md"'},
+    )
 
 
 # ============================================================
@@ -750,7 +911,9 @@ def session_regenerate(sid):
     ctx.cancel_event = threading.Event()
     _set_stream(sid, ctx.cancel_event)
     try:
-        return _stream_response(sid, user_text, ctx, regenerate_user_msg_id=last_user.id)
+        return _stream_response(
+            sid, user_text, ctx, regenerate_user_msg_id=last_user.id
+        )
     finally:
         _pop_stream(sid, ctx.cancel_event)
 
@@ -763,6 +926,7 @@ def session_chat(sid):
         return _session_chat_impl(sid)
     except Exception as exc:
         import traceback
+
         tb = traceback.format_exc(limit=10)
         # Don't leak traceback to the client in production — log only.
         app.logger.error(f"session_chat fatal: {exc}\n{tb}")
@@ -783,10 +947,12 @@ def _session_chat_impl(sid: str) -> Response:
 
     user_api_key = request.user.api_key or data.get("api_key")
     if not user_api_key and not has_api_key():
-        return jsonify({
-            "error": "no LLM API key configured. Set DEEPSEEK_API_KEY in the server env, "
-                     "or add your own key in Settings."
-        }), 503
+        return jsonify(
+            {
+                "error": "no LLM API key configured. Set DEEPSEEK_API_KEY in the server env, "
+                "or add your own key in Settings."
+            }
+        ), 503
     ctx = build_context(
         provider_id=data.get("provider") or session.provider,
         api_key_override=user_api_key,
@@ -803,7 +969,9 @@ def _session_chat_impl(sid: str) -> Response:
         _pop_stream(sid, ctx.cancel_event)
 
 
-def _stream_response(sid: str, user_text: str, ctx, regenerate_user_msg_id: int | None = None) -> Response:
+def _stream_response(
+    sid: str, user_text: str, ctx, regenerate_user_msg_id: int | None = None
+) -> Response:
     q: queue.Queue = queue.Queue()
     err_holder: dict = {"err": None}
 
@@ -815,6 +983,7 @@ def _stream_response(sid: str, user_text: str, ctx, regenerate_user_msg_id: int 
                 q.put(event)
         except Exception as exc:
             import traceback as _tb
+
             err_holder["err"] = f"{type(exc).__name__}: {exc}"
             err_holder["trace"] = _tb.format_exc(limit=5)
         finally:
@@ -839,13 +1008,17 @@ def _stream_response(sid: str, user_text: str, ctx, regenerate_user_msg_id: int 
             ctx.cancel_event.set()
             raise
 
-    return Response(event_stream(), mimetype="text/event-stream",
-                    headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"})
+    return Response(
+        event_stream(),
+        mimetype="text/event-stream",
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
+    )
 
 
 # ============================================================
 # Workspaces (per-user scoped)
 # ============================================================
+
 
 def get_user_workspace_dir(user_id: str) -> Path:
     return DATA_DIR / "workspaces" / user_id
@@ -854,12 +1027,25 @@ def get_user_workspace_dir(user_id: str) -> Path:
 # Allowed hostnames for git clone (SSRF mitigation).
 # Empty set = allow only direct .git urls to known git hosts. Users can add
 # more via STUPIDEX_GIT_HOSTS env var (comma-separated).
-_GIT_HOST_ALLOWLIST = set(filter(None, [
-    "github.com", "www.github.com",
-    "gitlab.com", "www.gitlab.com",
-    "bitbucket.org", "www.bitbucket.org",
-    "codeberg.org",
-] + [h.strip().lower() for h in os.environ.get("STUPIDEX_GIT_HOSTS", "").split(",") if h.strip()]))
+_GIT_HOST_ALLOWLIST = set(
+    filter(
+        None,
+        [
+            "github.com",
+            "www.github.com",
+            "gitlab.com",
+            "www.gitlab.com",
+            "bitbucket.org",
+            "www.bitbucket.org",
+            "codeberg.org",
+        ]
+        + [
+            h.strip().lower()
+            for h in os.environ.get("STUPIDEX_GIT_HOSTS", "").split(",")
+            if h.strip()
+        ],
+    )
+)
 
 
 def _validate_git_url(url: str) -> str | None:
@@ -887,10 +1073,12 @@ def _validate_git_url(url: str) -> str | None:
 def workspaces_list():
     ws_list = [w.to_dict() for w in workspaces_module.list_workspaces(request.user.id)]
     active = workspaces_module.get_active_workspace(request.user.id)
-    return jsonify({
-        "workspaces": ws_list,
-        "active_id": active.id if active else None,
-    })
+    return jsonify(
+        {
+            "workspaces": ws_list,
+            "active_id": active.id if active else None,
+        }
+    )
 
 
 @app.route("/api/workspaces", methods=["POST"])
@@ -904,7 +1092,9 @@ def workspaces_create():
     # Per-user cap: 50 workspaces
     existing = workspaces_module.list_workspaces(request.user.id)
     if len(existing) >= 50:
-        return jsonify({"error": "workspace limit reached (50). Delete some first."}), 400
+        return jsonify(
+            {"error": "workspace limit reached (50). Delete some first."}
+        ), 400
     ws = workspaces_module.create_empty(request.user.id, name)
     if not workspaces_module.get_active_workspace(request.user.id):
         workspaces_module.set_active_workspace(request.user.id, ws.id)
@@ -978,7 +1168,9 @@ def workspaces_upload_zip(ws_id):
     if not ws_path:
         return jsonify({"error": "workspace not found"}), 404
     if any(ws_path.iterdir()):
-        return jsonify({"error": "workspace is not empty — delete it first or use a fresh one"}), 400
+        return jsonify(
+            {"error": "workspace is not empty — delete it first or use a fresh one"}
+        ), 400
 
     f = request.files.get("file")
     if not f:
@@ -1019,7 +1211,9 @@ def workspaces_clone(ws_id):
     if err:
         return jsonify({"error": err}), 400
     try:
-        ws, stderr = workspaces_module.init_from_git(request.user.id, ws_id, url, branch)
+        ws, stderr = workspaces_module.init_from_git(
+            request.user.id, ws_id, url, branch
+        )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     except RuntimeError as exc:
@@ -1068,19 +1262,23 @@ def workspaces_file(ws_id):
         content = target.read_text(encoding="utf-8")
     except UnicodeDecodeError:
         return jsonify({"error": "binary file"}), 415
-    return jsonify({
-        "path": rel,
-        "content": content,
-        "size": target.stat().st_size,
-    })
+    return jsonify(
+        {
+            "path": rel,
+            "content": content,
+            "size": target.stat().st_size,
+        }
+    )
 
 
 # ============================================================
 # Entry point
 # ============================================================
 
+
 def main():
     import os as _os
+
     host = _os.environ.get("STUPIDEX_HOST", "0.0.0.0")
     port = int(_os.environ.get("STUPIDEX_PORT", _os.environ.get("PORT", "5000")))
     debug = _os.environ.get("STUPIDEX_DEBUG") == "1"
