@@ -4,6 +4,11 @@ marked.setOptions({ breaks: true, gfm: true, highlight: (code, lang) => {
     catch { return code; }
 }});
 
+// Avatar HTML for the assistant. Uses the Stupidex logo with a graceful
+// fallback to the letter "S" if the image fails to load.
+const ASSISTANT_AVATAR_HTML = `<div class="avatar assistant"><img src="/static/logo.webp" alt="S" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'S',style:'color:#FAFAFA;font-weight:700;font-size:14px'}))"/></div>`;
+const USER_AVATAR_HTML = `<div class="avatar user">U</div>`;
+
 const $ = (id) => document.getElementById(id);
 
 const els = {
@@ -344,7 +349,7 @@ function renderMessages(msgs) {
             // Convert to row so we can attach actions; we re-attach the bubble inside
             const row = document.createElement("div");
             row.className = "message assistant";
-            row.innerHTML = `<div class="avatar assistant"></div><div class="bubble"></div>`;
+            row.innerHTML = `${ASSISTANT_AVATAR_HTML}<div class="bubble"></div>`;
             row.querySelector(".bubble").innerHTML = aBubble.querySelector(".bubble").innerHTML;
             attachAssistantActions(row);
             inner.appendChild(row);
@@ -369,21 +374,21 @@ function renderMessages(msgs) {
 function buildUserBubble(text) {
     const row = document.createElement("div");
     row.className = "message user";
-    row.innerHTML = `<div class="avatar user">U</div><div class="bubble">${DOMPurify.sanitize(marked.parse(text || ""))}</div>`;
+    row.innerHTML = `${USER_AVATAR_HTML}<div class="bubble">${DOMPurify.sanitize(marked.parse(text || ""))}</div>`;
     return row;
 }
 
 function buildAssistantBubble(m) {
     const row = document.createElement("div");
     row.className = "message assistant";
-    row.innerHTML = `<div class="avatar assistant"></div><div class="bubble">${DOMPurify.sanitize(marked.parse(m.content || ""))}</div>`;
+    row.innerHTML = `${ASSISTANT_AVATAR_HTML}<div class="bubble">${DOMPurify.sanitize(marked.parse(m.content || ""))}</div>`;
     return row;
 }
 
 function buildAssistantGroup(m, all, start) {
     const row = document.createElement("div");
     row.className = "message assistant";
-    row.innerHTML = `<div class="avatar assistant"></div><div class="bubble"></div>`;
+    row.innerHTML = `${ASSISTANT_AVATAR_HTML}<div class="bubble"></div>`;
     const bubble = row.querySelector(".bubble");
     if (m.content && m.content.trim()) {
         const text = document.createElement("div");
@@ -689,7 +694,7 @@ function appendAssistantPlaceholder() {
     const inner = ensureInner();
     const row = document.createElement("div");
     row.className = "message assistant";
-    row.innerHTML = `<div class="avatar assistant"></div><div class="bubble"></div>`;
+    row.innerHTML = `${ASSISTANT_AVATAR_HTML}<div class="bubble"></div>`;
     inner.appendChild(row);
     scrollToBottom();
     return row;

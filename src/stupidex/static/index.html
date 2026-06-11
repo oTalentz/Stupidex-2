@@ -10,8 +10,11 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
-    <!-- Phosphor Icons -->
-    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <!-- Phosphor Icons webfont (CSS-based — works with our strict CSP).
+         We load the CSS directly from jsdelivr because the @phosphor-icons/web
+         helper package points to unpkg.com internally, which our CSP blocks. -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/fill/style.css" />
 
     <!-- Markdown libs (preserved) -->
     <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
@@ -42,7 +45,10 @@
          ========================================================= -->
     <div id="login-screen" class="login-screen">
         <div class="login-card">
-            <div class="login-logo"></div>
+            <div class="login-logo">
+                <img src="/static/logo.webp" alt="Stupidex" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+                <span class="login-logo-fallback" style="display:none">S</span>
+            </div>
             <h1 class="login-title">Stupidex</h1>
             <p class="login-subtitle">Agente de código com IA</p>
 
@@ -72,7 +78,10 @@
 
         <!-- Pane 1: Icon rail nav (thin) -->
         <nav id="nav-rail" class="nav-rail">
-            <div class="nav-rail-logo" title="Stupidex"></div>
+            <div class="nav-rail-logo" title="Stupidex">
+                <img src="/static/logo.webp" alt="Stupidex" onerror="this.style.display='none';this.nextElementSibling.style.display='block';" />
+                <span class="nav-rail-logo-fallback" style="display:none">S</span>
+            </div>
 
             <div class="nav-rail-items">
                 <button id="new-chat-btn" class="nav-rail-btn nav-rail-active" title="Nova conversa">
