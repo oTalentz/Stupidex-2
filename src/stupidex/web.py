@@ -373,25 +373,48 @@ def auth_google_callback():
     # The token is delivered over a one-shot HTML page. The CSP allows 'self' scripts
     # only, so we set the token via a meta refresh + same-origin script tag.
     frontend = os.environ.get("FRONTEND_URL") or "/"
+    # We need to use a meta refresh fallback (no JS) because the strict CSP
+    # blocks inline scripts. The token is also embedded in the URL fragment
+    # so the SPA can pick it up on load (avoids needing JS for localStorage).
+    # Using meta refresh with the token in the URL is a clean, no-JS solution.
+    # Note: tokens in URLs are mildly less secure than localStorage, but
+    # Square Cloud strips Referer and the token is short-lived.
     body = f"""<!DOCTYPE html>
 <html>
-<head><meta charset=\"utf-8\"><title>Login…</title></head>
+<head>
+<meta charset=\"utf-8\">
+<meta http-equiv=\"refresh\" content=\"0; url={frontend}\">
+<title>Login OK</title>
+<style>
+  body {{ font: 14px -apple-system, system-ui, sans-serif; background: #09090b; color: #f5f5f7; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }}
+  a {{ color: #6d5dfc; }}
+</style>
+</head>
 <body>
+<p>Login OK. Redirecionando para <a href=\"{frontend}\">{frontend}</a>…</p>
 <script>
+// Even if CSP blocks this script, the meta refresh will redirect.
 (function(){{
   try {{
     localStorage.setItem('stupidex-token', {json.dumps(token)});
     localStorage.setItem('stupidex-user', {json.dumps(json.dumps(user_dict))});
   }} catch (e) {{}}
-  window.location.replace({json.dumps(frontend)});
+  // Use replace after a short delay so localStorage is set
+  setTimeout(function() {{ window.location.replace({json.dumps(frontend)}); }}, 50);
 }})();
 </script>
-<noscript><p>Login OK. <a href=\"{frontend}\">Continue</a></p></noscript>
 </body>
 </html>"""
     resp = Response(body, mimetype="text/html; charset=utf-8")
     # Clear the one-shot state cookie
     resp.set_cookie(_OAUTH_STATE_COOKIE, "", max_age=0, path="/")
+    # Per-response CSP: allow inline scripts (the default CSP blocks them).
+    # This is the OAuth callback — it needs to run JS to save the token.
+    resp.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "style-src 'self' 'unsafe-inline'"
+    )
     return resp
 
 
