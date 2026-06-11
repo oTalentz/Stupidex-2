@@ -85,13 +85,16 @@ def _run_server(app, host: str, port: int) -> None:
             from gunicorn.app.wsgiapp import WSGIApplication
             from gunicorn import config as gconfig
 
-            cfg = gconfig.Config()
-            cfg.bind = f"{host}:{port}"
-            cfg.workers = 1
-            cfg.threads = 8
-            cfg.timeout = 120
-            cfg.accesslog = "-"
-            cfg.errorlog = "-"
+            # Newer gunicorn (>=21) blocks attribute assignment to Config
+            # instances. We have to use the kwargs constructor.
+            cfg = gconfig.Config(
+                bind=f"{host}:{port}",
+                workers=1,
+                threads=8,
+                timeout=120,
+                accesslog="-",
+                errorlog="-",
+            )
             logging.info("Using gunicorn on %s:%d", host, port)
             WSGIApplication(cfg).run()
             return
