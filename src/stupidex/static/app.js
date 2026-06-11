@@ -1227,10 +1227,122 @@ document.addEventListener("keydown", (e) => {
 });
 
 // ============================================================
+// AUTH
+// ============================================================
+
+const AUTH_KEY = "stupidex-token";
+const elsAuth = {
+    loginScreen: $("login-screen"),
+    mainApp: $("main-app"),
+    loginForm: $("login-form"),
+    loginEmail: $("login-email"),
+    loginPassword: $("login-password"),
+    loginError: $("login-error"),
+};
+
+function getToken() { try { return localStorage.getItem(AUTH_KEY) || ""; } catch { return ""; } }
+function setToken(t)   { try { localStorage.setItem(AUTH_KEY, t); } catch {} }
+function clearToken()  { try { localStorage.removeItem(AUTH_KEY); } catch {} }
+
+// Monkey-patch fetch to inject auth header on all API calls
+const _origFetch = window.fetch;
+window.fetch = function(url, opts = {}) {
+    const token = getToken();
+    const isApi = typeof url === "string" && (
+        url.startsWith("/api/") || url.includes("/api/")
+    );
+    if (token && isApi) {
+        opts.headers = opts.headers || {};
+        if (opts.headers instanceof Headers) {
+            opts.headers.set("Authorization", "Bearer " + token);
+        } else {
+            opts.headers["Authorization"] = "Bearer " + token;
+        }
+    }
+    return _origFetch(url, opts);
+};
+
+async function checkAuth() {
+    const token = getToken();
+    if (!token) return false;
+    try {
+        const r = await _origFetch("/api/auth/me", {
+            headers: { Authorization: "Bearer " + token },
+        });
+        return r.ok;
+    } catch {
+        return false;
+    }
+}
+
+function showLogin() {
+    elsAuth.loginScreen.classList.remove("hidden");
+    elsAuth.mainApp.classList.add("hidden");
+}
+
+function showApp() {
+    elsAuth.loginScreen.classList.add("hidden");
+    elsAuth.mainApp.classList.remove("hidden");
+}
+
+function setLoginError(msg) {
+    elsAuth.loginError.textContent = msg;
+    elsAuth.loginError.classList.remove("hidden");
+}
+
+// Email/password login
+elsAuth.loginForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const email = elsAuth.loginEmail.value.trim();
+    const password = elsAuth.loginPassword.value.trim();
+    if (!email || !password) { setLoginError("Preencha email e senha"); return; }
+    try {
+        const r = await _origFetch("/api/auth/register", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username: email, password }),
+        });
+        return handleLoginResponse(r, email);
+    } catch (err) { setLoginError("Erro de rede"); }
+});
+
+async function handleLoginResponse(r, email) {
+    const data = await r.json().catch(() => ({}));
+    if (r.ok && data.token) {
+        setToken(data.token);
+        showApp();
+        await bootApp();
+        return;
+    }
+    if (r.status === 409 || (data.error && data.error.includes("already taken"))) {
+        return tryLogin(email, elsAuth.loginPassword.value);
+    }
+    setLoginError(data.error || "Erro ao autenticar");
+}
+
+async function tryLogin(email, password) {
+    try {
+        const r = await _origFetch("/api/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username: email, password }),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (r.ok && data.token) {
+            setToken(data.token);
+            showApp();
+            await bootApp();
+        } else {
+            setLoginError(data.error || "Credenciais inválidas");
+        }
+    } catch { setLoginError("Erro de rede"); }
+}
+
+// ============================================================
 // BOOT
 // ============================================================
 
-(async function init() {
+async function bootApp() {
     await loadConfig();
     updateBadges();
     await loadWorkspaces();
@@ -1241,4 +1353,13 @@ document.addEventListener("keydown", (e) => {
         renderWelcome();
     }
     els.input.focus();
+}
+
+(async function init() {
+    if (await checkAuth()) {
+        showApp();
+        await bootApp();
+    } else {
+        showLogin();
+    }
 })();
