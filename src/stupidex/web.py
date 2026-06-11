@@ -375,49 +375,55 @@ def auth_google_callback():
     # If FRONTEND_URL is not set, fall back to the current origin root
     # (so the redirect lands on the app, not on a sub-route like the
     # callback itself).
+    # If FRONTEND_URL is not set, construct the origin from the request.
+    # Square Cloud sits behind Cloudflare which sets X-Forwarded-Proto.
     frontend = os.environ.get("FRONTEND_URL")
     if not frontend:
         try:
-            frontend = request.url_root.rstrip("/")
+            scheme = request.headers.get("X-Forwarded-Proto", "https")
+            host = request.host.rstrip("/")
+            frontend = f"{scheme}://{host}"
         except Exception:
             frontend = "/"
-    # We need to use a meta refresh fallback (no JS) because the strict CSP
-    # blocks inline scripts. The token is also embedded in the URL fragment
-    # so the SPA can pick it up on load (avoids needing JS for localStorage).
-    # Using meta refresh with the token in the URL is a clean, no-JS solution.
-    # Note: tokens in URLs are mildly less secure than localStorage, but
-    # Square Cloud strips Referer and the token is short-lived.
+
+    # The callback must save the token and redirect to the app. We use
+    # JavaScript as the primary mechanism (sets localStorage then redirects).
+    # The per-response CSP allows 'unsafe-inline' so the inline script runs.
+    # A meta-refresh fallback fires after 3 seconds if JS is completely
+    # disabled (rare — in that case, the user must log in again manually
+    # because we can't use localStorage without JS).
     body = f"""<!DOCTYPE html>
 <html>
 <head>
-<meta charset=\"utf-8\">
-<meta http-equiv=\"refresh\" content=\"0; url={frontend}\">
-<title>Login OK</title>
+<meta charset="utf-8">
+<meta http-equiv="refresh" content="3; url={frontend}">
+<title>Login — Stupidex</title>
 <style>
   body {{ font: 14px -apple-system, system-ui, sans-serif; background: #09090b; color: #f5f5f7; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }}
   a {{ color: #6d5dfc; }}
 </style>
-</head>
-<body>
-<p>Login OK. Redirecionando para <a href=\"{frontend}\">{frontend}</a>…</p>
 <script>
-// Even if CSP blocks this script, the meta refresh will redirect.
-(function(){{
+(function() {{
   try {{
     localStorage.setItem('stupidex-token', {json.dumps(token)});
     localStorage.setItem('stupidex-user', {json.dumps(json.dumps(user_dict))});
-  }} catch (e) {{}}
-  // Use replace after a short delay so localStorage is set
-  setTimeout(function() {{ window.location.replace({json.dumps(frontend)}); }}, 50);
+    // Redirect immediately — the localStorage write is synchronous so
+    // the token is guaranteed to be persisted before navigation.
+    window.location.replace({json.dumps(frontend)});
+  }} catch (e) {{
+    // If JS fails, the meta-refresh (3s delay) handles the redirect.
+  }}
 }})();
 </script>
+</head>
+<body>
+<p>Login OK. Indo para <a href="{frontend}">Stupidex</a>…</p>
 </body>
 </html>"""
     resp = Response(body, mimetype="text/html; charset=utf-8")
     # Clear the one-shot state cookie
     resp.set_cookie(_OAUTH_STATE_COOKIE, "", max_age=0, path="/")
-    # Per-response CSP: allow inline scripts (the default CSP blocks them).
-    # This is the OAuth callback — it needs to run JS to save the token.
+    # Per-response CSP: allow inline scripts so the token save JS runs.
     resp.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
         "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
