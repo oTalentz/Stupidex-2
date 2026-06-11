@@ -85,21 +85,38 @@ def _run_server(app, host: str, port: int) -> None:
             from gunicorn.app.wsgiapp import WSGIApplication
             from gunicorn import config as gconfig
 
-            # Newer gunicorn (>=21) blocks attribute assignment to Config
-            # instances. We have to use the kwargs constructor.
-            cfg = gconfig.Config(
-                bind=f"{host}:{port}",
-                workers=1,
-                threads=8,
-                timeout=120,
-                accesslog="-",
-                errorlog="-",
-            )
+            # gunicorn's Config() has had multiple breaking changes across
+            # versions (kwargs removed, then set() semantics changed). The
+            # most reliable form is to instantiate with no args, then use
+            # set() — this works on every gunicorn >=19.
+            cfg = gconfig.Config()
+            cfg.set("bind", f"{host}:{port}")
+            cfg.set("workers", 1)
+            cfg.set("threads", 8)
+            cfg.set("timeout", 120)
+            cfg.set("accesslog", "-")
+            cfg.set("errorlog", "-")
             logging.info("Using gunicorn on %s:%d", host, port)
             WSGIApplication(cfg).run()
             return
-        except ImportError as e:
-            logging.warning("gunicorn not available (%s), falling back", e)
+        except (ImportError, TypeError) as e:
+            logging.warning("gunicorn not usable via WSGIApplication (%s), trying direct run()", e)
+            # Last-ditch: use the legacy gunicorn.app.run() entrypoint which
+            # accepts kwargs in all recent versions.
+            try:
+                from gunicorn.app import run as gunicorn_run  # type: ignore
+                sys.argv = [
+                    "gunicorn",
+                    f"--bind={host}:{port}",
+                    "--workers=1",
+                    "--threads=8",
+                    "--timeout=120",
+                    "stupidex.web:app",
+                ]
+                gunicorn_run.run()
+                return
+            except Exception as e2:
+                logging.error("gunicorn completely failed: %s", e2)
 
     # Try waitress (works on Windows + Linux)
     try:
