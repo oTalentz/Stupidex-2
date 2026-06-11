@@ -33,35 +33,37 @@ MAX_TOOL_ITERATIONS = 20
 MAX_HISTORY_MESSAGES = 200  # safety net
 
 AGENT_SYSTEM_PROMPT = """\
-You are Stupidex, a precise coding agent operating on a workspace of files uploaded by the user.
-You help the user read, edit, refactor, debug and run code in their active workspace.
+You are Stupidex, a secure coding agent. You operate EXCLUSIVELY inside the user's
+workspace — a sandboxed directory containing only files the user uploaded or cloned.
+You CANNOT access any files outside this workspace. Attempting to do so will fail.
 
-## CRITICAL: Working directory
-Your active workspace is the ONLY directory you should operate in. Use its absolute path
-EXACTLY as shown below in every tool call's `working_dir` parameter (or `cwd` for shell).
-NEVER use a relative path, the project name, or "." as working_dir — that will fail.
-The path is automatically pre-filled if you omit it, so you can usually leave it out.
+## Sandbox Rules (MUST FOLLOW)
+1. **NEVER** try to read, list, or search files outside the active workspace path.
+2. **NEVER** try to access system directories (/etc, /home, /tmp, /var, /root).
+3. **NEVER** try to access the Stupidex source code or configuration files.
+4. **NEVER** try to access other users' workspaces — each user is isolated.
+5. The workspace path is pre-filled for you. **Do NOT override it** with an
+   absolute path pointing elsewhere. The system will reject such calls.
+6. `run_shell` commands run inside the workspace directory — do not cd elsewhere.
 
 ## Tooling
-You have these tools. Use them proactively when the user's request implies action on files:
-- read_file(path, working_dir?) — read a text file
+- read_file(path, working_dir?) — read a text file inside the workspace
 - write_file(path, content, working_dir?) — create or overwrite a file
 - edit_file(path, old_text, new_text, replace_all?, working_dir?) — surgical edits
-- list_dir(path?, working_dir?) — list directory contents (path is RELATIVE to working_dir)
-- search_files(path, pattern, recursive?, working_dir?) — regex search across files
-- mkdir(path, working_dir?) — create a directory (with parents)
-- delete(path, working_dir?) — remove a file or directory recursively
-- run_shell(command, cwd?, timeout?) — execute a shell command
+- list_dir(path?, working_dir?) — list directory contents
+- search_files(path, pattern, recursive?, working_dir?) — regex search
+- mkdir(path, working_dir?) — create a directory
+- delete(path, working_dir?) — remove a file or directory
+- run_shell(command, cwd?, timeout?) — execute a shell command inside the workspace
 - git(args, cwd?) — run a git subcommand
 
 ## Operating principles
-1. **Inspect first.** Before editing, use list_dir and read_file to understand the project structure.
-2. **Prefer edit_file over write_file** for any existing file. Use write_file only for new files or full rewrites.
-3. **Be surgical.** Match old_text exactly, including whitespace. If the snippet appears multiple times, narrow it down with surrounding context or use replace_all explicitly.
-4. **No destructive actions without cause.** Avoid delete and run_shell that mutates the system unless the user asked for it.
-5. **Chain tool calls when needed.** The result of one tool call is automatically fed back to you.
-6. **Stay concise.** After the work is done, summarize what changed in 2–6 lines. Don't repeat the diff verbatim.
-7. **Acknowledge ambiguity.** If the request is unclear, ask one short clarifying question before mutating files.
+1. **Inspect first.** Use list_dir and read_file to understand the project.
+2. **Prefer edit_file over write_file** for existing files.
+3. **Be surgical.** Match old_text exactly. Use replace_all for bulk changes.
+4. **No destructive actions without cause.**
+5. **Stay concise.** Summarize changes in 2–6 lines after finishing.
+6. **Acknowledge ambiguity.** Ask clarifying questions before mutating files.
 
 ## Active workspace
 {workspace_summary}
@@ -79,33 +81,46 @@ class AgentContext:
     base_url: str | None
     cancel_event: threading.Event | None = None
     user_msg_id: int | None = None
+    user_id: str = ""  # per-user isolation
 
 
-def _build_system_message() -> ChatMessage:
+def _build_system_message(user_id: str) -> ChatMessage:
     return ChatMessage(
         role=MessageRole.SYSTEM,
-        content=AGENT_SYSTEM_PROMPT.format(workspace_summary=_workspace_summary()),
+        content=AGENT_SYSTEM_PROMPT.format(workspace_summary=_workspace_summary(user_id)),
         type=MessageType.TEXT,
     )
 
 
-def _workspace_summary() -> str:
-    ws = workspaces_module.get_active_workspace()
+def _workspace_summary(user_id: str = "") -> str:
+    if not user_id:
+        return "(no user context — workspace unavailable)"
+    ws = workspaces_module.get_active_workspace(user_id)
     if not ws:
-        return "(no active workspace — user has not uploaded any files yet)"
-    summary = f"Active workspace: '{ws.name}' (id={ws.id})\nPath: {workspaces_module.WORKSPACES_DIR / ws.id}\nSource: {ws.source}"
+        return "(no active workspace — upload files or clone a repository first)"
+    ws_path = workspaces_module._user_dir(user_id) / ws.id
+    summary = f"Active workspace: '{ws.name}' (id={ws.id})\nPath: {ws_path}\nSource: {ws.source}"
     if ws.git_url:
         summary += f"\nGit: {ws.git_url}" + (f" (branch {ws.git_branch})" if ws.git_branch else "")
     summary += f"\nFiles: {ws.file_count} ({ws.size_bytes:,} bytes)"
     return summary
 
 
-def _history_for_llm(session_id: str) -> list[ChatMessage]:
+def _active_workspace_path(user_id: str) -> str | None:
+    if not user_id:
+        return None
+    ws = workspaces_module.get_active_workspace(user_id)
+    if not ws:
+        return None
+    return str(workspaces_module._user_dir(user_id) / ws.id)
+
+
+def _history_for_llm(session_id: str, user_id: str = "") -> list[ChatMessage]:
     """Load the persisted history for a session and prepend the system message."""
     raw = db.get_messages(session_id)
     history: list[ChatMessage] = []
     if not raw or raw[0].role != MessageRole.SYSTEM:
-        history.append(_build_system_message())
+        history.append(_build_system_message(user_id))
     for r in raw:
         if r.role == MessageRole.SYSTEM:
             continue
@@ -144,21 +159,13 @@ _DEFAULT_WD_TOOLS = {
 }
 
 
-def _active_workspace_path() -> str | None:
-    ws = workspaces_module.get_active_workspace()
-    if not ws:
-        return None
-    return str(workspaces_module.WORKSPACES_DIR / ws.id)
+def _resolve_working_dir(args: dict, user_id: str = "") -> None:
+    """Force `working_dir` to the user's active workspace.
 
-
-def _resolve_working_dir(args: dict) -> None:
-    """Force `working_dir` to the active workspace.
-
-    The agent's safety net: we don't trust the LLM's choice here because
-    a stray `working_dir="my-project-name"` (treating the name as a path)
-    produces confusing errors. Always override with the active workspace path.
+    This is the sandbox: we NEVER let the LLM choose its own working_dir.
+    The path is always the user's workspace directory, validated.
     """
-    active = _active_workspace_path()
+    active = _active_workspace_path(user_id)
     if active:
         args["working_dir"] = active
 
@@ -203,7 +210,7 @@ def stream_response(
     db.auto_title(session_id, user_text)
     db.touch_session(session_id)
 
-    history = _history_for_llm(session_id)
+    history = _history_for_llm(session_id, ctx.user_id)
 
     yield {
         "type": "session_meta",
@@ -338,7 +345,7 @@ def stream_response(
             if not isinstance(args, dict):
                 args = {}
             if call.name in _DEFAULT_WD_TOOLS:
-                _resolve_working_dir(args)
+                _resolve_working_dir(args, ctx.user_id)
                 call.arguments = json.dumps(args, ensure_ascii=False)
 
             yield {
@@ -401,7 +408,7 @@ def _extract_usage(chunk) -> Usage:
     )
 
 
-def build_context(provider_id: str, api_key_override: str | None) -> AgentContext:
+def build_context(provider_id: str, api_key_override: str | None, user_id: str = "") -> AgentContext:
     """Build an AgentContext for a request from a session or default config."""
     from ..config import load_config
     cfg = load_config()
@@ -414,4 +421,5 @@ def build_context(provider_id: str, api_key_override: str | None) -> AgentContex
         api_key=api_key,
         model=model,
         base_url=provider.base_url,
+        user_id=user_id,
     )

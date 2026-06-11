@@ -14,28 +14,49 @@ def _resolve(path: str, base: Path) -> Path:
     return p
 
 
+def _sandbox_guard(resolved: Path, workspace_dir: Path) -> str | None:
+    """Validate `resolved` is within `workspace_dir`. Returns error msg or None."""
+    try:
+        ws = workspace_dir.resolve()
+        target = resolved.resolve()
+        if str(target).startswith(str(ws)):
+            return None
+        return f"SECURITY: path outside workspace"
+    except Exception:
+        return f"SECURITY: could not validate path"
+
+
+def _wd(w: str | None) -> Path:
+    w = (w or "").strip()
+    return Path(w).resolve() if w else Path.cwd()
+
+
 def read_file(path: str, working_dir: str = ".") -> str:
-    base = Path(working_dir).resolve() if working_dir else Path.cwd()
+    base = _wd(working_dir)
     p = _resolve(path, base)
+    if err := _sandbox_guard(p, base):
+        return err
     if not p.exists():
-        return f"ERROR: file not found: {p}"
+        return f"ERROR: file not found"
     if p.is_dir():
-        return f"ERROR: path is a directory: {p}"
+        return f"ERROR: path is a directory"
     size = p.stat().st_size
     if size > MAX_FILE_BYTES:
         return f"ERROR: file too large ({size} bytes, max {MAX_FILE_BYTES})"
     try:
         return p.read_text(encoding="utf-8")
     except UnicodeDecodeError:
-        return f"ERROR: file is not valid UTF-8 (binary?): {p}"
+        return f"ERROR: file is not valid UTF-8 (binary?)"
 
 
 def write_file(path: str, content: str, working_dir: str = ".") -> str:
-    base = Path(working_dir).resolve() if working_dir else Path.cwd()
+    base = _wd(working_dir)
     p = _resolve(path, base)
+    if err := _sandbox_guard(p, base):
+        return err
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(content, encoding="utf-8")
-    return f"OK: wrote {len(content)} bytes to {p}"
+    return f"OK: wrote {len(content)} bytes"
 
 
 def edit_file(
@@ -45,28 +66,32 @@ def edit_file(
     replace_all: bool = False,
     working_dir: str = ".",
 ) -> str:
-    base = Path(working_dir).resolve() if working_dir else Path.cwd()
+    base = _wd(working_dir)
     p = _resolve(path, base)
+    if err := _sandbox_guard(p, base):
+        return err
     if not p.exists():
-        return f"ERROR: file not found: {p}"
+        return f"ERROR: file not found"
     original = p.read_text(encoding="utf-8")
     count = original.count(old_text)
     if count == 0:
-        return f"ERROR: old_text not found in {p}"
+        return f"ERROR: old_text not found"
     if count > 1 and not replace_all:
-        return f"ERROR: old_text matches {count} locations in {p}; pass replace_all=true or use a more specific snippet"
+        return f"ERROR: old_text matches {count} locations; pass replace_all=true or use a more specific snippet"
     updated = original.replace(old_text, new_text) if replace_all else original.replace(old_text, new_text, 1)
     p.write_text(updated, encoding="utf-8")
-    return f"OK: edited {p} (replaced {count if replace_all else 1} occurrence(s))"
+    return f"OK: edited (replaced {count if replace_all else 1} occurrence(s))"
 
 
 def list_dir(path: str = ".", working_dir: str = ".") -> str:
-    base = Path(working_dir).resolve() if working_dir else Path.cwd()
+    base = _wd(working_dir)
     p = _resolve(path, base)
+    if err := _sandbox_guard(p, base):
+        return err
     if not p.exists():
-        return f"ERROR: directory not found: {p}"
+        return f"ERROR: directory not found"
     if not p.is_dir():
-        return f"ERROR: not a directory: {p}"
+        return f"ERROR: not a directory"
     entries = []
     for entry in sorted(p.iterdir(), key=lambda e: (not e.is_dir(), e.name.lower())):
         if any(part.startswith(".git") for part in entry.parts) and entry.name == ".git":
@@ -81,20 +106,22 @@ def list_dir(path: str = ".", working_dir: str = ".") -> str:
 
 
 def search_files(path: str, pattern: str, recursive: bool = True, working_dir: str = ".") -> str:
-    base = Path(working_dir).resolve() if working_dir else Path.cwd()
+    base = _wd(working_dir)
     p = _resolve(path, base)
+    if err := _sandbox_guard(p, base):
+        return err
     if not p.exists():
-        return f"ERROR: path not found: {p}"
+        return f"ERROR: path not found"
     rx = re.compile(pattern)
     matches: list[str] = []
     if p.is_file():
         try:
             content = p.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):
-            return f"ERROR: cannot read {p}"
+            return f"ERROR: cannot read file"
         for i, line in enumerate(content.splitlines(), 1):
             if rx.search(line):
-                matches.append(f"{p}:{i}:{line.rstrip()}")
+                matches.append(line.rstrip()[:200])
         return "\n".join(matches) or "(no matches)"
     candidates = [p] if not recursive else [e for e in p.rglob("*") if e.is_file()]
     for f in candidates:
@@ -106,27 +133,31 @@ def search_files(path: str, pattern: str, recursive: bool = True, working_dir: s
             continue
         for i, line in enumerate(content.splitlines(), 1):
             if rx.search(line):
-                matches.append(f"{f}:{i}:{line.rstrip()}")
+                matches.append(f"{f.name}:{i}:{line.rstrip()}")
     return "\n".join(matches[:500]) or "(no matches)"
 
 
 def mkdir(path: str, working_dir: str = ".") -> str:
-    base = Path(working_dir).resolve() if working_dir else Path.cwd()
+    base = _wd(working_dir)
     p = _resolve(path, base)
+    if err := _sandbox_guard(p, base):
+        return err
     p.mkdir(parents=True, exist_ok=True)
-    return f"OK: created directory {p}"
+    return f"OK: created directory"
 
 
 def delete(path: str, working_dir: str = ".") -> str:
-    base = Path(working_dir).resolve() if working_dir else Path.cwd()
+    base = _wd(working_dir)
     p = _resolve(path, base)
+    if err := _sandbox_guard(p, base):
+        return err
     if not p.exists():
-        return f"ERROR: path not found: {p}"
+        return f"ERROR: path not found"
     if p.is_dir():
         shutil.rmtree(p)
-        return f"OK: removed directory {p}"
+        return f"OK: removed directory"
     p.unlink()
-    return f"OK: removed file {p}"
+    return f"OK: removed file"
 
 
 def run_shell(command: str, cwd: str | None = None, timeout: int = 60) -> str:
