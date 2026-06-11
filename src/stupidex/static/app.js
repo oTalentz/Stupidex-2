@@ -327,7 +327,7 @@ function renderMessages(msgs) {
             // Convert to row so we can attach actions; we re-attach the bubble inside
             const row = document.createElement("div");
             row.className = "message assistant";
-            row.innerHTML = `<div class="avatar assistant">S</div><div class="bubble"></div>`;
+            row.innerHTML = `<div class="avatar assistant"></div><div class="bubble"></div>`;
             row.querySelector(".bubble").innerHTML = aBubble.querySelector(".bubble").innerHTML;
             attachAssistantActions(row);
             inner.appendChild(row);
@@ -359,14 +359,14 @@ function buildUserBubble(text) {
 function buildAssistantBubble(m) {
     const row = document.createElement("div");
     row.className = "message assistant";
-    row.innerHTML = `<div class="avatar assistant">S</div><div class="bubble">${DOMPurify.sanitize(marked.parse(m.content || ""))}</div>`;
+    row.innerHTML = `<div class="avatar assistant"></div><div class="bubble">${DOMPurify.sanitize(marked.parse(m.content || ""))}</div>`;
     return row;
 }
 
 function buildAssistantGroup(m, all, start) {
     const row = document.createElement("div");
     row.className = "message assistant";
-    row.innerHTML = `<div class="avatar assistant">S</div><div class="bubble"></div>`;
+    row.innerHTML = `<div class="avatar assistant"></div><div class="bubble"></div>`;
     const bubble = row.querySelector(".bubble");
     if (m.content && m.content.trim()) {
         const text = document.createElement("div");
@@ -672,7 +672,7 @@ function appendAssistantPlaceholder() {
     const inner = ensureInner();
     const row = document.createElement("div");
     row.className = "message assistant";
-    row.innerHTML = `<div class="avatar assistant">S</div><div class="bubble"></div>`;
+    row.innerHTML = `<div class="avatar assistant"></div><div class="bubble"></div>`;
     inner.appendChild(row);
     scrollToBottom();
     return row;

@@ -168,14 +168,14 @@ input, textarea, select { font-family: inherit; }
 }
 
 .login-logo {
-    width: 56px; height: 56px;
+    width: 64px; height: 64px;
     border-radius: 14px;
-    background: var(--welcome-h-gradient);
-    color: white;
-    display: inline-flex;
-    align-items: center; justify-content: center;
-    font-weight: 700; font-size: 24px;
+    background-image: url("/static/logo.svg");
+    background-size: contain;
+    background-position: center;
+    background-repeat: no-repeat;
     margin-bottom: 16px;
+    display: inline-block;
 }
 
 .login-title { font-size: 22px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
@@ -615,13 +615,12 @@ html, body {
     width: 26px;
     height: 26px;
     border-radius: 6px;
-    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-    color: white;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 700;
-    font-size: 14px;
+    background-image: url("/static/logo.svg");
+    background-size: contain;
+    background-position: center;
+    background-repeat: no-repeat;
+    display: inline-block;
+    flex-shrink: 0;
 }
 
 .title { font-weight: 600; font-size: 15px; }
@@ -689,7 +688,13 @@ html, body {
     flex-shrink: 0;
 }
 .avatar.user { background: var(--accent); color: white; }
-.avatar.assistant { background: var(--welcome-h-gradient); color: white; }
+.avatar.assistant {
+    background-image: url("/static/logo.svg");
+    background-size: contain;
+    background-position: center;
+    background-repeat: no-repeat;
+    color: transparent;
+}
 
 .bubble {
     max-width: 85%;
