@@ -16,9 +16,26 @@ import logging
 import os
 import platform
 import socket
+import sys
 import threading
 import time
 import webbrowser
+from pathlib import Path
+
+
+# Make the `stupidex` package importable regardless of how this launcher
+# is invoked. Handles three layouts:
+#   1. src/ layout: launcher.py at project root, src/stupidex/ as package
+#   2. flat layout: launcher.py next to stupidex/ package
+#   3. packaged: stupidex is already on sys.path (pip install -e .)
+_THIS_DIR = Path(__file__).resolve().parent
+for _candidate in (_THIS_DIR, _THIS_DIR / "src", _THIS_DIR.parent):
+    pkg = _candidate / "stupidex"
+    if pkg.is_dir() and (pkg / "__init__.py").is_file():
+        sp = str(_candidate)
+        if sp not in sys.path:
+            sys.path.insert(0, sp)
+        break
 
 
 def _find_free_port(preferred: int = 5000) -> int:
