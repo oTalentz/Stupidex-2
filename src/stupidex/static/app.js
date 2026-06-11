@@ -11,6 +11,7 @@ const els = {
     sessionList: $("session-list"),
     newChatBtn: $("new-chat-btn"),
     openSettings: $("open-settings"),
+    logoutBtn: $("logout-btn"),
 
     workspacePanel: $("workspace-panel"),
     workspaceList: $("workspace-list"),
@@ -20,6 +21,8 @@ const els = {
     cloneBtn: $("clone-btn"),
     newWsBtn: $("new-ws-btn"),
     fileInput: $("file-input"),
+    wsFilesCount: $("ws-files-count"),
+    wsActiveBadge: $("ws-active-badge"),
 
     sessionTitle: $("session-title"),
     messages: $("messages"),
@@ -61,6 +64,20 @@ const els = {
     fileModalContent: $("file-modal-content"),
 
     dropOverlay: $("drop-overlay"),
+
+    // v3 premium UI elements
+    researchPanel: $("research-panel"),
+    researchToggle: $("research-toggle"),
+    closeResearch: $("close-research"),
+    researchTabs: document.querySelectorAll(".research-tab"),
+    researchTabPanes: {
+        sources: $("research-tab-sources"),
+        notes: $("research-tab-notes"),
+        graph: $("research-tab-graph"),
+    },
+    composerAttach: $("composer-attach"),
+    composerViewProject: $("composer-view-project"),
+    modelSwitcher: $("model-switcher"),
 };
 
 let state = {
@@ -1119,8 +1136,15 @@ async function loadConfig() {
 }
 
 function updateBadges() {
-    els.providerBadge.textContent = state.config.provider;
-    els.modelBadge.textContent = state.config.model;
+    if (els.providerBadge) els.providerBadge.textContent = state.config.provider;
+    if (els.modelBadge) els.modelBadge.textContent = state.config.model;
+    // v3: reflect the active model on the model chip switcher
+    if (els.modelSwitcher) {
+        const model = state.config.model || "deepseek-v4-flash";
+        els.modelSwitcher.querySelectorAll(".model-chip").forEach(c => {
+            c.classList.toggle("model-chip-active", c.dataset.model === model);
+        });
+    }
 }
 
 // ============================================================
@@ -1197,39 +1221,124 @@ els.themeToggle.addEventListener("click", () => {
 })();
 
 // ============================================================
+// RESEARCH PANEL (v3 premium UI)
+// ============================================================
+
+function setResearchVisible(visible) {
+    if (!els.researchPanel) return;
+    if (visible) {
+        els.researchPanel.classList.remove("research-hidden");
+        els.researchToggle && els.researchToggle.classList.add("is-active");
+    } else {
+        els.researchPanel.classList.add("research-hidden");
+        els.researchToggle && els.researchToggle.classList.remove("is-active");
+    }
+    try { localStorage.setItem("stupidex-research-open", visible ? "1" : "0"); } catch (e) {}
+}
+
+if (els.researchToggle) {
+    els.researchToggle.addEventListener("click", () => {
+        const isHidden = els.researchPanel.classList.contains("research-hidden");
+        setResearchVisible(isHidden);
+    });
+}
+if (els.closeResearch) {
+    els.closeResearch.addEventListener("click", () => setResearchVisible(false));
+}
+
+// Research tabs
+els.researchTabs.forEach(tab => {
+    tab.addEventListener("click", () => {
+        els.researchTabs.forEach(t => t.classList.remove("research-tab-active"));
+        tab.classList.add("research-tab-active");
+        const target = tab.dataset.tab;
+        Object.entries(els.researchTabPanes).forEach(([k, pane]) => {
+            if (!pane) return;
+            pane.classList.toggle("hidden", k !== target);
+        });
+    });
+});
+
+// Composer attach (re-uses file input)
+if (els.composerAttach) {
+    els.composerAttach.addEventListener("click", () => els.fileInput && els.fileInput.click());
+}
+if (els.composerViewProject) {
+    els.composerViewProject.addEventListener("click", () => {
+        // Visual placeholder — just open settings for now
+        openSettings();
+    });
+}
+
+// Model chip switcher
+if (els.modelSwitcher) {
+    els.modelSwitcher.addEventListener("click", (e) => {
+        const chip = e.target.closest(".model-chip");
+        if (!chip) return;
+        els.modelSwitcher.querySelectorAll(".model-chip").forEach(c =>
+            c.classList.toggle("model-chip-active", c === chip));
+        const model = chip.dataset.model;
+        try { localStorage.setItem("stupidex-model", model); } catch (e) {}
+    });
+}
+
+// Restore research panel state
+(function() {
+    try {
+        if (localStorage.getItem("stupidex-research-open") === "1") {
+            setResearchVisible(true);
+        }
+    } catch (e) {}
+})();
+
+// ============================================================
 // SEARCH
 // ============================================================
 
 let searchDebounce = null;
-$("search-input").addEventListener("input", (e) => {
-    clearTimeout(searchDebounce);
-    const q = e.target.value.trim();
-    searchDebounce = setTimeout(async () => {
-        if (!q) {
-            await loadSessions();
-            return;
-        }
-        const r = await fetch(`/api/sessions/search?q=${encodeURIComponent(q)}`);
-        if (r.ok) {
-            state.sessions = await r.json();
-            renderSessions();
-        }
-    }, 200);
-});
+function bindSearchInput(input) {
+    if (!input) return;
+    input.addEventListener("input", (e) => {
+        clearTimeout(searchDebounce);
+        const q = e.target.value.trim();
+        searchDebounce = setTimeout(async () => {
+            if (!q) {
+                await loadSessions();
+                return;
+            }
+            const r = await fetch(`/api/sessions/search?q=${encodeURIComponent(q)}`);
+            if (r.ok) {
+                state.sessions = await r.json();
+                renderSessions();
+            }
+        }, 200);
+    });
+}
+// Existing legacy input (kept in DOM for backwards-compat)
+bindSearchInput($("search-input"));
+// New: rail button focuses an inline search field in the workspace panel
+const railSearch = $("rail-search");
+if (railSearch) {
+    railSearch.addEventListener("click", () => {
+        // The workspace panel already lists all sessions; we just focus the
+        // session list as a soft "search" affordance. Future: show an input.
+        const firstSession = document.querySelector(".session-item");
+        if (firstSession) firstSession.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+}
 
 // ============================================================
 // KEYBOARD SHORTCUTS
 // ============================================================
 
 document.addEventListener("keydown", (e) => {
-    // Ctrl/Cmd+K → focus search
+    // Ctrl/Cmd+K → focus composer input
     if ((e.ctrlKey || e.metaKey) && e.key === "k") {
         e.preventDefault();
-        $("search-input").focus();
-        $("search-input").select();
+        if (els.input) { els.input.focus(); els.input.select(); }
     }
     // Ctrl/Cmd+Shift+N → new chat
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "N") {
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "N" || e.key === "n")) {
         e.preventDefault();
         newSession();
     }
