@@ -168,9 +168,9 @@ input, textarea, select { font-family: inherit; }
 }
 
 .login-logo {
-    width: 64px; height: 64px;
-    border-radius: 14px;
-    background-image: url("/static/logo.svg");
+    width: 72px; height: 72px;
+    border-radius: 16px;
+    background-image: url("/static/logo.webp");
     background-size: contain;
     background-position: center;
     background-repeat: no-repeat;
@@ -612,10 +612,10 @@ html, body {
 .topbar-left { display: flex; align-items: center; gap: 10px; }
 
 .logo {
-    width: 26px;
-    height: 26px;
-    border-radius: 6px;
-    background-image: url("/static/logo.svg");
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+    background-image: url("/static/logo.webp");
     background-size: contain;
     background-position: center;
     background-repeat: no-repeat;
@@ -689,11 +689,12 @@ html, body {
 }
 .avatar.user { background: var(--accent); color: white; }
 .avatar.assistant {
-    background-image: url("/static/logo.svg");
+    background-image: url("/static/logo.webp");
     background-size: contain;
     background-position: center;
     background-repeat: no-repeat;
     color: transparent;
+    border-radius: 6px;
 }
 
 .bubble {
