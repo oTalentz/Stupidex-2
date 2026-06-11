@@ -127,9 +127,17 @@ html, body {
 button { font-family: inherit; cursor: pointer; }
 input, textarea, select { font-family: inherit; }
 
-/* ----------- Main app container (grid pass-through) ----------- */
+/* ----------- Main app sub-grid ----------- */
 #main-app {
-    display: contents;
+    display: grid;
+    grid-template-columns: 240px 280px 1fr;
+    grid-column: 1 / -1;
+    overflow: hidden;
+    min-height: 0;
+}
+
+#main-app.hidden {
+    display: none !important;
 }
 
 /* ----------- Login Screen ----------- */
