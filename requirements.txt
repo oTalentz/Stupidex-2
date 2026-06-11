@@ -3,3 +3,4 @@ litellm>=1.40
 textual>=0.80
 python-dotenv>=1.0
 gunicorn>=21.0
+waitress>=3.0
