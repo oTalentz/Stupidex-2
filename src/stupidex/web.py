@@ -372,7 +372,15 @@ def auth_google_callback():
     # Return HTML that saves the token and redirects to the frontend.
     # The token is delivered over a one-shot HTML page. The CSP allows 'self' scripts
     # only, so we set the token via a meta refresh + same-origin script tag.
-    frontend = os.environ.get("FRONTEND_URL") or "/"
+    # If FRONTEND_URL is not set, fall back to the current origin root
+    # (so the redirect lands on the app, not on a sub-route like the
+    # callback itself).
+    frontend = os.environ.get("FRONTEND_URL")
+    if not frontend:
+        try:
+            frontend = request.url_root.rstrip("/")
+        except Exception:
+            frontend = "/"
     # We need to use a meta refresh fallback (no JS) because the strict CSP
     # blocks inline scripts. The token is also embedded in the URL fragment
     # so the SPA can pick it up on load (avoids needing JS for localStorage).
