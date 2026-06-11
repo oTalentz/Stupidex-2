@@ -1119,6 +1119,10 @@ function updateBadges() {
 
 els.newChatBtn.addEventListener("click", newSession);
 els.openSettings.addEventListener("click", openSettings);
+$("logout-btn").addEventListener("click", async () => {
+    if (!confirm("Sair da conta?")) return;
+    await logout();
+});
 els.closeSettings.addEventListener("click", closeSettings);
 els.cancelSettings.addEventListener("click", closeSettings);
 els.saveSettings.addEventListener("click", saveSettings);
@@ -1283,6 +1287,32 @@ function showLogin() {
 function showApp() {
     elsAuth.loginScreen.classList.add("hidden");
     elsAuth.mainApp.classList.remove("hidden");
+}
+
+async function logout() {
+    try { await _origFetch("/api/auth/logout", { method: "POST", headers: { Authorization: "Bearer " + getToken() } }); } catch {}
+    clearToken();
+    if (state.abortController) try { state.abortController.abort(); } catch {}
+    state = {
+        providers: [],
+        config: { provider: "deepseek-v4-flash", model: "deepseek-v4-flash", has_api_key: true },
+        workspaces: { workspaces: [], active_id: null },
+        sessions: [],
+        currentSessionId: null,
+        busy: false,
+        abortController: null,
+        tree: [],
+        dropCounter: 0,
+    };
+    els.messages.innerHTML = "";
+    els.sessionList.innerHTML = "";
+    els.workspaceList.innerHTML = "";
+    els.treeContainer.innerHTML = "";
+    els.sessionTitle.textContent = "Stupidex";
+    showLogin();
+    elsAuth.loginEmail.value = "";
+    elsAuth.loginPassword.value = "";
+    elsAuth.loginError.classList.add("hidden");
 }
 
 function setLoginError(msg) {

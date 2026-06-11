@@ -329,7 +329,10 @@ html, body {
 .session-item:hover .delete { opacity: 1; }
 .session-item .delete:hover { background: var(--danger); color: white; }
 
-.sidebar-footer { padding: 4px; border-top: 1px solid var(--border); }
+.sidebar-footer { padding: 4px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px; }
+
+.logout-btn { color: var(--text-muted); }
+.logout-btn:hover { background: var(--bg-error); color: var(--danger); border-color: var(--tool-block-error-border); }
 
 #open-settings {
     display: flex;
