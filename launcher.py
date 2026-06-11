@@ -126,17 +126,21 @@ def _try_flask(app, host: str, port: int) -> None:
 def main() -> int:
     _setup_logging()
 
-    # Auto-detect server mode: if PORT is set, we're on a cloud host.
-    # Also honor STUPIDEX_SERVER=1 for explicit control.
+    # Auto-detect server mode. Cloud hosts (Square Cloud, Render, Fly, etc.)
+    # often don't set PORT — but they run on Linux in a non-TTY container.
+    # The desktop .exe is a separate build (PyInstaller) and doesn't use this.
     is_server = (
         os.environ.get("STUPIDEX_SERVER") == "1"
         or os.environ.get("PORT") is not None
         or os.environ.get("STUPIDEX_HOST") == "0.0.0.0"
+        or (
+            os.name == "posix"
+            and not sys.stdout.isatty()
+            and os.environ.get("STUPIDEX_DESKTOP") != "1"
+        )
     )
 
     host = os.environ.get("STUPIDEX_HOST", "0.0.0.0" if is_server else "127.0.0.1")
-    # Cloud platforms that proxy to port 80 usually don't set PORT.
-    # Square Cloud, Render, etc route requests to port 80 internally.
     port = int(
         os.environ.get("PORT")
         or os.environ.get("STUPIDEX_PORT")
