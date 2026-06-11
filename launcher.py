@@ -99,7 +99,10 @@ def main() -> int:
     log_path = _setup_logging()
 
     is_server = os.environ.get("STUPIDEX_SERVER") == "1"
-    host = os.environ.get("STUPIDEX_HOST", "0.0.0.0" if is_server else "127.0.0.1")
+    # Auto-detect server mode: if STUPIDEX_HOST is 0.0.0.0 OR PORT is set OR we're not on Windows desktop
+    requested_host = os.environ.get("STUPIDEX_HOST")
+    is_server = is_server or requested_host == "0.0.0.0" or os.environ.get("PORT") is not None
+    host = requested_host or ("0.0.0.0" if is_server else "127.0.0.1")
     # Cloud platforms (Render, Fly, Square Cloud, Railway, Heroku) all
     # expose a `PORT` env var; honor that first, then STUPIDEX_PORT, then 5000.
     preferred = int(
@@ -110,7 +113,7 @@ def main() -> int:
     port = _find_free_port(preferred) if not is_server else preferred
     url = f"http://{host}:{port}/" if is_server else f"http://127.0.0.1:{port}/"
 
-    logging.info("Stupidex starting on %s (pid=%d)", url, os.getpid())
+    logging.info("Stupidex starting on %s (pid=%d, server=%s)", url, os.getpid(), is_server)
 
     from stupidex.web import app
 
