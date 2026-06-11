@@ -476,25 +476,25 @@ i[class*="ph-"] {
     left: 0; right: 0; bottom: 0;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 32px 24px 140px 24px;
-    display: flex; flex-direction: column;
-    scroll-behavior: smooth;
+    padding: 0 24px 120px 24px;
+    text-align: center;
     background:
-        radial-gradient(ellipse at 50% 30%, rgba(99,102,241,0.04) 0%, transparent 60%),
+        radial-gradient(ellipse at 50% 0%, rgba(99,102,241,0.05) 0%, transparent 50%),
         var(--bg-main);
 }
 .messages-loading {
-    flex: 1;
-    display: flex; align-items: center; justify-content: center;
     color: var(--text-muted);
     font-size: 14px;
+    padding: 60px 0;
 }
 .messages-inner {
     max-width: 820px;
     width: 100%;
     margin: 0 auto;
+    text-align: left;
     display: flex; flex-direction: column;
     gap: 24px;
+    padding: 32px 0;
 }
 
 .message { display: flex; gap: 12px; align-items: flex-start; animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
@@ -684,14 +684,15 @@ i[class*="ph-"] {
 
 /* Welcome screen */
 .welcome {
-    flex: 1;
     display: flex; flex-direction: column;
     align-items: center; justify-content: center;
     text-align: center;
     padding: 32px 20px;
     color: var(--text);
     width: 100%;
-    min-height: calc(100vh - var(--topbar-height) - 200px);
+    max-width: 820px;
+    margin: 0 auto;
+    min-height: 100%;
 }
 .welcome h2 {
     font-size: 30px;
