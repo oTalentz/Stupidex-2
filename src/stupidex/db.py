@@ -21,7 +21,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterator
 
-from werkzeug.security import check_password_hash, generate_password_hash
+try:
+    from werkzeug.security import check_password_hash, generate_password_hash
+except ImportError:
+    # Fallback: use hashlib (basic, no salt — only used if werkzeug is missing)
+    import hashlib
+    def generate_password_hash(pw: str, method: str = "sha256") -> str:  # noqa: ARG001
+        return hashlib.sha256(pw.encode()).hexdigest()
+    def check_password_hash(hash_val: str, pw: str) -> bool:  # noqa: ARG001
+        return hashlib.sha256(pw.encode()).hexdigest() == hash_val
 
 from .config import DATA_DIR
 
