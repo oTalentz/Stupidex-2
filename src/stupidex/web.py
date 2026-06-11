@@ -268,7 +268,7 @@ def _force_utf8_static(resp):
 
 @app.route("/api/health")
 def health():
-    return jsonify({"ok": True, "ts": time.time()})
+    return jsonify({"ok": True, "ts": time.time(), "v": "oauth-fix-v3"})
 
 
 # ============================================================
