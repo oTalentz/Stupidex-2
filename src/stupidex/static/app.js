@@ -1,4 +1,5 @@
 /* Stupidex client v2 — Workspaces, drag&drop, file tree, git clone */
+hljs.configure({ ignoreUnescapedHTML: true });
 marked.setOptions({ breaks: true, gfm: true, highlight: (code, lang) => {
     try { return lang && hljs.getLanguage(lang) ? hljs.highlight(code, { language: lang }).value : hljs.highlightAuto(code).value; }
     catch { return code; }

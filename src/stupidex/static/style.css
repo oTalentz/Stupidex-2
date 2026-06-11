@@ -298,6 +298,7 @@ i[class*="ph-"] {
 
 .workspace-list { display: flex; flex-direction: column; gap: 1px; }
 .workspace-item {
+    position: relative;
     display: flex; align-items: center; gap: 10px;
     padding: 8px 10px;
     border-radius: 8px;
@@ -588,6 +589,7 @@ i[class*="ph-"] {
 
 /* Tool blocks */
 .tool-block {
+    position: relative;
     background: rgba(0, 0, 0, 0.3);
     border: 1px solid var(--border-soft);
     border-radius: 10px;
@@ -736,6 +738,7 @@ i[class*="ph-"] {
     display: block;
 }
 .composer-input-wrap {
+    position: relative;
     background: var(--bg-input);
     border: 1px solid var(--border);
     border-radius: 16px;
