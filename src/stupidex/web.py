@@ -38,7 +38,6 @@ Endpoints:
 """
 
 import io
-import ipaddress
 import json
 import os
 import queue
@@ -200,88 +199,6 @@ def rate_limited(bucket: str):
         return wrapper
 
     return deco
-
-
-# ============================================================
-# IP Whitelisting for SquareCloud and private instances
-# ============================================================
-
-# Load allowed IPs from environment variable (comma-separated)
-_IP_WHITELIST_ENV = os.environ.get("STUPIDEX_ALLOWED_IPS", "").strip()
-_IP_WHITELIST = (
-    [ip.strip() for ip in _IP_WHITELIST_ENV.split(",") if ip.strip()]
-    if _IP_WHITELIST_ENV
-    else []
-)
-
-# If SquareCloud, automatically allow its IP ranges
-_SQUARECLOUD_PROXY_IPS = [
-    "167.248.133.0/24",
-    "167.248.134.0/24",
-    "167.248.135.0/24",
-]
-
-
-def _is_ip_allowed(remote_addr: str) -> bool:
-    """Check if the given IP address is in the whitelist or SquareCloud ranges."""
-    if not _IP_WHITELIST and not _SQUARECLOUD_PROXY_IPS:
-        return True  # No whitelist configured = allow all
-
-    try:
-        ip = ipaddress.ip_address(remote_addr)
-
-        # Check explicit whitelist
-        for allowed in _IP_WHITELIST:
-            try:
-                if ipaddress.ip_address(allowed) == ip:
-                    return True
-                # Check if it's a network
-                network = ipaddress.ip_network(allowed, strict=False)
-                if ip in network:
-                    return True
-            except ValueError:
-                # If it's not a valid IP/network, skip
-                continue
-
-        # Check SquareCloud proxy ranges
-        for cidr in _SQUARECLOUD_PROXY_IPS:
-            network = ipaddress.ip_network(cidr, strict=False)
-            if ip in network:
-                return True
-
-        return False
-    except ValueError:
-        # Invalid IP address format
-        return False
-
-
-# ============================================================
-# Global IP Whitelisting (applied to all API routes)
-# ============================================================
-
-
-@app.before_request
-def check_ip_whitelist():
-    """Global IP whitelist check for all requests."""
-    # Skip for static files and root
-    if request.path.startswith("/static/"):
-        return
-    if request.path == "/":
-        return
-
-    remote_addr = request.remote_addr or ""
-    forwarded_for = request.headers.get("X-Forwarded-For", "")
-    real_ip = request.headers.get("X-Real-IP", "")
-
-    if forwarded_for:
-        client_ip = forwarded_for.split(",")[0].strip()
-    elif real_ip:
-        client_ip = real_ip.strip()
-    else:
-        client_ip = remote_addr
-
-    if not _is_ip_allowed(client_ip):
-        return jsonify({"error": "IP not allowed"}), 403
 
 
 # ============================================================
