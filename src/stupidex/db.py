@@ -8,6 +8,7 @@ Migrations:
   v2 – pinned / archived flags
   v3 – users + auth_tokens
   v4 – sessions.user_id FK
+  v5 – Google OAuth (email, avatar_url, oauth_provider)
 """
 import json
 import secrets
@@ -38,11 +39,17 @@ class User:
     created_at: float
     last_login: float
     api_key: str | None = None
+    email: str | None = None
+    avatar_url: str | None = None
+    oauth_provider: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "username": self.username,
+            "email": self.email,
+            "avatar_url": self.avatar_url,
+            "oauth_provider": self.oauth_provider,
             "created_at": self.created_at,
             "last_login": self.last_login,
             "has_api_key": bool(self.api_key),
@@ -169,6 +176,16 @@ _MIGRATIONS: list[str] = [
     ALTER TABLE sessions ADD COLUMN user_id TEXT NOT NULL DEFAULT '';
     CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id, updated_at DESC);
     """,
+    # v5 — Google OAuth support
+    """
+    ALTER TABLE users ADD COLUMN email         TEXT DEFAULT '';
+    ALTER TABLE users ADD COLUMN avatar_url    TEXT DEFAULT '';
+    ALTER TABLE users ADD COLUMN oauth_provider TEXT DEFAULT '';
+    """,
+    # v6 — composite unique on (email, oauth_provider)
+    """
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_provider ON users(email, oauth_provider) WHERE email != '';
+    """,
 ]
 
 
@@ -187,10 +204,23 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             v = i + 1
             if v <= current:
                 continue
-            cur.executescript(sql)
-            cur.execute("INSERT INTO schema_version(version, applied_at) VALUES (?, ?)", (v, time.time()))
+            # executescript() can invalidate the cursor — use execute() for
+            # single statements, or split multi-statement scripts manually.
+            for stmt in _split_statements(sql):
+                conn.execute(stmt)
+            conn.execute("INSERT INTO schema_version(version, applied_at) VALUES (?, ?)", (v, time.time()))
         conn.commit()
         _SCHEMA_INITIALIZED = True
+
+
+def _split_statements(sql: str) -> list[str]:
+    """Split a SQL script into individual statements, skipping blanks and comments."""
+    stmts = []
+    for raw in sql.split(";"):
+        stmt = raw.strip()
+        if stmt and not stmt.startswith("--"):
+            stmts.append(stmt)
+    return stmts
 
 
 @contextmanager
@@ -239,8 +269,52 @@ def create_user(username: str, password: str) -> tuple[User, str]:
         )
 
     token = _create_token(uid)
-    user = User(id=uid, username=username, created_at=now, last_login=now)
+    return User(id=uid, username=username, created_at=now, last_login=now), token
+
+
+def find_or_create_oauth_user(email: str, name: str, avatar_url: str, provider: str) -> tuple[User, str]:
+    """Find existing OAuth user by email, or create a new one. Returns (User, token)."""
+    email = email.strip().lower()
+    name = name.strip() or email.split("@")[0]
+
+    with db_cursor() as cur:
+        row = cur.execute(
+            "SELECT id, username, password_hash, api_key, email, avatar_url, oauth_provider, created_at, last_login "
+            "FROM users WHERE email = ? AND oauth_provider = ?",
+            (email, provider),
+        ).fetchone()
+
+        now = time.time()
+        if row:
+            uid = row["id"]
+            cur.execute(
+                "UPDATE users SET avatar_url = ?, last_login = ? WHERE id = ?",
+                (avatar_url or row["avatar_url"], now, uid),
+            )
+        else:
+            uid = uuid.uuid4().hex[:12]
+            base = name.strip().lower().replace(" ", "")[:20] or "user"
+            username = base
+            if cur.execute("SELECT 1 FROM users WHERE username = ?", (base,)).fetchone():
+                suffix = 2
+                while True:
+                    username = f"{base}{suffix}"
+                    if not cur.execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone():
+                        break
+                    suffix += 1
+            cur.execute(
+                "INSERT INTO users(id, username, password_hash, email, avatar_url, oauth_provider, created_at, last_login) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (uid, username, "", email, avatar_url, provider, now, now),
+            )
+
+    token = _create_token(uid)
+    user = User(id=uid, username=name, created_at=now, last_login=now,
+                email=email, avatar_url=avatar_url, oauth_provider=provider)
     return user, token
+
+
+
 
 
 def authenticate_user(username: str, password: str) -> tuple[User, str]:
@@ -278,7 +352,7 @@ def validate_token(token: str) -> User | None:
         return None
     with db_cursor() as cur:
         row = cur.execute(
-            "SELECT u.id, u.username, u.api_key, u.created_at, u.last_login "
+            "SELECT u.id, u.username, u.api_key, u.email, u.avatar_url, u.oauth_provider, u.created_at, u.last_login "
             "FROM auth_tokens t JOIN users u ON u.id = t.user_id "
             "WHERE t.token = ? AND t.expires_at > ?",
             (token, time.time()),
@@ -286,7 +360,8 @@ def validate_token(token: str) -> User | None:
     if not row:
         return None
     return User(id=row["id"], username=row["username"], created_at=row["created_at"],
-                last_login=row["last_login"], api_key=row["api_key"])
+                last_login=row["last_login"], api_key=row["api_key"],
+                email=row["email"], avatar_url=row["avatar_url"], oauth_provider=row["oauth_provider"])
 
 
 def logout_token(token: str) -> None:

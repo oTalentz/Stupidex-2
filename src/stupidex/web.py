@@ -42,14 +42,17 @@ import io
 import json
 import os
 import queue
+import secrets
 import threading
 import time
+import urllib.parse
+import urllib.request
 import zipfile
 from collections.abc import Generator
 from functools import wraps
 from pathlib import Path
 
-from flask import Flask, Response, jsonify, request, send_from_directory
+from flask import Flask, Response, jsonify, redirect, request, send_from_directory
 
 from . import db, workspaces as workspaces_module
 from .config import DATA_DIR, load_config, update_config
@@ -60,6 +63,18 @@ app = Flask(__name__, static_folder="static")
 app.config["MAX_CONTENT_LENGTH"] = 200 * 1024 * 1024  # 200 MB upload limit
 
 CORS_ORIGINS = os.environ.get("STUPIDEX_CORS", "*").split(",")
+
+# Google OAuth
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+GOOGLE_REDIRECT_URI = os.environ.get(
+    "GOOGLE_REDIRECT_URI",
+    (os.environ.get("FRONTEND_URL") or os.environ.get("RENDER_EXTERNAL_URL") or "http://localhost:" + os.environ.get("PORT", "5000"))
+    + "/api/auth/google/callback"
+)
+_GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+_GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+_GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 
 
 # ============================================================
@@ -119,7 +134,101 @@ def health():
 
 
 # ============================================================
-# Auth endpoints
+# Google OAuth
+# ============================================================
+
+@app.route("/api/auth/google", methods=["GET"])
+def auth_google():
+    if not GOOGLE_CLIENT_ID:
+        return jsonify({"error": "Google OAuth not configured (set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)"}), 501
+
+    state = secrets.token_urlsafe(16)
+    params = urllib.parse.urlencode({
+        "client_id": GOOGLE_CLIENT_ID,
+        "redirect_uri": GOOGLE_REDIRECT_URI,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "state": state,
+        "access_type": "offline",
+        "prompt": "select_account",
+    })
+    return redirect(f"{_GOOGLE_AUTH_URL}?{params}")
+
+
+@app.route("/api/auth/google/callback", methods=["GET"])
+def auth_google_callback():
+    code = request.args.get("code", "")
+    error = request.args.get("error", "")
+    if error:
+        return jsonify({"error": f"Google OAuth denied: {error}"}), 400
+    if not code:
+        return jsonify({"error": "missing authorization code"}), 400
+
+    # Exchange code for access token
+    try:
+        token_req = urllib.request.Request(
+            _GOOGLE_TOKEN_URL,
+            data=urllib.parse.urlencode({
+                "client_id": GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
+                "code": code,
+                "grant_type": "authorization_code",
+                "redirect_uri": GOOGLE_REDIRECT_URI,
+            }).encode(),
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        with urllib.request.urlopen(token_req, timeout=10) as resp:
+            token_data = json.loads(resp.read())
+        access_token = token_data.get("access_token")
+        if not access_token:
+            return jsonify({"error": "failed to exchange code", "detail": token_data.get("error_description", "")}), 400
+    except Exception as e:
+        return jsonify({"error": f"token exchange failed: {e}"}), 500
+
+    # Get user info from Google
+    try:
+        userinfo_req = urllib.request.Request(
+            _GOOGLE_USERINFO_URL,
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        with urllib.request.urlopen(userinfo_req, timeout=10) as resp:
+            userinfo = json.loads(resp.read())
+        email = (userinfo.get("email") or "").strip().lower()
+        name = userinfo.get("name") or email.split("@")[0]
+        picture = userinfo.get("picture") or ""
+        if not email:
+            return jsonify({"error": "Google did not return an email address"}), 400
+    except Exception as e:
+        return jsonify({"error": f"userinfo request failed: {e}"}), 500
+
+    # Find or create user
+    try:
+        user, token = db.find_or_create_oauth_user(email, name, picture, "google")
+    except Exception as e:
+        return jsonify({"error": f"user creation failed: {e}"}), 500
+
+    user_dict = user.to_dict()
+    user_dict["token"] = token
+
+    # Return HTML that saves the token and redirects to the frontend
+    frontend = os.environ.get("FRONTEND_URL") or "/"
+    return f"""<!DOCTYPE html>
+<html>
+<body>
+<script>
+    try {{
+        localStorage.setItem('stupidex-token', '{token}');
+        localStorage.setItem('stupidex-user', JSON.stringify({json.dumps(user_dict)}));
+    }} catch (e) {{}}
+    window.location.href = '{frontend}';
+</script>
+<p>Login successful. Redirecting...</p>
+</body>
+</html>"""
+
+
+# ============================================================
+# Auth endpoints (email/password)
 # ============================================================
 
 @app.route("/api/auth/register", methods=["POST"])
