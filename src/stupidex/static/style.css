@@ -127,6 +127,11 @@ html, body {
 button { font-family: inherit; cursor: pointer; }
 input, textarea, select { font-family: inherit; }
 
+/* ----------- Main app container (grid pass-through) ----------- */
+#main-app {
+    display: contents;
+}
+
 /* ----------- Login Screen ----------- */
 
 .login-screen {
