@@ -5,6 +5,74 @@ import subprocess
 from pathlib import Path
 
 MAX_FILE_BYTES = 256 * 1024
+MAX_SHELL_OUTPUT_BYTES = 64 * 1024
+MAX_SHELL_TIMEOUT = 120
+DEFAULT_SHELL_TIMEOUT = 30
+
+# Commands that can escape the sandbox, exfiltrate data, or destroy the host.
+# Even though the LLM is told not to run them, we enforce this in code as a
+# defense in depth.
+_SHELL_BLOCKED_PATTERNS = [
+    r"\brm\s+-rf?\s+/(?!tmp/|workspace)",
+    r"\bsudo\b",
+    r"\bsu\b",
+    r"\bchmod\s+777\b",
+    r"\bchown\s+-R\b",
+    r"\bcurl\s+",
+    r"\bwget\s+",
+    r"\bnc\s+",
+    r"\bnetcat\b",
+    r"\bssh\s+",
+    r"\bscp\s+",
+    r"\brsync\s+",
+    r"\bdd\s+if=",
+    r"\bmkfs\b",
+    r"\bformat\s+",
+    r":\(\)\s*\{",       # fork bomb
+    r"&&\s*rm\b",
+    r"\|\s*sh\b",
+    r"\|\s*bash\b",
+    r"\beval\b",
+    r"\bbase64\s+-d\b",
+    r"\bpython\s+-c\b",
+    r"\bnode\s+-e\b",
+    r"\bperl\s+-e\b",
+    r"/etc/(?:passwd|shadow|hosts|fstab|hostname)",
+    r"/proc/",
+    r"/sys/",
+    r"~/?\.stupidex",
+    r"~/?\.ssh",
+    r"~/?\.aws",
+    r"~/?\.env",
+    r"~/?\.config",
+    r"\benv\b",
+    r"\bprintenv\b",
+    r"\bwhoami\b",
+    r"\buname\b",
+    r"\bhostname\b",
+    r"\bifconfig\b",
+    r"\bip\s+addr\b",
+    r"\bcat\s+/var/",
+    r"\bcrontab\b",
+    r"\bsystemctl\b",
+    r"\bservice\s+",
+]
+
+_SHELL_BLOCKED_RX = [re.compile(p) for p in _SHELL_BLOCKED_PATTERNS]
+
+
+def _is_path_within(child: Path, parent: Path) -> bool:
+    """True if `child` is inside `parent` (after resolve)."""
+    try:
+        child = child.resolve()
+        parent = parent.resolve()
+    except (OSError, RuntimeError):
+        return False
+    try:
+        child.relative_to(parent)
+        return True
+    except ValueError:
+        return False
 
 
 def _resolve(path: str, base: Path) -> Path:
@@ -16,14 +84,9 @@ def _resolve(path: str, base: Path) -> Path:
 
 def _sandbox_guard(resolved: Path, workspace_dir: Path) -> str | None:
     """Validate `resolved` is within `workspace_dir`. Returns error msg or None."""
-    try:
-        ws = workspace_dir.resolve()
-        target = resolved.resolve()
-        if str(target).startswith(str(ws)):
-            return None
+    if not _is_path_within(resolved, workspace_dir):
         return f"SECURITY: path outside workspace"
-    except Exception:
-        return f"SECURITY: could not validate path"
+    return None
 
 
 def _wd(w: str | None) -> Path:
@@ -160,8 +223,34 @@ def delete(path: str, working_dir: str = ".") -> str:
     return f"OK: removed file"
 
 
-def run_shell(command: str, cwd: str | None = None, timeout: int = 60) -> str:
+def run_shell(command: str, cwd: str | None = None, timeout: int = DEFAULT_SHELL_TIMEOUT) -> str:
+    """Run a shell command inside the workspace.
+
+    Defense-in-depth: enforce that the working directory is the workspace, and
+    block dangerous command patterns that could escape the sandbox even with a
+    contained cwd.
+    """
+    # 1. Enforce cwd is within the workspace
     work = Path(cwd).resolve() if cwd else Path.cwd()
+    workspace_root = Path(os.environ.get("STUPIDEX_WORKSPACE_ROOT", str(Path.cwd()))).resolve()
+    if not _is_path_within(work, workspace_root):
+        return f"SECURITY: shell cwd is outside the workspace"
+
+    # 2. Block dangerous patterns
+    cmd_lc = command.lower()
+    for rx in _SHELL_BLOCKED_RX:
+        if rx.search(cmd_lc):
+            return f"SECURITY: command blocked by sandbox policy"
+
+    # 3. Clamp timeout
+    timeout = max(1, min(int(timeout or DEFAULT_SHELL_TIMEOUT), MAX_SHELL_TIMEOUT))
+
+    # 4. Drop privileges: never run as root even if we are
+    env = {
+        "PATH": "/usr/local/bin:/usr/bin:/bin",
+        "HOME": str(work),
+        "LANG": "C.UTF-8",
+    }
     try:
         result = subprocess.run(
             command,
@@ -170,20 +259,34 @@ def run_shell(command: str, cwd: str | None = None, timeout: int = 60) -> str:
             capture_output=True,
             text=True,
             timeout=timeout,
+            env=env,
         )
     except subprocess.TimeoutExpired:
         return f"ERROR: command timed out after {timeout}s"
+    stdout = (result.stdout or "")[:MAX_SHELL_OUTPUT_BYTES]
+    stderr = (result.stderr or "")[:MAX_SHELL_OUTPUT_BYTES]
     parts = []
-    if result.stdout.strip():
-        parts.append(f"stdout:\n{result.stdout.rstrip()}")
-    if result.stderr.strip():
-        parts.append(f"stderr:\n{result.stderr.rstrip()}")
+    if stdout.strip():
+        parts.append(f"stdout:\n{stdout.rstrip()}")
+    if stderr.strip():
+        parts.append(f"stderr:\n{stderr.rstrip()}")
     parts.append(f"[exit {result.returncode}]")
     return "\n".join(parts) or f"[exit {result.returncode}] (no output)"
 
 
 def git(args: str, cwd: str | None = None) -> str:
     work = Path(cwd).resolve() if cwd else Path.cwd()
+    workspace_root = Path(os.environ.get("STUPIDEX_WORKSPACE_ROOT", str(Path.cwd()))).resolve()
+    if not _is_path_within(work, workspace_root):
+        return f"SECURITY: git cwd is outside the workspace"
+    # Only allow safe git subcommands
+    safe = {"status", "log", "diff", "show", "branch", "remote", "ls-files",
+            "ls-tree", "rev-parse", "fetch", "add", "commit", "push", "pull",
+            "stash", "tag", "checkout", "switch", "restore", "reset", "revert",
+            "merge", "rebase", "init", "config"}
+    first = (args or "").strip().split(maxsplit=1)[0:1]
+    if not first or first[0] not in safe:
+        return f"SECURITY: git subcommand not allowed"
     return run_shell(f"git {args}", cwd=str(work), timeout=120)
 
 

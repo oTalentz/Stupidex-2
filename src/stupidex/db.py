@@ -24,12 +24,31 @@ from typing import Any, Iterator
 try:
     from werkzeug.security import check_password_hash, generate_password_hash
 except ImportError:
-    # Fallback: use hashlib (basic, no salt — only used if werkzeug is missing)
+    # Fallback: PBKDF2 (NIST-recommended) — better than raw sha256, no extra deps.
     import hashlib
-    def generate_password_hash(pw: str, method: str = "sha256") -> str:  # noqa: ARG001
-        return hashlib.sha256(pw.encode()).hexdigest()
-    def check_password_hash(hash_val: str, pw: str) -> bool:  # noqa: ARG001
-        return hashlib.sha256(pw.encode()).hexdigest() == hash_val
+    import hmac
+    import os as _os
+    _PBKDF2_ITERS = 200_000
+    _PBKDF2_ALGO = "sha256"
+
+    def generate_password_hash(pw: str) -> str:
+        salt = _os.urandom(16)
+        dk = hashlib.pbkdf2_hmac(_PBKDF2_ALGO, pw.encode("utf-8"), salt, _PBKDF2_ITERS)
+        return f"pbkdf2_{_PBKDF2_ALGO}${_PBKDF2_ITERS}${salt.hex()}${dk.hex()}"
+
+    def check_password_hash(hash_val: str, pw: str) -> bool:
+        try:
+            scheme, iters_s, salt_hex, dk_hex = hash_val.split("$", 3)
+            if not scheme.startswith("pbkdf2_"):
+                return False
+            algo = scheme.split("_", 1)[1]
+            iters = int(iters_s)
+            salt = bytes.fromhex(salt_hex)
+            expected = bytes.fromhex(dk_hex)
+            candidate = hashlib.pbkdf2_hmac(algo, pw.encode("utf-8"), salt, iters)
+            return hmac.compare_digest(expected, candidate)
+        except Exception:
+            return False
 
 from .config import DATA_DIR
 
@@ -38,6 +57,18 @@ DB_FILE = DATA_DIR / "stupidex.db"
 _SCHEMA_LOCK = threading.Lock()
 _SCHEMA_INITIALIZED = False
 _TOKEN_BYTES = 32
+_MIN_PASSWORD_LEN = 8
+_MAX_PASSWORD_LEN = 200
+_MAX_USERNAME_LEN = 50
+
+# Per-user login throttling: at most N failures in M seconds before a temporary lock.
+_LOGIN_FAIL_LIMIT = 8
+_LOGIN_FAIL_WINDOW = 600.0  # 10 min
+_LOGIN_FAIL_LOCKOUT = 30.0  # sec blocked after the limit is hit
+_LOGIN_FAIL: dict[str, list[float]] = {}
+_LOGIN_FAIL_LOCK = threading.Lock()
+_LOGIN_BLOCKED: dict[str, float] = {}
+_LOGIN_BLOCKED_LOCK = threading.Lock()
 
 
 @dataclass
@@ -255,12 +286,53 @@ def init_db() -> None:
 # Users & Auth
 # ============================================================
 
+def _check_login_lockout(key: str) -> None:
+    """Raise ValueError if this key is currently locked out."""
+    with _LOGIN_BLOCKED_LOCK:
+        until = _LOGIN_BLOCKED.get(key, 0.0)
+    if until > time.time():
+        raise ValueError("too many failed attempts — try again later")
+
+
+def _record_login_failure(key: str) -> None:
+    # NOTE: must be careful with lock order. We hold _LOGIN_FAIL_LOCK and
+    # then acquire _LOGIN_BLOCKED_LOCK — never the reverse, to avoid deadlock.
+    should_block_until: float | None = None
+    with _LOGIN_FAIL_LOCK:
+        history = _LOGIN_FAIL.setdefault(key, [])
+        now = time.time()
+        history[:] = [t for t in history if t > now - _LOGIN_FAIL_WINDOW]
+        history.append(now)
+        if len(history) >= _LOGIN_FAIL_LIMIT:
+            should_block_until = now + _LOGIN_FAIL_LOCKOUT
+            _LOGIN_FAIL.pop(key, None)
+    if should_block_until is not None:
+        with _LOGIN_BLOCKED_LOCK:
+            _LOGIN_BLOCKED[key] = should_block_until
+
+
+def _record_login_success(key: str) -> None:
+    with _LOGIN_FAIL_LOCK:
+        _LOGIN_FAIL.pop(key, None)
+    with _LOGIN_BLOCKED_LOCK:
+        _LOGIN_BLOCKED.pop(key, None)
+
+
+def _is_valid_username(u: str) -> bool:
+    if not u or len(u) > _MAX_USERNAME_LEN:
+        return False
+    # Allow a-z, 0-9, _, ., -, @
+    return all(c.isalnum() or c in "_.@-" for c in u)
+
+
 def create_user(username: str, password: str) -> tuple[User, str]:
     username = username.strip().lower()
-    if not username or not password:
-        raise ValueError("username and password required")
-    if len(password) < 4:
-        raise ValueError("password must be at least 4 characters")
+    if not _is_valid_username(username):
+        raise ValueError("invalid username (allowed: letters, digits, _ . @ -)")
+    if not password or len(password) < _MIN_PASSWORD_LEN:
+        raise ValueError(f"password must be at least {_MIN_PASSWORD_LEN} characters")
+    if len(password) > _MAX_PASSWORD_LEN:
+        raise ValueError(f"password too long (max {_MAX_PASSWORD_LEN})")
 
     now = time.time()
     uid = uuid.uuid4().hex[:12]
@@ -327,14 +399,22 @@ def find_or_create_oauth_user(email: str, name: str, avatar_url: str, provider: 
 
 def authenticate_user(username: str, password: str) -> tuple[User, str]:
     username = username.strip().lower()
+    key = f"login:{username}"
+    _check_login_lockout(key)
+    # Always run the hash check (constant-time-ish) even on missing user
+    # to avoid user-enumeration timing attacks.
     with db_cursor() as cur:
         row = cur.execute(
             "SELECT id, username, password_hash, api_key, created_at FROM users WHERE username = ?",
             (username,),
         ).fetchone()
-    if not row or not check_password_hash(row["password_hash"], password):
+    dummy_hash = "pbkdf2_sha256$1$00$00"  # 1 iter so the check is fast
+    valid = check_password_hash(row["password_hash"] if row else dummy_hash, password)
+    if not row or not valid:
+        _record_login_failure(key)
         raise ValueError("invalid username or password")
 
+    _record_login_success(key)
     token = _create_token(row["id"])
     with db_cursor() as cur:
         cur.execute("UPDATE users SET last_login = ? WHERE id = ?", (time.time(), row["id"]))
@@ -558,6 +638,14 @@ def delete_messages_from(session_id: str, from_id: int) -> None:
 
 def _row_to_msg(r) -> DBMessage:
     d = dict(r)
+    # Defensive: corrupted JSON in DB shouldn't crash the entire message list.
+    try:
+        tc = json.loads(d["tool_calls_json"])
+    except (ValueError, TypeError):
+        tc = []
+    try:
+        md = json.loads(d["metadata_json"])
+    except (ValueError, TypeError):
+        md = {}
     return DBMessage(d["id"], d["session_id"], d["role"], d["type"], d["content"],
-                     json.loads(d["tool_calls_json"]), d["tool_call_id"],
-                     json.loads(d["metadata_json"]), d["created_at"])
+                     tc, d["tool_call_id"], md, d["created_at"])

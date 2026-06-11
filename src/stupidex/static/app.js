@@ -419,7 +419,9 @@ function buildToolCallBlock(call, result) {
     }
     if (argsText) {
         const argsEl = document.createElement("pre");
-        argsEl.innerHTML = `<code>${escapeHtml(argsText)}</code>`;
+        const argsCode = document.createElement("code");
+        argsCode.textContent = argsText;
+        argsEl.appendChild(argsCode);
         body.appendChild(argsEl);
     }
     if (result) {
@@ -430,7 +432,9 @@ function buildToolCallBlock(call, result) {
         const out = document.createElement("pre");
         const text = result.content || "(empty)";
         const truncated = text.length > 4000 ? text.slice(0, 4000) + `\n... (truncated, ${text.length} chars total)` : text;
-        out.innerHTML = `<code>${escapeHtml(truncated)}</code>`;
+        const outCode = document.createElement("code");
+        outCode.textContent = truncated;
+        out.appendChild(outCode);
         body.appendChild(out);
     } else {
         const sep = document.createElement("div");
@@ -588,14 +592,16 @@ function handleEvent(evt, ctx) {
             node.classList.remove("tool-pending");
             const body = node.querySelector(".tool-block-body");
             if (body) {
-                body.innerHTML = "";
+                body.textContent = "";
                 let argsText = "";
                 if (evt.arguments && evt.arguments !== "{}") {
                     try { argsText = JSON.stringify(JSON.parse(evt.arguments), null, 2); } catch { argsText = evt.arguments; }
                 }
                 if (argsText) {
                     const argsEl = document.createElement("pre");
-                    argsEl.innerHTML = `<code>${escapeHtml(argsText)}</code>`;
+                    const argsCode = document.createElement("code");
+                    argsCode.textContent = argsText;
+                    argsEl.appendChild(argsCode);
                     body.appendChild(argsEl);
                 }
                 const sep = document.createElement("div");
@@ -605,7 +611,11 @@ function handleEvent(evt, ctx) {
                 const out = document.createElement("pre");
                 const text = evt.content || "(empty)";
                 const truncated = text.length > 4000 ? text.slice(0, 4000) + `\n... (truncated, ${text.length} chars total)` : text;
-                out.innerHTML = `<code>${escapeHtml(truncated)}</code>`;
+                // Use textContent (not innerHTML) — defense in depth against
+                // XSS from tool output. The `out` <pre> renders preformatted text.
+                const outCode = document.createElement("code");
+                outCode.textContent = truncated;
+                out.appendChild(outCode);
                 body.appendChild(out);
             }
             const header = node.querySelector(".tool-block-header");

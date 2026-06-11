@@ -19,7 +19,11 @@ from pathlib import Path
 
 DEFAULT_PROVIDER = "deepseek-v4-flash"
 DEFAULT_MODEL = "deepseek-v4-flash"
-DEFAULT_API_KEY = "sk-a56f77faae7f482d9fc09ec8b777b2e2"  # DeepSeek V4 Flash
+# API key is intentionally EMPTY in the binary. Users must set it via env
+# (DEEPSEEK_API_KEY / STUPIDEX_API_KEY) or the .env / config.json. This
+# prevents the key from being shipped in compiled binaries and shared with
+# every user. The server will refuse to start a chat if no key is found.
+DEFAULT_API_KEY = ""
 DEFAULT_BASE_URL = "https://api.deepseek.com/v1"
 
 CONFIG_DIR = Path.home() / ".stupidex"
@@ -99,6 +103,11 @@ def load_config() -> AppConfig:
         custom_model=raw.get("custom_model", os.environ.get("STUPIDEX_CUSTOM_MODEL", "")),
         extra=raw.get("extra", {}),
     )
+
+
+def has_api_key() -> bool:
+    """True if a usable LLM API key is configured anywhere."""
+    return bool(load_config().api_key)
 
 
 def save_config(cfg: AppConfig) -> None:

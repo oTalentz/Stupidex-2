@@ -157,6 +157,7 @@ _DEFAULT_WD_TOOLS = {
     "read_file", "write_file", "edit_file", "list_dir",
     "search_files", "mkdir", "delete",
 }
+_CWD_TOOLS = {"run_shell", "git"}
 
 
 def _resolve_working_dir(args: dict, user_id: str = "") -> None:
@@ -168,6 +169,19 @@ def _resolve_working_dir(args: dict, user_id: str = "") -> None:
     active = _active_workspace_path(user_id)
     if active:
         args["working_dir"] = active
+        # Expose the workspace root to subprocess-based tools so the
+        # `run_shell` sandbox can also enforce containment.
+        import os
+        os.environ["STUPIDEX_WORKSPACE_ROOT"] = active
+
+
+def _resolve_cwd(args: dict, user_id: str = "") -> None:
+    """Force `cwd` (used by run_shell/git) to the user's active workspace."""
+    active = _active_workspace_path(user_id)
+    if active:
+        args["cwd"] = active
+        import os
+        os.environ["STUPIDEX_WORKSPACE_ROOT"] = active
 
 
 def _litellm_kwargs(ctx: AgentContext) -> dict:
@@ -346,6 +360,9 @@ def stream_response(
                 args = {}
             if call.name in _DEFAULT_WD_TOOLS:
                 _resolve_working_dir(args, ctx.user_id)
+                call.arguments = json.dumps(args, ensure_ascii=False)
+            elif call.name in _CWD_TOOLS:
+                _resolve_cwd(args, ctx.user_id)
                 call.arguments = json.dumps(args, ensure_ascii=False)
 
             yield {
