@@ -237,7 +237,33 @@ def preflight(_):
 
 @app.route("/")
 def index():
-    return send_from_directory(app.static_folder, "index.html")
+    resp = send_from_directory(app.static_folder, "index.html")
+    resp.headers["Content-Type"] = "text/html; charset=utf-8"
+    return resp
+
+
+# Ensure all static text/* files are served as UTF-8 so non-ASCII
+# characters (emojis, accented letters) render correctly in the browser.
+@app.after_request
+def _force_utf8_static(resp):
+    if not request.path.startswith("/static/"):
+        return resp
+    ct = resp.headers.get("Content-Type", "")
+    if ct.startswith("text/") and "charset" not in ct:
+        resp.headers["Content-Type"] = ct + "; charset=utf-8"
+    elif ct.startswith("application/javascript") and "charset" not in ct:
+        resp.headers["Content-Type"] = "application/javascript; charset=utf-8"
+    elif ct == "application/octet-stream":
+        ext = request.path.rsplit(".", 1)[-1].lower()
+        mapping = {
+            "js": "application/javascript; charset=utf-8",
+            "css": "text/css; charset=utf-8",
+            "html": "text/html; charset=utf-8",
+            "svg": "image/svg+xml; charset=utf-8",
+        }
+        if ext in mapping:
+            resp.headers["Content-Type"] = mapping[ext]
+    return resp
 
 
 @app.route("/api/health")
