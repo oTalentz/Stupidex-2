@@ -1,9 +1,13 @@
 /* Stupidex client v2 — Workspaces, drag&drop, file tree, git clone */
-hljs.configure({ ignoreUnescapedHTML: true });
-marked.setOptions({ breaks: true, gfm: true, highlight: (code, lang) => {
-    try { return lang && hljs.getLanguage(lang) ? hljs.highlight(code, { language: lang }).value : hljs.highlightAuto(code).value; }
-    catch { return code; }
-}});
+
+// Safely configure external libraries (they may fail to load from CDN).
+try { hljs && hljs.configure({ ignoreUnescapedHTML: true }); } catch (e) {}
+try {
+    marked && marked.setOptions({ breaks: true, gfm: true, highlight: function(code, lang) {
+        try { return lang && hljs && hljs.getLanguage(lang) ? hljs.highlight(code, { language: lang }).value : (hljs && hljs.highlightAuto(code).value); }
+        catch (e) { return code; }
+    }});
+} catch (e) {}
 
 // Avatar HTML for the assistant. Uses the Stupidex logo with a graceful
 // fallback to the letter "S" if the image fails to load.
