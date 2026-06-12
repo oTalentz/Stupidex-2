@@ -28,9 +28,31 @@ Then open `http://127.0.0.1:5000` in your browser.
 
 - Web authentication uses an `HttpOnly` cookie; bearer tokens remain supported for API clients.
 - Provider, model and API key settings are stored per user. API keys are encrypted at rest.
+- GitHub OAuth tokens are encrypted at rest and are used only by the server when downloading repository archives.
 - Agent shell execution is disabled by default. Enable it only inside an isolated container with
   `STUPIDEX_ENABLE_SHELL=1`; optionally restrict executables with `STUPIDEX_SHELL_COMMANDS`.
 - Production deployments must persist `STUPIDEX_DATA_DIR` (the Docker image uses `/data`).
+
+## GitHub private repositories
+
+Create a GitHub OAuth App and configure its callback URL as:
+
+```text
+https://your-domain.example/api/integrations/github/callback
+```
+
+Then set these environment variables:
+
+```bash
+GITHUB_CLIENT_ID=your_oauth_app_client_id
+GITHUB_CLIENT_SECRET=your_oauth_app_client_secret
+GITHUB_REDIRECT_URI=https://your-domain.example/api/integrations/github/callback
+FRONTEND_URL=https://your-domain.example
+```
+
+The integration requests GitHub's `repo` scope so the connected user can clone
+and update private repositories they are allowed to access. Public GitHub and
+GitLab repositories continue to work without connecting an account.
 
 ### Standalone executable (no Python required)
 

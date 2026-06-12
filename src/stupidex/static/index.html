@@ -66,9 +66,7 @@
             hljs.configure({ ignoreUnescapedHTML: true });
         </script>
 
-        <link rel="stylesheet" href="/static/style.css?v=11" />
-        <!-- Puter.com Mistral API -->
-        <script src="https://js.puter.com/v2/"></script>
+        <link rel="stylesheet" href="/static/style.css?v=12" />
     </head>
     <body>
         <!-- =========================================================
@@ -288,10 +286,17 @@
                 <!-- Top Toolbar -->
                 <header id="topbar" class="topbar">
                     <div class="topbar-left">
-                        <h1 id="session-title" class="topbar-title">
-                            Stupidex
-                        </h1>
-                        <span id="session-time" class="topbar-meta"></span>
+                        <div class="conversation-mark" aria-hidden="true">
+                            <i class="ph ph-chat-circle-dots"></i>
+                        </div>
+                        <div class="conversation-heading">
+                            <h1 id="session-title" class="topbar-title">
+                                Stupidex
+                            </h1>
+                            <span id="session-time" class="topbar-meta"
+                                >Pronto para começar</span
+                            >
+                        </div>
                     </div>
 
                     <div class="topbar-center">
@@ -560,8 +565,31 @@
                     </button>
                 </div>
                 <div class="modal-body">
+                    <div
+                        id="clone-github-card"
+                        class="github-integration-card github-integration-compact"
+                    >
+                        <div class="github-integration-icon" aria-hidden="true">
+                            <i class="ph ph-github-logo"></i>
+                        </div>
+                        <div class="github-integration-copy">
+                            <strong id="clone-github-title"
+                                >Verificando GitHub…</strong
+                            >
+                            <span id="clone-github-description"
+                                >Repositórios públicos continuam disponíveis.</span
+                            >
+                        </div>
+                        <button
+                            id="clone-github-action"
+                            type="button"
+                            class="ghost-btn github-integration-action"
+                        >
+                            Conectar
+                        </button>
+                    </div>
                     <p class="section-hint">
-                        Cole a URL HTTPS ou SSH do repositório. Exemplo:
+                        Cole a URL HTTPS do repositório. Exemplo:
                         <code>https://github.com/usuario/projeto.git</code>
                     </p>
                     <label class="field">
@@ -667,6 +695,40 @@
                             />
                         </label>
                     </section>
+                    <section class="settings-section settings-section-divider">
+                        <h3 class="section-title">Integrações</h3>
+                        <div
+                            id="settings-github-card"
+                            class="github-integration-card"
+                        >
+                            <div
+                                id="settings-github-avatar"
+                                class="github-integration-icon"
+                                aria-hidden="true"
+                            >
+                                <i class="ph ph-github-logo"></i>
+                            </div>
+                            <div class="github-integration-copy">
+                                <strong id="settings-github-title"
+                                    >Verificando GitHub…</strong
+                                >
+                                <span id="settings-github-description"
+                                    >Conecte sua conta para clonar projetos privados.</span
+                                >
+                            </div>
+                            <button
+                                id="settings-github-action"
+                                type="button"
+                                class="ghost-btn github-integration-action"
+                            >
+                                Conectar
+                            </button>
+                        </div>
+                        <p class="integration-privacy-note">
+                            O token é armazenado cifrado no servidor e nunca é
+                            enviado ao navegador ou incluído na URL do repositório.
+                        </p>
+                    </section>
                 </div>
                 <div class="modal-footer">
                     <button id="cancel-settings" class="ghost-btn">
@@ -720,6 +782,6 @@
             </div>
         </div>
 
-        <script src="/static/app.js?v=11"></script>
+        <script src="/static/app.js?v=12"></script>
     </body>
 </html>

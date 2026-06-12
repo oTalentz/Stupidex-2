@@ -116,11 +116,13 @@ squarecloud logs
 No dashboard (https://squarecloud.app/pt-br/dashboard) ou via CLI:
 
 ```powershell
-squarecloud env set DEEPSEEK_API_KEY=sk-a56f77faae7f482d9fc09ec8b777b2e2
+squarecloud env set DEEPSEEK_API_KEY=sk-substitua-pela-sua-chave
 squarecloud env set STUPIDEX_TOKEN=uma-senha-segura-de-pelo-menos-32-chars
+squarecloud env set GITHUB_CLIENT_ID=seu-client-id
+squarecloud env set GITHUB_CLIENT_SECRET=seu-client-secret
+squarecloud env set GITHUB_REDIRECT_URI=https://<seu-subdomain>.squareweb.app/api/integrations/github/callback
+squarecloud env set FRONTEND_URL=https://<seu-subdomain>.squareweb.app
 ```
-
-(Para sua key atual, use `sk-a56f77faae7f482d9fc09ec8b777b2e2`.)
 
 ---
 
@@ -129,7 +131,8 @@ squarecloud env set STUPIDEX_TOKEN=uma-senha-segura-de-pelo-menos-32-chars
 1. Abra `https://<seu-subdomain>.squareweb.app` no navegador
 2. Faça login com o token que você definiu (cabeçalho `Authorization: Bearer <token>`)
 3. O Stupidex vai pedir pra **escolher um workspace** — clique em "Upload" ou "Git clone"
-4. **Git clone funciona** porque o app agora baixa o ZIP em vez de clonar
+4. **Git clone funciona** porque o app baixa o ZIP em vez de depender do executável Git
+5. Para projetos privados, conecte sua conta GitHub no modal de clonagem ou nas configurações
 
 ---
 

@@ -8,6 +8,9 @@ Endpoints:
   POST /api/auth/login                    → {username, password} → {user, token}
   POST /api/auth/logout                   → invalidate token (login_required)
   GET  /api/auth/me                       → current user info (login_required)
+  GET  /api/integrations/github           → GitHub connection status
+  GET  /api/integrations/github/connect   → start GitHub OAuth connection
+  DELETE /api/integrations/github         → disconnect GitHub account
 
   GET  /api/providers                     → provider list
   GET  /api/config                        → current config (no secrets leaked)
@@ -168,6 +171,23 @@ _GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 _GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 _GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 
+# GitHub OAuth App integration. The `repo` scope is required to download
+# archives from private repositories selected by the connected user.
+GITHUB_CLIENT_ID = os.environ.get("GITHUB_CLIENT_ID", "")
+GITHUB_CLIENT_SECRET = os.environ.get("GITHUB_CLIENT_SECRET", "")
+GITHUB_REDIRECT_URI = os.environ.get(
+    "GITHUB_REDIRECT_URI",
+    (
+        os.environ.get("FRONTEND_URL")
+        or os.environ.get("RENDER_EXTERNAL_URL")
+        or "http://localhost:" + os.environ.get("PORT", "5000")
+    )
+    + "/api/integrations/github/callback",
+)
+_GITHUB_AUTH_URL = "https://github.com/login/oauth/authorize"
+_GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token"
+_GITHUB_USER_URL = "https://api.github.com/user"
+
 # Session-secret used to sign the OAuth `state` cookie (CSRF defense).
 # Auto-generated on first run and persisted to the data dir.
 _SECRET_FILE = DATA_DIR / ".flask_secret"
@@ -246,6 +266,7 @@ def _client_identity() -> str:
 
 # OAuth `state` cookie store (CSRF defense)
 _OAUTH_STATE_COOKIE = "stupidex_oauth_state"
+_GITHUB_STATE_COOKIE = "stupidex_github_oauth_state"
 _AUTH_COOKIE = "stupidex_auth"
 
 
@@ -529,6 +550,164 @@ def auth_google_callback():
     _set_auth_cookie(resp, token)
     resp.set_cookie(_OAUTH_STATE_COOKIE, "", max_age=0, path="/")
     return resp
+
+
+# ============================================================
+# GitHub integration
+# ============================================================
+
+
+def _github_configured() -> bool:
+    return bool(GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET)
+
+
+def _frontend_redirect_url(github_status: str) -> str:
+    frontend = os.environ.get("FRONTEND_URL", "/").strip() or "/"
+    if frontend != "/":
+        parsed = urllib.parse.urlparse(frontend)
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            frontend = "/"
+    parsed = urllib.parse.urlparse(frontend)
+    query = dict(urllib.parse.parse_qsl(parsed.query, keep_blank_values=True))
+    query["github"] = github_status
+    return urllib.parse.urlunparse(parsed._replace(query=urllib.parse.urlencode(query)))
+
+
+@app.route("/api/integrations/github", methods=["GET"])
+@login_required
+@rate_limited("default")
+def github_integration_status():
+    return jsonify(
+        {
+            "configured": _github_configured(),
+            "connected": bool(request.user.github_access_token),
+            "login": request.user.github_login,
+            "avatar_url": request.user.github_avatar_url,
+            "connected_at": request.user.github_connected_at,
+            "scope": "repo",
+        }
+    )
+
+
+@app.route("/api/integrations/github/connect", methods=["GET"])
+@login_required
+@rate_limited("auth")
+def github_integration_connect():
+    if not _github_configured():
+        return jsonify(
+            {
+                "error": "GitHub OAuth is not configured",
+                "detail": "Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET.",
+            }
+        ), 501
+
+    state = secrets.token_urlsafe(32)
+    params = urllib.parse.urlencode(
+        {
+            "client_id": GITHUB_CLIENT_ID,
+            "redirect_uri": GITHUB_REDIRECT_URI,
+            "scope": "repo",
+            "state": state,
+            "allow_signup": "false",
+        }
+    )
+    resp = redirect(f"{_GITHUB_AUTH_URL}?{params}")
+    resp.set_cookie(
+        _GITHUB_STATE_COOKIE,
+        state,
+        max_age=600,
+        httponly=True,
+        secure=request.is_secure
+        or request.headers.get("X-Forwarded-Proto") == "https",
+        samesite="Lax",
+        path="/",
+    )
+    return resp
+
+
+@app.route("/api/integrations/github/callback", methods=["GET"])
+@login_required
+@rate_limited("auth")
+def github_integration_callback():
+    state_qs = request.args.get("state", "")
+    state_cookie = request.cookies.get(_GITHUB_STATE_COOKIE, "")
+    if (
+        not state_qs
+        or not state_cookie
+        or not secrets.compare_digest(state_qs, state_cookie)
+    ):
+        return jsonify({"error": "invalid OAuth state (possible CSRF)"}), 400
+
+    if request.args.get("error"):
+        resp = redirect(_frontend_redirect_url("denied"))
+        resp.set_cookie(_GITHUB_STATE_COOKIE, "", max_age=0, path="/")
+        return resp
+    code = request.args.get("code", "")
+    if not code:
+        return jsonify({"error": "missing authorization code"}), 400
+    if not _github_configured():
+        return jsonify({"error": "GitHub OAuth is not configured"}), 501
+
+    try:
+        token_req = urllib.request.Request(
+            _GITHUB_TOKEN_URL,
+            data=urllib.parse.urlencode(
+                {
+                    "client_id": GITHUB_CLIENT_ID,
+                    "client_secret": GITHUB_CLIENT_SECRET,
+                    "code": code,
+                    "redirect_uri": GITHUB_REDIRECT_URI,
+                }
+            ).encode(),
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/x-www-form-urlencoded",
+                "User-Agent": "Stupidex/0.1",
+            },
+        )
+        with urllib.request.urlopen(token_req, timeout=10) as token_resp:
+            token_data = json.loads(token_resp.read())
+        access_token = (token_data.get("access_token") or "").strip()
+        granted_scopes = {
+            item.strip() for item in (token_data.get("scope") or "").split(",")
+        }
+        if not access_token:
+            raise RuntimeError("GitHub did not return an access token")
+        if "repo" not in granted_scopes:
+            raise RuntimeError("GitHub did not grant private repository access")
+
+        user_req = urllib.request.Request(
+            _GITHUB_USER_URL,
+            headers={
+                "Accept": "application/vnd.github+json",
+                "Authorization": f"Bearer {access_token}",
+                "User-Agent": "Stupidex/0.1",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+        )
+        with urllib.request.urlopen(user_req, timeout=10) as user_resp:
+            github_user = json.loads(user_resp.read())
+        login = (github_user.get("login") or "").strip()
+        avatar_url = (github_user.get("avatar_url") or "").strip()
+        if not login:
+            raise RuntimeError("GitHub did not return an account login")
+        db.update_github_connection(request.user.id, access_token, login, avatar_url)
+    except Exception:
+        resp = redirect(_frontend_redirect_url("error"))
+        resp.set_cookie(_GITHUB_STATE_COOKIE, "", max_age=0, path="/")
+        return resp
+
+    resp = redirect(_frontend_redirect_url("connected"))
+    resp.set_cookie(_GITHUB_STATE_COOKIE, "", max_age=0, path="/")
+    return resp
+
+
+@app.route("/api/integrations/github", methods=["DELETE"])
+@login_required
+@rate_limited("default")
+def github_integration_disconnect():
+    db.clear_github_connection(request.user.id)
+    return jsonify({"ok": True})
 
 
 # ============================================================
@@ -1077,9 +1256,7 @@ def get_user_workspace_dir(user_id: str) -> Path:
     return DATA_DIR / "workspaces" / user_id
 
 
-# Allowed hostnames for git clone (SSRF mitigation).
-# Empty set = allow only direct .git urls to known git hosts. Users can add
-# more via STUPIDEX_GIT_HOSTS env var (comma-separated).
+# Allowed hostnames for archive-based repository cloning (SSRF mitigation).
 _GIT_HOST_ALLOWLIST = set(
     filter(
         None,
@@ -1105,9 +1282,21 @@ def _validate_git_url(url: str) -> str | None:
     host = (parsed.hostname or "").lower()
     if host not in _GIT_HOST_ALLOWLIST:
         return f"host {host!r} not in git allowlist"
+    try:
+        port = parsed.port
+    except ValueError:
+        return "invalid repository port"
+    if port not in (None, 443):
+        return "custom repository ports are not allowed"
     # Disallow userinfo (e.g. https://user:pass@host/...)
     if "@" in parsed.netloc:
         return "URLs with credentials are not allowed"
+    if parsed.query or parsed.fragment:
+        return "repository URL cannot contain a query or fragment"
+    if host in {"github.com", "www.github.com"}:
+        parts = [part for part in parsed.path.strip("/").split("/") if part]
+        if len(parts) != 2 or not parts[1].removesuffix(".git"):
+            return "GitHub URL must identify one repository"
     return None
 
 
@@ -1312,10 +1501,16 @@ def workspaces_clone(ws_id):
         return jsonify({"error": "invalid branch name"}), 400
     try:
         ws, stderr = workspaces_module.init_from_git(
-            request.user.id, ws_id, url, branch
+            request.user.id,
+            ws_id,
+            url,
+            branch,
+            request.user.github_access_token,
         )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
+    except workspaces_module.RepositoryAccessError as exc:
+        return jsonify({"error": str(exc)}), 403
     except RuntimeError as exc:
         return jsonify({"error": str(exc)}), 500
     except Exception as exc:
@@ -1327,8 +1522,10 @@ def workspaces_clone(ws_id):
 @login_required
 @rate_limited("upload")
 def workspaces_pull(ws_id):
-    ok, output = workspaces_module.git_pull(request.user.id, ws_id)
-    return jsonify({"ok": ok, "output": output})
+    ok, output = workspaces_module.git_pull(
+        request.user.id, ws_id, request.user.github_access_token
+    )
+    return jsonify({"ok": ok, "output": output}), 200 if ok else 400
 
 
 @app.route("/api/workspaces/<ws_id>/tree", methods=["GET"])

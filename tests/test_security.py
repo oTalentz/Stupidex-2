@@ -117,6 +117,96 @@ def test_oauth_state_csrf():
     assert r.status_code == 400, f"expected 400, got {r.status_code}"
 
 
+def test_github_oauth_state_csrf():
+    """GitHub callback also requires a state cookie bound to the logged-in user."""
+    from stupidex import web
+
+    _, token = db.create_user("github_csrf", "validpass123")
+    client = web.app.test_client()
+    r = client.get(
+        "/api/integrations/github/callback?code=fake&state=anything",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 400, f"expected 400, got {r.status_code}"
+
+
+def test_github_token_is_encrypted_and_never_serialized():
+    user, auth_token = db.create_user("github_storage", "validpass123")
+    secret = "gho_super_secret_token"
+    db.update_github_connection(
+        user.id,
+        secret,
+        "octocat",
+        "https://avatars.githubusercontent.com/u/1?v=4",
+    )
+    with db.db_cursor() as cur:
+        row = cur.execute(
+            "SELECT github_access_token FROM users WHERE id = ?", (user.id,)
+        ).fetchone()
+    assert row["github_access_token"].startswith("enc:v1:")
+    assert secret not in row["github_access_token"]
+
+    connected_user = db.validate_token(auth_token)
+    assert connected_user.github_access_token == secret
+    payload = connected_user.to_dict()
+    assert payload["github_connected"] is True
+    assert "github_access_token" not in payload
+    assert secret not in str(payload)
+
+
+def test_private_github_archive_url_uses_api_without_token_in_url():
+    from stupidex import workspaces
+
+    public_url = workspaces._archive_url_for(
+        "https://github.com/octocat/Hello-World.git", "main"
+    )
+    private_url = workspaces._archive_url_for(
+        "https://github.com/octocat/private.git", "feature/private", "gho_secret"
+    )
+    assert public_url == (
+        "https://codeload.github.com/octocat/Hello-World/zip/refs/heads/main"
+    )
+    assert private_url == (
+        "https://api.github.com/repos/octocat/private/zipball/feature%2Fprivate"
+    )
+    assert "gho_secret" not in private_url
+
+
+def test_archive_redirect_strips_auth_and_blocks_unknown_hosts():
+    import urllib.request
+
+    from stupidex import workspaces
+
+    handler = workspaces._SafeArchiveRedirectHandler()
+    request = urllib.request.Request(
+        "https://api.github.com/repos/octocat/private/zipball/HEAD",
+        headers={"Authorization": "Bearer gho_secret"},
+    )
+    redirected = handler.redirect_request(
+        request,
+        None,
+        302,
+        "Found",
+        {},
+        "https://codeload.github.com/octocat/private/legacy.zip",
+    )
+    assert redirected.get_header("Authorization") is None
+
+    try:
+        handler.redirect_request(
+            request,
+            None,
+            302,
+            "Found",
+            {},
+            "https://example.com/archive.zip",
+        )
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("redirect to an unknown host should be blocked")
+
+
 def test_rate_limit_returns_429():
     from stupidex import web
     app = web.app
@@ -165,6 +255,8 @@ def test_git_url_validation():
     assert _validate_git_url("https://evil.com/foo.git") is not None
     assert _validate_git_url("https://user:pass@github.com/foo.git") is not None
     assert _validate_git_url("ftp://github.com/foo.git") is not None
+    assert _validate_git_url("https://github.com:444/foo/bar.git") is not None
+    assert _validate_git_url("https://github.com/foo/bar.git?token=x") is not None
     assert _validate_git_url("") is not None
     assert _validate_git_url("x" * 3000) is not None
 

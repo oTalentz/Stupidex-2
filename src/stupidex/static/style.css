@@ -648,6 +648,7 @@ body,
 }
 .topbar-left {
     justify-self: start;
+    max-width: min(100%, 380px);
 }
 .topbar-center {
     justify-self: center;
@@ -676,22 +677,48 @@ body,
     border-color: var(--border-strong);
 }
 .topbar-title {
-    font-size: 15px;
-    font-weight: 500;
+    font-size: 14px;
+    font-weight: 600;
     color: var(--text-main);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     max-width: 360px;
 }
+.conversation-mark {
+    width: 34px;
+    height: 34px;
+    flex: 0 0 34px;
+    display: grid;
+    place-items: center;
+    color: var(--accent);
+    font-size: 17px;
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    border-radius: 10px;
+    background: linear-gradient(
+        145deg,
+        rgba(99, 102, 241, 0.16),
+        rgba(99, 102, 241, 0.04)
+    );
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+.conversation-heading {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+}
 .topbar-meta {
-    font-size: 11px;
+    display: block;
+    max-width: 320px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 10px;
     color: var(--text-muted);
-    font-family: var(--font-mono);
-    background: rgba(255, 255, 255, 0.04);
-    padding: 3px 8px;
-    border-radius: 6px;
-    border: 1px solid var(--border);
+    letter-spacing: 0.01em;
+}
+.topbar-meta:empty {
+    display: none;
 }
 
 .model-switcher {
@@ -1915,6 +1942,76 @@ body,
     flex-direction: column;
     gap: 12px;
 }
+.settings-section-divider {
+    padding-top: 18px;
+    border-top: 1px solid var(--border);
+}
+.github-integration-card {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    padding: 13px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.025);
+}
+.github-integration-card.is-connected {
+    border-color: rgba(16, 185, 129, 0.24);
+    background: rgba(16, 185, 129, 0.045);
+}
+.github-integration-card.is-unavailable {
+    opacity: 0.72;
+}
+.github-integration-icon {
+    width: 40px;
+    height: 40px;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    color: var(--text-main);
+    background: var(--bg-input);
+    font-size: 21px;
+}
+.github-integration-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.github-integration-copy {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+}
+.github-integration-copy strong,
+.github-integration-copy span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.github-integration-copy strong {
+    color: var(--text-main);
+    font-size: 13px;
+    font-weight: 600;
+}
+.github-integration-copy span,
+.integration-privacy-note {
+    color: var(--text-muted);
+    font-size: 11px;
+    line-height: 1.45;
+}
+.github-integration-action {
+    min-width: 92px;
+    justify-content: center;
+}
+.github-integration-compact {
+    margin-bottom: 2px;
+}
+.integration-privacy-note {
+    margin: -2px 2px 0;
+}
 .section-title {
     font-size: 11px;
     font-weight: 600;
@@ -2043,6 +2140,11 @@ body,
     .topbar {
         padding: 0 14px;
     }
+    .conversation-mark {
+        width: 32px;
+        height: 32px;
+        flex-basis: 32px;
+    }
     .messages {
         padding: 0 14px 16px;
     }
@@ -2058,6 +2160,19 @@ body,
     :root[data-theme="light"] #theme-toggle .ph-sun,
     :root[data-theme="light"] #theme-toggle .ph-moon {
         display: inline;
+    }
+}
+
+@media (max-width: 520px) {
+    .github-integration-card {
+        grid-template-columns: 40px minmax(0, 1fr);
+    }
+    .github-integration-action {
+        grid-column: 1 / -1;
+        width: 100%;
+    }
+    .topbar-meta {
+        max-width: 150px;
     }
 }
 

@@ -48,6 +48,7 @@ const els = {
   wsActiveBadge: $("ws-active-badge"),
 
   sessionTitle: $("session-title"),
+  sessionTime: $("session-time"),
   messages: $("messages"),
   form: $("form"),
   input: $("input"),
@@ -80,6 +81,16 @@ const els = {
   cloneBranch: $("clone-branch"),
   cloneName: $("clone-name"),
   cloneStatus: $("clone-status"),
+  cloneGithubCard: $("clone-github-card"),
+  cloneGithubTitle: $("clone-github-title"),
+  cloneGithubDescription: $("clone-github-description"),
+  cloneGithubAction: $("clone-github-action"),
+
+  settingsGithubCard: $("settings-github-card"),
+  settingsGithubAvatar: $("settings-github-avatar"),
+  settingsGithubTitle: $("settings-github-title"),
+  settingsGithubDescription: $("settings-github-description"),
+  settingsGithubAction: $("settings-github-action"),
 
   fileModal: $("file-modal"),
   closeFile: $("close-file"),
@@ -140,6 +151,12 @@ let state = {
   confirmCallback: null,
   trashMode: false,
   webSearchEnabled: false,
+  github: {
+    configured: false,
+    connected: false,
+    login: "",
+    avatar_url: "",
+  },
 };
 
 const MAX_CHAT_IMAGES = 4;
@@ -292,6 +309,21 @@ function fmtTime(ts) {
   return d.toLocaleDateString();
 }
 
+function updateConversationHeader(session = null) {
+  if (!session) {
+    els.sessionTitle.textContent = "Stupidex";
+    els.sessionTime.textContent = "Pronto para começar";
+    return;
+  }
+  const count = Number(session.message_count || 0);
+  const messageLabel = `${count} ${count === 1 ? "mensagem" : "mensagens"}`;
+  const updated = fmtTime(session.updated_at);
+  els.sessionTitle.textContent = session.title || "Nova conversa";
+  els.sessionTime.textContent = count
+    ? `${messageLabel}${updated ? ` · Atualizada ${updated}` : ""}`
+    : "Sem mensagens ainda";
+}
+
 function fmtTokens(n) {
   if (n < 1000) return n;
   return (n / 1000).toFixed(1) + "k";
@@ -306,6 +338,11 @@ async function loadSessions() {
   if (!r.ok) return;
   state.sessions = await r.json();
   renderSessions();
+  if (state.currentSessionId) {
+    updateConversationHeader(
+      state.sessions.find((session) => session.id === state.currentSessionId),
+    );
+  }
 }
 
 function renderSessions() {
@@ -479,7 +516,7 @@ function showSessionMenu(session, anchorEl) {
         state.currentSessionId = null;
         els.messages.innerHTML = "";
         renderWelcome();
-        els.sessionTitle.textContent = "Stupidex";
+        updateConversationHeader();
       }
       await loadSessions();
     } else if (act === "trash") {
@@ -519,7 +556,7 @@ async function newSession() {
   state.currentSessionId = s.id;
   renderSessions();
   renderWelcome();
-  els.sessionTitle.textContent = s.title;
+  updateConversationHeader(s);
   els.input.focus();
 }
 
@@ -530,7 +567,7 @@ async function openSession(id) {
   state.currentSessionId = id;
   renderSessions();
   await loadMessages(id);
-  els.sessionTitle.textContent = target.title;
+  updateConversationHeader(target);
   els.workspacePanel.classList.remove("mobile-open");
 }
 
@@ -546,7 +583,7 @@ async function moveSessionToTrash(id) {
     state.currentSessionId = null;
     els.messages.innerHTML = "";
     renderWelcome();
-    els.sessionTitle.textContent = "Stupidex";
+    updateConversationHeader();
   }
   await loadSessions();
 }
@@ -568,7 +605,7 @@ async function deleteSession(id) {
   if (state.currentSessionId === id) {
     state.currentSessionId = null;
     renderWelcome();
-    els.sessionTitle.textContent = "Stupidex";
+    updateConversationHeader();
   }
   renderSessions();
 }
@@ -975,7 +1012,7 @@ async function runChat({
     state.abortController = null;
     await loadSessions();
     const s = state.sessions.find((x) => x.id === sid);
-    if (s) els.sessionTitle.textContent = s.title;
+    if (s) updateConversationHeader(s);
     renderSessions();
     if (state.workspaces.active_id) {
       setTimeout(() => loadTree(state.workspaces.active_id), 500);
@@ -1147,7 +1184,13 @@ function handleEvent(evt, ctx) {
       ctx.bubble.innerHTML = `<em style="color:var(--danger)">${escapeHtml(evt.content)}</em>`;
       break;
     case "session_meta":
-      if (evt.title) els.sessionTitle.textContent = evt.title;
+      if (evt.title) {
+        const session = state.sessions.find(
+          (item) => item.id === state.currentSessionId,
+        );
+        if (session) session.title = evt.title;
+        updateConversationHeader(session || { title: evt.title });
+      }
       break;
   }
 }
@@ -1528,14 +1571,125 @@ window.addEventListener("drop", async (e) => {
 // GIT CLONE
 // ============================================================
 
-els.cloneBtn.addEventListener("click", () => {
+function safeGithubAvatar(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" &&
+      parsed.hostname.endsWith("githubusercontent.com")
+      ? parsed.href
+      : "";
+  } catch {
+    return "";
+  }
+}
+
+function renderGithubIntegrationCard(card, title, description, action) {
+  if (!card) return;
+  const connected = state.github.connected;
+  const configured = state.github.configured;
+  card.classList.toggle("is-connected", connected);
+  card.classList.toggle("is-unavailable", !configured);
+  title.textContent = connected
+    ? `GitHub conectado · @${state.github.login}`
+    : configured
+      ? "GitHub não conectado"
+      : "Integração GitHub indisponível";
+  description.textContent = connected
+    ? "Acesso habilitado para repositórios públicos e privados."
+    : configured
+      ? "Conecte sua conta para clonar repositórios privados."
+      : "Configure o OAuth do GitHub no servidor para habilitar projetos privados.";
+  action.textContent = connected
+    ? "Desconectar"
+    : configured
+      ? "Conectar"
+      : "Indisponível";
+  action.disabled = !configured;
+
+  const icon = card.querySelector(".github-integration-icon");
+  const avatar = connected ? safeGithubAvatar(state.github.avatar_url) : "";
+  icon.replaceChildren();
+  if (avatar) {
+    const image = document.createElement("img");
+    image.src = avatar;
+    image.alt = "";
+    icon.appendChild(image);
+  } else {
+    const logo = document.createElement("i");
+    logo.className = "ph ph-github-logo";
+    icon.appendChild(logo);
+  }
+}
+
+function renderGithubIntegration() {
+  renderGithubIntegrationCard(
+    els.cloneGithubCard,
+    els.cloneGithubTitle,
+    els.cloneGithubDescription,
+    els.cloneGithubAction,
+  );
+  renderGithubIntegrationCard(
+    els.settingsGithubCard,
+    els.settingsGithubTitle,
+    els.settingsGithubDescription,
+    els.settingsGithubAction,
+  );
+}
+
+async function loadGithubIntegration() {
+  try {
+    const response = await fetch("/api/integrations/github");
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    state.github = await response.json();
+  } catch {
+    state.github = {
+      configured: false,
+      connected: false,
+      login: "",
+      avatar_url: "",
+    };
+  }
+  renderGithubIntegration();
+}
+
+function handleGithubAction() {
+  if (!state.github.configured) return;
+  if (!state.github.connected) {
+    window.location.assign("/api/integrations/github/connect");
+    return;
+  }
+  showConfirm(
+    "Desconectar GitHub?",
+    `A conta @${state.github.login} deixará de ser usada para acessar repositórios privados.`,
+    async () => {
+      const response = await fetch("/api/integrations/github", {
+        method: "DELETE",
+      });
+      if (!response.ok) throw new Error("Não foi possível desconectar o GitHub.");
+      await loadGithubIntegration();
+    },
+    {
+      detail: "Workspaces já clonados permanecem disponíveis, mas novos pulls privados exigirão uma nova conexão.",
+      confirmLabel: "Desconectar",
+      danger: false,
+      icon: "ph-link-break",
+    },
+  );
+}
+
+async function openCloneModal() {
   els.cloneUrl.value = "";
   els.cloneBranch.value = "";
   els.cloneName.value = "";
   els.cloneStatus.textContent = "";
   els.cloneStatus.className = "field-hint";
+  await loadGithubIntegration();
   els.cloneModal.classList.remove("hidden");
-});
+}
+
+els.cloneBtn.addEventListener("click", openCloneModal);
+els.cloneGithubAction.addEventListener("click", handleGithubAction);
+els.settingsGithubAction.addEventListener("click", handleGithubAction);
 els.closeClone.addEventListener("click", () =>
   els.cloneModal.classList.add("hidden"),
 );
@@ -1595,7 +1749,7 @@ function setCloneStatus(text, isError) {
 // ============================================================
 
 async function openSettings() {
-  await loadConfig();
+  await Promise.all([loadConfig(), loadGithubIntegration()]);
   els.providerSelect.value = state.config.provider;
   els.modelInput.value = state.config.custom_model || "";
   els.apiKeyInput.value = "";
@@ -2151,12 +2305,18 @@ async function logout() {
     confirmCallback: null,
     trashMode: false,
     webSearchEnabled: false,
+    github: {
+      configured: false,
+      connected: false,
+      login: "",
+      avatar_url: "",
+    },
   };
   els.messages.innerHTML = "";
   els.sessionList.innerHTML = "";
   els.workspaceList.innerHTML = "";
   els.treeContainer.innerHTML = "";
-  els.sessionTitle.textContent = "Stupidex";
+  updateConversationHeader();
   renderChatImagePreviews();
   els.composerSearch?.classList.remove("is-active");
   els.webSearchIndicator?.classList.add("hidden");
@@ -2234,17 +2394,36 @@ async function tryLogin(email, password) {
 // ============================================================
 
 async function bootApp() {
-  await loadConfig();
+  await Promise.all([loadConfig(), loadGithubIntegration()]);
   updateBadges();
   await loadWorkspaces();
   await loadSessions();
   const firstActiveSession = state.sessions.find((session) => !session.trashed);
   if (firstActiveSession) {
-    openSession(firstActiveSession.id);
+    await openSession(firstActiveSession.id);
   } else {
     renderWelcome();
+    updateConversationHeader();
   }
+  showGithubCallbackResult();
   els.input.focus();
+}
+
+function showGithubCallbackResult() {
+  const params = new URLSearchParams(window.location.search);
+  const result = params.get("github");
+  if (!result) return;
+  const messages = {
+    connected: "GitHub conectado. Repositórios privados estão disponíveis.",
+    denied: "A conexão com o GitHub foi cancelada.",
+    error: "Não foi possível conectar o GitHub. Tente novamente.",
+  };
+  els.status.textContent = messages[result] || "";
+  els.status.classList.toggle("hidden", !messages[result]);
+  params.delete("github");
+  const query = params.toString();
+  const cleanUrl = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`;
+  window.history.replaceState({}, "", cleanUrl);
 }
 
 (async function init() {

@@ -36,8 +36,8 @@ gunicorn>=21.0
 ### `.env.example`
 
 ```bash
-# API DeepSeek (a sua key)
-DEEPSEEK_API_KEY=sk-a56f77faae7f482d9fc09ec8b777b2e2
+# API DeepSeek
+DEEPSEEK_API_KEY=sk-substitua-pela-sua-chave
 
 # Configuração do servidor
 STUPIDEX_HOST=0.0.0.0
@@ -116,7 +116,7 @@ cd C:\Users\leona\Downloads\Stupidex
 railway init
 
 # 4. Adicionar variável de ambiente
-railway variables set DEEPSEEK_API_KEY=sk-a56f77faae7f482d9fc09ec8b777b2e2
+railway variables set DEEPSEEK_API_KEY=sk-substitua-pela-sua-chave
 
 # 5. Deploy
 railway up
@@ -149,7 +149,7 @@ fly launch --no-deploy
 # Responda: nome do app, região (gru = São Paulo), sem Postgres, sem Redis
 
 # 4. Adicionar secret
-fly secrets set DEEPSEEK_API_KEY=sk-a56f77faae7f482d9fc09ec8b777b2e2
+fly secrets set DEEPSEEK_API_KEY=sk-substitua-pela-sua-chave
 
 # 5. Deploy
 fly deploy

@@ -13,6 +13,7 @@ import re
 import shutil
 import tempfile
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
@@ -29,7 +30,35 @@ MAX_WORKSPACE_FILES = 10_000
 MAX_ARCHIVE_BYTES = 50 * 1024 * 1024
 MAX_FILE_BYTES = 20 * 1024 * 1024
 _WS_ID_RX = re.compile(r"^[0-9a-f]{12}$")
-_ARCHIVE_HOSTS = {"codeload.github.com", "github.com", "gitlab.com", "www.gitlab.com"}
+_ARCHIVE_HOSTS = {
+    "api.github.com",
+    "codeload.github.com",
+    "github.com",
+    "gitlab.com",
+    "www.gitlab.com",
+}
+
+
+class RepositoryAccessError(RuntimeError):
+    pass
+
+
+class _SafeArchiveRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        target = urllib.parse.urlparse(newurl)
+        if (
+            target.scheme != "https"
+            or (target.hostname or "").lower() not in _ARCHIVE_HOSTS
+        ):
+            raise RuntimeError("archive redirect left the allowed hosts")
+        redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if redirected is None:
+            return None
+        source_host = (urllib.parse.urlparse(req.full_url).hostname or "").lower()
+        target_host = (target.hostname or "").lower()
+        if source_host != target_host:
+            redirected.remove_header("Authorization")
+        return redirected
 
 
 def _user_dir(user_id: str) -> Path:
@@ -216,14 +245,26 @@ def init_from_upload(user_id: str, ws_id: str) -> Workspace:
     return Workspace(**meta)
 
 
-def init_from_git(user_id: str, ws_id: str, url: str, branch: str | None) -> tuple[Workspace, str]:
+def init_from_git(
+    user_id: str,
+    ws_id: str,
+    url: str,
+    branch: str | None,
+    github_token: str = "",
+) -> tuple[Workspace, str]:
     ws_path = workspace_path(user_id, ws_id)
     if ws_path is None:
         raise ValueError("workspace not found")
-    return _download_archive(user_id, ws_id, url, branch)
+    return _download_archive(user_id, ws_id, url, branch, github_token)
 
 
-def _download_archive(user_id: str, ws_id: str, url: str, branch: str | None) -> tuple[Workspace, str]:
+def _download_archive(
+    user_id: str,
+    ws_id: str,
+    url: str,
+    branch: str | None,
+    github_token: str = "",
+) -> tuple[Workspace, str]:
     ws_path = _user_dir(user_id) / ws_id
     meta_file = ws_path / ".stupidex.json"
     original_meta = _read_meta(user_id, ws_id)
@@ -232,7 +273,7 @@ def _download_archive(user_id: str, ws_id: str, url: str, branch: str | None) ->
         meta_backup = ws_path.parent / f".stupidex.tmp.{ws_id}"
         meta_file.rename(meta_backup)
 
-    archive_url = _archive_url_for(url, branch)
+    archive_url = _archive_url_for(url, branch, github_token)
     if not archive_url:
         if meta_backup is not None and meta_backup.exists():
             meta_backup.rename(meta_file) if not meta_file.exists() else meta_backup.unlink()
@@ -242,7 +283,7 @@ def _download_archive(user_id: str, ws_id: str, url: str, branch: str | None) ->
         )
 
     try:
-        tmp_path = _download_archive_file(archive_url)
+        tmp_path = _download_archive_file(archive_url, github_token)
         stage = Path(tempfile.mkdtemp(prefix=f".{ws_id}-", dir=ws_path.parent))
         try:
             _extract_archive(tmp_path, stage)
@@ -255,6 +296,8 @@ def _download_archive(user_id: str, ws_id: str, url: str, branch: str | None) ->
         meta["source"] = "git"
         meta["git_url"] = url
         meta["git_branch"] = branch
+        meta["size_bytes"], meta["file_count"] = _dir_stats(ws_path)
+        meta["last_activity"] = time.time()
         ws_obj = Workspace(**meta)
         _write_meta(user_id, ws_obj)
         return ws_obj, f"downloaded {archive_url}"
@@ -263,8 +306,27 @@ def _download_archive(user_id: str, ws_id: str, url: str, branch: str | None) ->
             meta_backup.rename(meta_file) if not meta_file.exists() else meta_backup.unlink()
 
 
-def _archive_url_for(url: str, branch: str | None) -> str | None:
+def _github_repo_slug(url: str) -> str | None:
     from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    if (parsed.hostname or "").lower() not in ("github.com", "www.github.com"):
+        return None
+    parts = [part for part in parsed.path.strip("/").split("/") if part]
+    if len(parts) != 2:
+        return None
+    owner, repo = parts
+    repo = repo.removesuffix(".git")
+    if not owner or not repo:
+        return None
+    return f"{owner}/{repo}"
+
+
+def _archive_url_for(
+    url: str, branch: str | None, github_token: str = ""
+) -> str | None:
+    from urllib.parse import urlparse
+
     ref = urllib.parse.quote(branch or "HEAD", safe="-._/")
     parsed = urlparse(url)
     host = (parsed.netloc or "").lower()
@@ -272,6 +334,12 @@ def _archive_url_for(url: str, branch: str | None) -> str | None:
     if not path.endswith(".git"):
         path += ".git"
     if host in ("github.com", "www.github.com"):
+        slug = _github_repo_slug(url)
+        if not slug:
+            return None
+        if github_token:
+            api_ref = urllib.parse.quote(branch or "HEAD", safe="-._~")
+            return f"https://api.github.com/repos/{slug}/zipball/{api_ref}"
         suffix = f"refs/heads/{ref}" if branch else "HEAD"
         return f"https://codeload.github.com{path[:-4]}/zip/{suffix}"
     if host in ("gitlab.com", "www.gitlab.com"):
@@ -279,16 +347,18 @@ def _archive_url_for(url: str, branch: str | None) -> str | None:
     return None
 
 
-def git_pull(user_id: str, ws_id: str) -> tuple[bool, str]:
+def git_pull(user_id: str, ws_id: str, github_token: str = "") -> tuple[bool, str]:
     ws = get_workspace(user_id, ws_id)
     if not ws or ws.source != "git" or not ws.git_url:
         return False, "workspace is not a git repository"
     try:
         ws_path = _user_dir(user_id) / ws_id
-        archive_url = _archive_url_for(ws.git_url, ws.git_branch or None)
+        archive_url = _archive_url_for(
+            ws.git_url, ws.git_branch or None, github_token
+        )
         if not archive_url:
             return False, "cannot determine archive URL"
-        tmp_path = _download_archive_file(archive_url)
+        tmp_path = _download_archive_file(archive_url, github_token)
         stage = Path(tempfile.mkdtemp(prefix=f".{ws_id}-pull-", dir=ws_path.parent))
         try:
             _extract_archive(tmp_path, stage)
@@ -307,11 +377,19 @@ def git_pull(user_id: str, ws_id: str) -> tuple[bool, str]:
         return False, f"pull failed: {exc}"
 
 
-def _download_archive_file(url: str) -> Path:
-    request = urllib.request.Request(url, headers={"User-Agent": "Stupidex/0.1"})
+def _download_archive_file(url: str, github_token: str = "") -> Path:
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "Stupidex/0.1",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    if github_token and urllib.parse.urlparse(url).hostname == "api.github.com":
+        headers["Authorization"] = f"Bearer {github_token}"
+    request = urllib.request.Request(url, headers=headers)
+    opener = urllib.request.build_opener(_SafeArchiveRedirectHandler())
     tmp_path: Path | None = None
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with opener.open(request, timeout=30) as response:
             final = urllib.parse.urlparse(response.geturl())
             if final.scheme != "https" or (final.hostname or "").lower() not in _ARCHIVE_HOSTS:
                 raise RuntimeError("archive redirect left the allowed hosts")
@@ -330,6 +408,25 @@ def _download_archive_file(url: str) -> Path:
                         raise RuntimeError("repository archive is too large")
                     tmp.write(chunk)
         return tmp_path
+    except urllib.error.HTTPError as exc:
+        if tmp_path is not None:
+            tmp_path.unlink(missing_ok=True)
+        host = (urllib.parse.urlparse(url).hostname or "").lower()
+        if host in {"api.github.com", "codeload.github.com"} and exc.code in {
+            401,
+            403,
+            404,
+        }:
+            if github_token:
+                raise RepositoryAccessError(
+                    "GitHub denied repository access. Reconnect your GitHub account "
+                    "and confirm that it can access this repository."
+                ) from exc
+            raise RepositoryAccessError(
+                "Repository not found or private. Connect your GitHub account to "
+                "clone private repositories."
+            ) from exc
+        raise
     except Exception:
         if tmp_path is not None:
             tmp_path.unlink(missing_ok=True)

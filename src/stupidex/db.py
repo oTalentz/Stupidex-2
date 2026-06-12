@@ -9,6 +9,7 @@ Migrations:
   v3 – users + auth_tokens
   v4 – sessions.user_id FK
   v5 – Google OAuth (email, avatar_url, oauth_provider)
+  v9 – GitHub OAuth connection for private repositories
 """
 
 import hashlib
@@ -133,6 +134,10 @@ class User:
     provider: str = ""
     model: str = ""
     custom_model: str = ""
+    github_access_token: str = ""
+    github_login: str = ""
+    github_avatar_url: str = ""
+    github_connected_at: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -144,6 +149,9 @@ class User:
             "created_at": self.created_at,
             "last_login": self.last_login,
             "has_api_key": bool(self.api_key),
+            "github_connected": bool(self.github_access_token),
+            "github_login": self.github_login,
+            "github_avatar_url": self.github_avatar_url,
         }
 
 
@@ -294,6 +302,13 @@ _MIGRATIONS: list[str] = [
     """
     ALTER TABLE sessions ADD COLUMN trashed INTEGER NOT NULL DEFAULT 0;
     CREATE INDEX IF NOT EXISTS idx_sessions_trashed ON sessions(trashed, updated_at DESC);
+    """,
+    # v9 — GitHub OAuth connection for private repository access
+    """
+    ALTER TABLE users ADD COLUMN github_access_token TEXT NOT NULL DEFAULT '';
+    ALTER TABLE users ADD COLUMN github_login TEXT NOT NULL DEFAULT '';
+    ALTER TABLE users ADD COLUMN github_avatar_url TEXT NOT NULL DEFAULT '';
+    ALTER TABLE users ADD COLUMN github_connected_at REAL NOT NULL DEFAULT 0;
     """,
 ]
 
@@ -448,7 +463,8 @@ def find_or_create_oauth_user(
     with db_cursor() as cur:
         row = cur.execute(
             "SELECT id, username, password_hash, api_key, email, avatar_url, oauth_provider, "
-            "provider, model, custom_model, created_at, last_login "
+            "provider, model, custom_model, github_access_token, github_login, "
+            "github_avatar_url, github_connected_at, created_at, last_login "
             "FROM users WHERE email = ? AND oauth_provider = ?",
             (email, provider),
         ).fetchone()
@@ -494,6 +510,12 @@ def find_or_create_oauth_user(
         provider=(row["provider"] if row else ""),
         model=(row["model"] if row else ""),
         custom_model=(row["custom_model"] if row else ""),
+        github_access_token=(
+            _decrypt_secret(row["github_access_token"]) if row else ""
+        ),
+        github_login=(row["github_login"] if row else ""),
+        github_avatar_url=(row["github_avatar_url"] if row else ""),
+        github_connected_at=(row["github_connected_at"] if row else 0.0),
     )
     return user, token
 
@@ -506,7 +528,8 @@ def authenticate_user(username: str, password: str) -> tuple[User, str]:
     # to avoid user-enumeration timing attacks.
     with db_cursor() as cur:
         row = cur.execute(
-            "SELECT id, username, password_hash, api_key, provider, model, custom_model, created_at "
+            "SELECT id, username, password_hash, api_key, provider, model, custom_model, "
+            "github_access_token, github_login, github_avatar_url, github_connected_at, created_at "
             "FROM users WHERE username = ?",
             (username,),
         ).fetchone()
@@ -532,6 +555,10 @@ def authenticate_user(username: str, password: str) -> tuple[User, str]:
         provider=row["provider"],
         model=row["model"],
         custom_model=row["custom_model"],
+        github_access_token=_decrypt_secret(row["github_access_token"]),
+        github_login=row["github_login"],
+        github_avatar_url=row["github_avatar_url"],
+        github_connected_at=row["github_connected_at"],
     )
     return user, token
 
@@ -556,7 +583,9 @@ def validate_token(token: str) -> User | None:
         stored_token = _token_digest(token)
         row = cur.execute(
             "SELECT u.id, u.username, u.api_key, u.email, u.avatar_url, u.oauth_provider, "
-            "u.provider, u.model, u.custom_model, u.created_at, u.last_login, t.token AS stored_token "
+            "u.provider, u.model, u.custom_model, u.github_access_token, u.github_login, "
+            "u.github_avatar_url, u.github_connected_at, u.created_at, u.last_login, "
+            "t.token AS stored_token "
             "FROM auth_tokens t JOIN users u ON u.id = t.user_id "
             "WHERE t.token IN (?, ?) AND t.expires_at > ?",
             (stored_token, token, time.time()),
@@ -580,6 +609,10 @@ def validate_token(token: str) -> User | None:
         provider=row["provider"],
         model=row["model"],
         custom_model=row["custom_model"],
+        github_access_token=_decrypt_secret(row["github_access_token"]),
+        github_login=row["github_login"],
+        github_avatar_url=row["github_avatar_url"],
+        github_connected_at=row["github_connected_at"],
     )
 
 
@@ -596,6 +629,36 @@ def update_user_api_key(user_id: str, api_key: str | None) -> None:
         cur.execute(
             "UPDATE users SET api_key = ? WHERE id = ?",
             (_encrypt_secret(api_key), user_id),
+        )
+
+
+def update_github_connection(
+    user_id: str, access_token: str, login: str, avatar_url: str
+) -> None:
+    if not access_token or not login:
+        raise ValueError("GitHub access token and login are required")
+    with db_cursor() as cur:
+        cur.execute(
+            "UPDATE users SET github_access_token = ?, github_login = ?, "
+            "github_avatar_url = ?, github_connected_at = ? WHERE id = ?",
+            (
+                _encrypt_secret(access_token),
+                login[:100],
+                avatar_url[:1000],
+                time.time(),
+                user_id,
+            ),
+        )
+        if cur.rowcount != 1:
+            raise ValueError("user not found")
+
+
+def clear_github_connection(user_id: str) -> None:
+    with db_cursor() as cur:
+        cur.execute(
+            "UPDATE users SET github_access_token = '', github_login = '', "
+            "github_avatar_url = '', github_connected_at = 0 WHERE id = ?",
+            (user_id,),
         )
 
 
