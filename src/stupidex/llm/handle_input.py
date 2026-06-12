@@ -7,7 +7,6 @@ Key properties:
   • The loop is bounded (MAX_TOOL_ITERATIONS) and survives a single bad call.
   • Streaming events are yielded as plain dicts; the web layer forwards them.
 """
-from . import _bootstrap  # noqa: F401 — must come first
 
 import json
 import logging
@@ -20,6 +19,7 @@ import litellm
 
 from .. import db
 from .. import workspaces as workspaces_module
+from . import _bootstrap  # noqa: F401 — must come first
 from .message import ChatMessage, MessageRole, MessageType, ToolCall, Usage
 from .providers import get_provider
 from .tools import TOOL_DEFINITIONS, TOOL_FUNCTIONS
@@ -86,7 +86,9 @@ class AgentContext:
 def _build_system_message(user_id: str) -> ChatMessage:
     return ChatMessage(
         role=MessageRole.SYSTEM,
-        content=AGENT_SYSTEM_PROMPT.format(workspace_summary=_workspace_summary(user_id)),
+        content=AGENT_SYSTEM_PROMPT.format(
+            workspace_summary=_workspace_summary(user_id)
+        ),
         type=MessageType.TEXT,
     )
 
@@ -100,7 +102,9 @@ def _workspace_summary(user_id: str = "") -> str:
     ws_path = workspaces_module._user_dir(user_id) / ws.id
     summary = f"Active workspace: '{ws.name}' (id={ws.id})\nPath: {ws_path}\nSource: {ws.source}"
     if ws.git_url:
-        summary += f"\nGit: {ws.git_url}" + (f" (branch {ws.git_branch})" if ws.git_branch else "")
+        summary += f"\nGit: {ws.git_url}" + (
+            f" (branch {ws.git_branch})" if ws.git_branch else ""
+        )
     summary += f"\nFiles: {ws.file_count} ({ws.size_bytes:,} bytes)"
     return summary
 
@@ -135,13 +139,15 @@ def _reconstruct(r: db.DBMessage) -> ChatMessage:
     tool_calls: list[ToolCall] = []
     for tc in r.tool_calls:
         if isinstance(tc, dict):
-            tool_calls.append(ToolCall(
-                id=tc.get("id", ""),
-                name=tc.get("name", ""),
-                arguments=tc.get("arguments", ""),
-                result=tc.get("result"),
-                error=tc.get("error", False),
-            ))
+            tool_calls.append(
+                ToolCall(
+                    id=tc.get("id", ""),
+                    name=tc.get("name", ""),
+                    arguments=tc.get("arguments", ""),
+                    result=tc.get("result"),
+                    error=tc.get("error", False),
+                )
+            )
     return ChatMessage(
         role=role,
         content=r.content,
@@ -153,8 +159,13 @@ def _reconstruct(r: db.DBMessage) -> ChatMessage:
 
 
 _DEFAULT_WD_TOOLS = {
-    "read_file", "write_file", "edit_file", "list_dir",
-    "search_files", "mkdir", "delete",
+    "read_file",
+    "write_file",
+    "edit_file",
+    "list_dir",
+    "search_files",
+    "mkdir",
+    "delete",
 }
 _CWD_TOOLS = {"run_shell", "git"}
 
@@ -185,7 +196,7 @@ def _litellm_kwargs(ctx: AgentContext) -> dict:
         "tools": TOOL_DEFINITIONS,
     }
     if ctx.base_url:
-        kw["base_url"] = ctx.base_url
+        kw["api_base"] = ctx.base_url
     if ctx.api_key:
         kw["api_key"] = ctx.api_key
     return kw
@@ -273,7 +284,10 @@ def stream_response(
             tb = traceback.format_exc(limit=2)
             err = f"LLM error: {exc}"
             db.append_message(
-                session_id, MessageRole.SYSTEM.value, err, MessageType.TEXT.value,
+                session_id,
+                MessageRole.SYSTEM.value,
+                err,
+                MessageType.TEXT.value,
                 metadata={"error": True, "trace": tb},
             )
             yield {"type": "error", "content": err}
@@ -344,8 +358,13 @@ def stream_response(
             )
             history.append(msg)
             db.append_message(
-                session_id, MessageRole.ASSISTANT.value, pending_text, MessageType.TEXT.value,
-                tool_calls=[], tool_call_id=None, metadata={"usage": last_usage.to_dict() if last_usage else None},
+                session_id,
+                MessageRole.ASSISTANT.value,
+                pending_text,
+                MessageType.TEXT.value,
+                tool_calls=[],
+                tool_call_id=None,
+                metadata={"usage": last_usage.to_dict() if last_usage else None},
             )
             yield {
                 "type": "done",
@@ -364,7 +383,10 @@ def stream_response(
         )
         history.append(msg)
         db.append_message(
-            session_id, MessageRole.ASSISTANT.value, pending_text, MessageType.TOOL_CALL.value,
+            session_id,
+            MessageRole.ASSISTANT.value,
+            pending_text,
+            MessageType.TOOL_CALL.value,
             tool_calls=[c.to_dict() for c in pending_calls.values()],
         )
 
@@ -435,8 +457,12 @@ def stream_response(
             )
             history.append(tool_msg)
             db.append_message(
-                session_id, MessageRole.TOOL.value, result, MessageType.TOOL_RESULT.value,
-                tool_call_id=call.id, metadata={"error": is_error, "tool_name": call.name},
+                session_id,
+                MessageRole.TOOL.value,
+                result,
+                MessageType.TOOL_RESULT.value,
+                tool_call_id=call.id,
+                metadata={"error": is_error, "tool_name": call.name},
             )
 
     if cancelled:
@@ -465,6 +491,7 @@ def build_context(
 ) -> AgentContext:
     """Build an AgentContext for a request from a session or default config."""
     from ..config import load_config
+
     cfg = load_config()
     provider = get_provider(provider_id or cfg.provider)
     model = (model_override or provider.default_model).strip()
