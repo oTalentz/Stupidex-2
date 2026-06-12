@@ -2567,7 +2567,7 @@ function openProfile() {
   const provider = u.oauth_provider || "email";
   els.profileProvider.textContent = provider === "google" ? "Google" : provider === "github" ? "GitHub" : "Email e senha";
   els.profileOauthBadge.textContent = provider === "google" ? "⋮ Gmail" : provider === "github" ? "⊞ GitHub" : "⊡ Local";
-  const created = u.created_at ? new Date(u.created_at) : null;
+  const created = u.created_at ? new Date(u.created_at * 1000) : null;
   els.profileMemberSince.textContent = created ? created.toLocaleDateString("pt-BR", { year: "numeric", month: "long", day: "numeric" }) : "—";
   const count = (state.workspaces?.workspaces || []).length;
   els.profileWsCount.textContent = count;
