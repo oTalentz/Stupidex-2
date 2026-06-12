@@ -354,8 +354,6 @@ def git(args: str, cwd: str | None = None) -> str:
         "tag",
         "config",
         "mv",
-        "rm",
-        "clean",
     }
     if any(token in args for token in ("|", "&", ";", "<", ">", "`", "$(", "\n", "\r")):
         return "SECURITY: git shell operators are not allowed"

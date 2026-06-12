@@ -594,7 +594,13 @@ async function newSession() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({}),
   });
-  if (!r.ok) return;
+  if (!r.ok) {
+    const payload = await r.json().catch(() => ({}));
+    els.status.textContent =
+      payload.error || `Falha ao criar conversa (HTTP ${r.status})`;
+    els.status.classList.remove("hidden");
+    return null;
+  }
   const s = await r.json();
   state.sessions.unshift(s);
   state.currentSessionId = s.id;
@@ -602,6 +608,7 @@ async function newSession() {
   renderWelcome();
   updateConversationHeader(s);
   els.input.focus();
+  return s;
 }
 
 async function openSession(id) {
@@ -984,8 +991,12 @@ async function sendMessage() {
     alert("O modelo selecionado não aceita imagens.");
     return;
   }
-  if (!state.currentSessionId) await newSession();
+  if (!state.currentSessionId) {
+    const session = await newSession();
+    if (!session) return;
+  }
   const sid = state.currentSessionId;
+  if (!sid) return;
   els.input.value = "";
   autoSize();
   clearChatImages();
@@ -2469,9 +2480,9 @@ function clearToken() {
   } catch {}
 }
 
-// Monkey-patch fetch to inject auth header on all API calls
+// Keep bearer auth as a fallback when a proxy or browser policy filters cookies.
 const _origFetch = window.fetch;
-window.fetch = function (url, opts = {}) {
+window.fetch = async function (url, opts = {}) {
   const token = getToken();
   const isApi =
     typeof url === "string" &&
@@ -2484,7 +2495,17 @@ window.fetch = function (url, opts = {}) {
       opts.headers["Authorization"] = "Bearer " + token;
     }
   }
-  return _origFetch(url, opts);
+  const response = await _origFetch(url, opts);
+  if (
+    response.status === 401 &&
+    isApi &&
+    typeof url === "string" &&
+    !url.startsWith("/api/auth/")
+  ) {
+    clearToken();
+    showLogin();
+  }
+  return response;
 };
 
 async function checkAuth() {
@@ -2493,7 +2514,6 @@ async function checkAuth() {
     const r = await _origFetch("/api/auth/me", {
       headers: token ? { Authorization: "Bearer " + token } : {},
     });
-    if (r.ok && token) clearToken();
     return r.ok;
   } catch {
     return false;
@@ -2583,52 +2603,26 @@ elsAuth.loginForm.addEventListener("submit", async (e) => {
     return;
   }
   try {
-    const r = await _origFetch("/api/auth/register", {
+    const r = await _origFetch("/api/auth/enter", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: email, password }),
     });
-    return handleLoginResponse(r, email);
+    await handleLoginResponse(r);
   } catch (err) {
     setLoginError("Erro de rede");
   }
 });
 
-async function handleLoginResponse(r, email) {
+async function handleLoginResponse(r) {
   const data = await r.json().catch(() => ({}));
   if (r.ok) {
-    clearToken();
-    showApp();
+    if (data.token) setToken(data.token);
     await bootApp();
+    showApp();
     return;
   }
-  if (
-    r.status === 409 ||
-    (data.error && data.error.includes("already taken"))
-  ) {
-    return tryLogin(email, elsAuth.loginPassword.value);
-  }
   setLoginError(data.error || "Erro ao autenticar");
-}
-
-async function tryLogin(email, password) {
-  try {
-    const r = await _origFetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: email, password }),
-    });
-    const data = await r.json().catch(() => ({}));
-    if (r.ok) {
-      clearToken();
-      showApp();
-      await bootApp();
-    } else {
-      setLoginError(data.error || "Credenciais inválidas");
-    }
-  } catch {
-    setLoginError("Erro de rede");
-  }
 }
 
 // ============================================================

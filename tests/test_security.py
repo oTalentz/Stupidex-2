@@ -605,6 +605,71 @@ def test_trashed_session_cannot_continue_chatting():
     assert response.get_json()["error"] == "session is in trash"
 
 
+def test_auth_enter_creates_and_authenticates_with_bearer_fallback():
+    from stupidex import web
+
+    web._RL_BUCKETS.clear()
+    client = web.app.test_client()
+    credentials = {"username": "entry_flow", "password": "validpass123"}
+
+    created = client.post("/api/auth/enter", json=credentials)
+    assert created.status_code == 200
+    token = created.get_json()["token"]
+    assert token
+    assert "stupidex_auth=" in created.headers["Set-Cookie"]
+
+    bearer_client = web.app.test_client()
+    me = bearer_client.get(
+        "/api/auth/me", headers={"Authorization": f"Bearer {token}"}
+    )
+    assert me.status_code == 200
+    assert me.get_json()["user"]["username"] == "entry_flow"
+
+    logged_in = bearer_client.post("/api/auth/enter", json=credentials)
+    assert logged_in.status_code == 200
+    denied = bearer_client.post(
+        "/api/auth/enter",
+        json={"username": "entry_flow", "password": "wrong-password"},
+    )
+    assert denied.status_code == 401
+
+
+def test_git_pull_uses_server_pat_and_preserves_git_directory(monkeypatch):
+    from stupidex import workspaces
+
+    user_id = "pull_pat_user"
+    workspace = workspaces.create_empty(user_id, "repo")
+    workspace.source = "git"
+    workspace.git_url = "https://github.com/example/private.git"
+    workspace.git_branch = "main"
+    workspaces._write_meta(user_id, workspace)
+    workspace_path = workspaces.workspace_path(user_id, workspace.id)
+    git_marker = workspace_path / ".git" / "marker"
+    git_marker.parent.mkdir()
+    git_marker.write_text("keep", encoding="utf-8")
+    captured = {}
+
+    def fake_download(url, token=""):
+        captured["token"] = token
+        archive = _TMP / "pull-pat.zip"
+        archive.write_bytes(b"archive")
+        return archive
+
+    def fake_extract(_archive, destination):
+        (destination / "README.md").write_text("updated", encoding="utf-8")
+
+    monkeypatch.setenv("GITHUB_PAT", "server-pat")
+    monkeypatch.setattr(workspaces, "_download_archive_file", fake_download)
+    monkeypatch.setattr(workspaces, "_extract_archive", fake_extract)
+    monkeypatch.setattr(workspaces, "_ensure_git_repo", lambda *args: None)
+
+    ok, _ = workspaces.git_pull(user_id, workspace.id)
+    assert ok
+    assert captured["token"] == "server-pat"
+    assert git_marker.read_text(encoding="utf-8") == "keep"
+    assert (workspace_path / "README.md").read_text(encoding="utf-8") == "updated"
+
+
 def cleanup():
     shutil.rmtree(_TMP, ignore_errors=True)
 

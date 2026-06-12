@@ -755,6 +755,27 @@ def auth_login():
     return _set_auth_cookie(jsonify({"user": user.to_dict(), "token": token}), token)
 
 
+@app.route("/api/auth/enter", methods=["POST"])
+@rate_limited("auth")
+def auth_enter():
+    """Authenticate an existing account or create a new one with one request."""
+    data = request.get_json(force=True) or {}
+    username = (data.get("username") or "").strip()
+    password = data.get("password") or ""
+    try:
+        user, token = db.authenticate_user(username, password)
+    except ValueError as login_error:
+        if "too many" in str(login_error).lower():
+            return jsonify({"error": str(login_error)}), 429
+        try:
+            user, token = db.create_user(username, password)
+        except ValueError as create_error:
+            if "already taken" in str(create_error).lower():
+                return jsonify({"error": "invalid username or password"}), 401
+            return jsonify({"error": str(create_error)}), 400
+    return _set_auth_cookie(jsonify({"user": user.to_dict(), "token": token}), token)
+
+
 @app.route("/api/auth/logout", methods=["POST"])
 @login_required
 @rate_limited("auth")

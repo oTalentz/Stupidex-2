@@ -289,7 +289,7 @@ def init_from_git(
     effective_token = github_token or os.environ.get("GITHUB_PAT", "")
 
     ws_obj, msg = _download_archive(user_id, ws_id, url, branch, effective_token)
-    _ensure_git_repo(ws_path)
+    _ensure_git_repo(ws_path, url, branch)
     return ws_obj, msg
 
 
@@ -345,13 +345,29 @@ def _download_archive(
             ) if not meta_file.exists() else meta_backup.unlink()
 
 
-def _ensure_git_repo(ws_path: Path) -> None:
+def _ensure_git_repo(
+    ws_path: Path, remote_url: str = "", branch: str | None = None
+) -> None:
     """Initialize a git repository in the workspace if git CLI is available."""
     git = shutil.which("git")
     if not git:
         return
     git_dir = ws_path / ".git"
     if git_dir.is_dir():
+        if remote_url:
+            updated = subprocess.run(
+                [git, "remote", "set-url", "origin", remote_url],
+                cwd=str(ws_path),
+                capture_output=True,
+                timeout=15,
+            )
+            if updated.returncode != 0:
+                subprocess.run(
+                    [git, "remote", "add", "origin", remote_url],
+                    cwd=str(ws_path),
+                    capture_output=True,
+                    timeout=15,
+                )
         subprocess.run(
             [git, "add", "-A"], cwd=str(ws_path), capture_output=True, timeout=30
         )
@@ -379,6 +395,20 @@ def _ensure_git_repo(ws_path: Path) -> None:
             capture_output=True,
             timeout=30,
         )
+        if remote_url:
+            subprocess.run(
+                [git, "remote", "add", "origin", remote_url],
+                cwd=str(ws_path),
+                capture_output=True,
+                timeout=15,
+            )
+        if branch:
+            subprocess.run(
+                [git, "branch", "-M", branch],
+                cwd=str(ws_path),
+                capture_output=True,
+                timeout=15,
+            )
     except Exception:
         pass
 
@@ -448,12 +478,12 @@ def git_pull(user_id: str, ws_id: str, github_token: str = "") -> tuple[bool, st
         )
         if not archive_url:
             return False, "cannot determine archive URL"
-        tmp_path = _download_archive_file(archive_url, github_token)
+        tmp_path = _download_archive_file(archive_url, effective_token)
         stage = Path(tempfile.mkdtemp(prefix=f".{ws_id}-pull-", dir=ws_path.parent))
         try:
             _extract_archive(tmp_path, stage)
             for child in ws_path.iterdir():
-                if child.name == ".stupidex.json":
+                if child.name in {".stupidex.json", ".git"}:
                     continue
                 shutil.rmtree(
                     child, ignore_errors=True
@@ -464,7 +494,7 @@ def git_pull(user_id: str, ws_id: str, github_token: str = "") -> tuple[bool, st
             tmp_path.unlink(missing_ok=True)
             shutil.rmtree(stage, ignore_errors=True)
         touch(user_id, ws_id)
-        _ensure_git_repo(ws_path)
+        _ensure_git_repo(ws_path, ws.git_url, ws.git_branch or None)
         return True, f"re-downloaded {archive_url}"
     except Exception as exc:
         return False, f"pull failed: {exc}"
