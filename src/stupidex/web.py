@@ -37,6 +37,8 @@ Endpoints:
   GET  /api/workspaces/<id>/file?path=   → file content
 """
 
+import base64
+import binascii
 import json
 import os
 import queue
@@ -66,6 +68,59 @@ app = Flask(__name__, static_folder="static")
 app.config["MAX_CONTENT_LENGTH"] = (
     50 * 1024 * 1024
 )  # 50 MB upload limit (DoS hardening)
+
+MAX_CHAT_IMAGES = 4
+MAX_CHAT_IMAGE_BYTES = 5 * 1024 * 1024
+_CHAT_IMAGE_MIMES = {
+    "image/png": b"\x89PNG\r\n\x1a\n",
+    "image/jpeg": b"\xff\xd8\xff",
+    "image/gif": (b"GIF87a", b"GIF89a"),
+    "image/webp": b"RIFF",
+}
+
+
+def _validate_chat_images(raw_images) -> tuple[list[dict], str | None]:
+    if raw_images is None:
+        return [], None
+    if not isinstance(raw_images, list):
+        return [], "images must be a list"
+    if len(raw_images) > MAX_CHAT_IMAGES:
+        return [], f"too many images (max {MAX_CHAT_IMAGES})"
+
+    normalized: list[dict] = []
+    for index, raw in enumerate(raw_images):
+        if not isinstance(raw, dict):
+            return [], f"image {index + 1} is invalid"
+        data_url = raw.get("data_url")
+        if not isinstance(data_url, str) or not data_url.startswith("data:image/"):
+            return [], f"image {index + 1} must use a data URL"
+        try:
+            header, encoded = data_url.split(",", 1)
+            mime = header[5:].split(";", 1)[0].lower()
+        except ValueError:
+            return [], f"image {index + 1} has an invalid data URL"
+        if ";base64" not in header.lower() or mime not in _CHAT_IMAGE_MIMES:
+            return [], f"unsupported image type: {mime or 'unknown'}"
+        if len(encoded) > ((MAX_CHAT_IMAGE_BYTES + 2) // 3) * 4 + 8:
+            return [], f"image {index + 1} is too large"
+        try:
+            content = base64.b64decode(encoded, validate=True)
+        except (binascii.Error, ValueError):
+            return [], f"image {index + 1} has invalid base64 data"
+        if not content or len(content) > MAX_CHAT_IMAGE_BYTES:
+            return [], f"image {index + 1} is too large"
+        signature = _CHAT_IMAGE_MIMES[mime]
+        signatures = signature if isinstance(signature, tuple) else (signature,)
+        valid_signature = any(content.startswith(item) for item in signatures)
+        if mime == "image/webp":
+            valid_signature = valid_signature and len(content) >= 12 and content[8:12] == b"WEBP"
+        if not valid_signature:
+            return [], f"image {index + 1} content does not match {mime}"
+        name = re.sub(r"[^A-Za-z0-9._ -]+", "_", str(raw.get("name") or f"image-{index + 1}"))[:120]
+        normalized.append(
+            {"data_url": data_url, "mime": mime, "name": name, "size": len(content)}
+        )
+    return normalized, None
 
 # CORS: when STUPIDEX_CORS is unset, allow only same-origin (no header).
 # Set to a comma-separated list of origins or "*" to allow any.
@@ -863,14 +918,20 @@ def _session_chat_impl(sid: str) -> Response:
 
     data = request.get_json(force=True) or {}
     user_msg = (data.get("message") or "").strip()
-    if not user_msg:
+    images, image_error = _validate_chat_images(data.get("images"))
+    if image_error:
+        return jsonify({"error": image_error}), 400
+    if not user_msg and not images:
         return jsonify({"error": "empty message"}), 400
     if len(user_msg) > 100_000:
         return jsonify({"error": "message too long (max 100k chars)"}), 400
 
     provider_id = data.get("provider") or session.provider
+    provider = PROVIDERS.get(provider_id, PROVIDERS[DEFAULT_FALLBACK_ID])
+    if images and not provider.supports_vision:
+        return jsonify({"error": "the selected model does not support image input"}), 400
     user_api_key = request.user.api_key or data.get("api_key")
-    if PROVIDERS.get(provider_id, PROVIDERS[DEFAULT_FALLBACK_ID]).needs_api_key and not user_api_key and not has_api_key():
+    if provider.needs_api_key and not user_api_key and not has_api_key():
         return jsonify(
             {
                 "error": "no LLM API key configured. Set DEEPSEEK_API_KEY in the server env, "
@@ -887,11 +948,15 @@ def _session_chat_impl(sid: str) -> Response:
     ctx.cancel_event = _claim_stream(sid)
     if ctx.cancel_event is None:
         return jsonify({"error": "session is already generating"}), 409
-    return _stream_response(sid, user_msg, ctx)
+    return _stream_response(sid, user_msg, ctx, images=images)
 
 
 def _stream_response(
-    sid: str, user_text: str, ctx, regenerate_user_msg_id: int | None = None
+    sid: str,
+    user_text: str,
+    ctx,
+    regenerate_user_msg_id: int | None = None,
+    images: list[dict] | None = None,
 ) -> Response:
     q: queue.Queue = queue.Queue(maxsize=128)
     err_holder: dict = {"err": None}
@@ -900,7 +965,11 @@ def _stream_response(
     def producer() -> None:
         try:
             for event in stream_response(
-                sid, user_text, ctx, regenerate_user_msg_id=regenerate_user_msg_id
+                sid,
+                user_text,
+                ctx,
+                regenerate_user_msg_id=regenerate_user_msg_id,
+                images=images,
             ):
                 while not ctx.cancel_event.is_set():
                     try:

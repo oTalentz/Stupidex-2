@@ -196,6 +196,7 @@ def stream_response(
     user_text: str,
     ctx: AgentContext,
     regenerate_user_msg_id: int | None = None,
+    images: list[dict] | None = None,
 ) -> Generator[dict, None, None]:
     """Stream an assistant turn for the given session and user message.
 
@@ -212,12 +213,34 @@ def stream_response(
         # followed it; the user message itself stays.
         db.delete_messages_from(session_id, regenerate_user_msg_id + 1)
     else:
-        user_msg = db.append_message(session_id, MessageRole.USER.value, user_text, MessageType.TEXT.value)
+        attachment_meta = [
+            {"name": image["name"], "mime": image["mime"], "size": image["size"]}
+            for image in images or []
+        ]
+        user_msg = db.append_message(
+            session_id,
+            MessageRole.USER.value,
+            user_text,
+            MessageType.TEXT.value,
+            metadata={"images": attachment_meta} if attachment_meta else None,
+        )
         ctx.user_msg_id = user_msg.id
     db.auto_title(session_id, user_text)
     db.touch_session(session_id)
 
     history = _history_for_llm(session_id, ctx.user_id)
+    if images and history and history[-1].role == MessageRole.USER:
+        multimodal_content: list[dict] = [
+            {"type": "text", "text": user_text or "Analise as imagens anexadas."}
+        ]
+        multimodal_content.extend(
+            {
+                "type": "image_url",
+                "image_url": {"url": image["data_url"]},
+            }
+            for image in images
+        )
+        history[-1].content = multimodal_content
 
     yield {
         "type": "session_meta",

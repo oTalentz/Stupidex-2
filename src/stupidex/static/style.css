@@ -1184,6 +1184,12 @@ body,
         0 0 0 1px rgba(99, 102, 241, 0.2),
         0 8px 32px -8px rgba(0, 0, 0, 0.4);
 }
+.composer-input-wrap.image-drag-active {
+    border-color: var(--accent);
+    box-shadow:
+        0 0 0 2px rgba(99, 102, 241, 0.2),
+        0 8px 32px -8px rgba(0, 0, 0, 0.4);
+}
 .composer-attach-row {
     display: flex;
     align-items: center;
@@ -1240,6 +1246,10 @@ body,
     background: rgba(255, 255, 255, 0.05);
     color: var(--text-main);
 }
+.composer-icon-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
 .composer-attach-divider {
     width: 1px;
     height: 16px;
@@ -1263,6 +1273,82 @@ body,
 .composer-view-project:hover {
     background: rgba(255, 255, 255, 0.05);
     color: var(--text-main);
+}
+.vision-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-left: auto;
+    padding: 4px 8px;
+    border-radius: 999px;
+    color: #a5b4fc;
+    background: rgba(99, 102, 241, 0.12);
+    border: 1px solid rgba(99, 102, 241, 0.22);
+    font-size: 10px;
+    font-weight: 600;
+}
+.composer-image-preview {
+    display: flex;
+    gap: 8px;
+    padding: 10px 12px 2px;
+    overflow-x: auto;
+}
+.composer-image-item {
+    position: relative;
+    width: 72px;
+    height: 72px;
+    flex: 0 0 72px;
+    border-radius: 10px;
+    overflow: visible;
+    border: 1px solid var(--border-strong);
+    background: var(--bg-card);
+}
+.composer-image-item img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+    border-radius: 9px;
+}
+.composer-image-remove {
+    position: absolute;
+    top: -7px;
+    right: -7px;
+    width: 22px;
+    height: 22px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: #27272a;
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    font-size: 16px;
+    line-height: 1;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+.message-image-gallery {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    margin-bottom: 10px;
+}
+.message-image-gallery img {
+    display: block;
+    width: 100%;
+    max-height: 280px;
+    object-fit: cover;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+}
+.message-image-attachment {
+    display: inline-flex;
+    align-items: center;
+    padding: 7px 10px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 12px;
 }
 
 .composer-stop {

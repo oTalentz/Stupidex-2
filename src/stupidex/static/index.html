@@ -42,7 +42,7 @@
     </script>
     <script>hljs.configure({ ignoreUnescapedHTML: true });</script>
 
-    <link rel="stylesheet" href="/static/style.css?v=8" />
+    <link rel="stylesheet" href="/static/style.css?v=9" />
 </head>
 <body>
     <!-- =========================================================
@@ -208,9 +208,9 @@
             <!-- Floating Input Bar -->
             <footer id="composer" class="composer">
                 <form id="form" class="composer-form" autocomplete="off">
-                    <div class="composer-input-wrap">
+                    <div id="composer-input-wrap" class="composer-input-wrap">
                         <div class="composer-attach-row">
-                            <button type="button" id="composer-attach" class="composer-icon-btn" title="Anexar arquivo">
+                            <button type="button" id="composer-attach" class="composer-icon-btn" title="Anexar imagem ao chat">
                                 <i class="ph ph-paperclip"></i>
                             </button>
                             <button type="button" id="composer-search" class="composer-icon-btn" title="Buscar na web">
@@ -221,7 +221,12 @@
                                 <i class="ph ph-layout"></i>
                                 View Project
                             </button>
+                            <span id="vision-indicator" class="vision-indicator hidden" title="O modelo atual aceita imagens">
+                                <i class="ph ph-eye"></i>
+                                Visão
+                            </span>
                         </div>
+                        <div id="composer-image-preview" class="composer-image-preview hidden"></div>
                         <textarea id="input" class="composer-input"
                             placeholder="Pergunte algo, faça upload ou peça uma alteração…  (Shift+Enter para nova linha)"
                             rows="1"></textarea>
@@ -277,6 +282,7 @@
 
         <!-- Hidden inputs (preserved) -->
         <input id="file-input" type="file" multiple webkitdirectory style="display:none" />
+        <input id="composer-image-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple style="display:none" />
         <input id="search-input" type="text" placeholder="Buscar conversas…" class="hidden" />
     </div><!-- /#main-app -->
 
@@ -369,6 +375,6 @@
         </div>
     </div>
 
-    <script src="/static/app.js?v=8"></script>
+    <script src="/static/app.js?v=9"></script>
 </body>
 </html>

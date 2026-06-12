@@ -87,6 +87,10 @@ const els = {
         graph: $("research-tab-graph"),
     },
     composerAttach: $("composer-attach"),
+    composerImageInput: $("composer-image-input"),
+    composerImagePreview: $("composer-image-preview"),
+    composerInputWrap: $("composer-input-wrap"),
+    visionIndicator: $("vision-indicator"),
     composerViewProject: $("composer-view-project"),
     modelSwitcher: $("model-switcher"),
 };
@@ -101,7 +105,12 @@ let state = {
     abortController: null,
     tree: [],
     dropCounter: 0,
+    pendingImages: [],
 };
+
+const MAX_CHAT_IMAGES = 4;
+const MAX_CHAT_IMAGE_BYTES = 5 * 1024 * 1024;
+const CHAT_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 
 function escapeHtml(s) {
     return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -111,6 +120,89 @@ function fmtSize(n) {
     if (n < 1024) return n + " B";
     if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
     return (n / 1024 / 1024).toFixed(1) + " MB";
+}
+
+function currentProvider() {
+    return state.providers.find(p => p.id === state.config.provider) || null;
+}
+
+function currentModelSupportsVision() {
+    return Boolean(currentProvider()?.supports_vision);
+}
+
+function fileToDataUrl(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error(`Não foi possível ler ${file.name || "a imagem"}`));
+        reader.readAsDataURL(file);
+    });
+}
+
+async function addChatImages(fileList) {
+    const files = Array.from(fileList || []).filter(file => file.type.startsWith("image/"));
+    if (!files.length) return;
+    if (!currentModelSupportsVision()) {
+        alert("O modelo selecionado não aceita imagens. Escolha um modelo com visão.");
+        return;
+    }
+    const available = MAX_CHAT_IMAGES - state.pendingImages.length;
+    if (available <= 0) {
+        alert(`Você pode anexar no máximo ${MAX_CHAT_IMAGES} imagens por mensagem.`);
+        return;
+    }
+    for (const file of files.slice(0, available)) {
+        if (!CHAT_IMAGE_TYPES.has(file.type)) {
+            alert(`Formato não suportado: ${file.type || file.name}`);
+            continue;
+        }
+        if (file.size > MAX_CHAT_IMAGE_BYTES) {
+            alert(`${file.name || "Imagem"} excede o limite de 5 MB.`);
+            continue;
+        }
+        try {
+            state.pendingImages.push({
+                id: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
+                name: file.name || "imagem-colada.png",
+                type: file.type,
+                size: file.size,
+                dataUrl: await fileToDataUrl(file),
+            });
+        } catch (error) {
+            alert(error.message);
+        }
+    }
+    renderChatImagePreviews();
+}
+
+function renderChatImagePreviews() {
+    els.composerImagePreview.innerHTML = "";
+    els.composerImagePreview.classList.toggle("hidden", state.pendingImages.length === 0);
+    for (const image of state.pendingImages) {
+        const item = document.createElement("div");
+        item.className = "composer-image-item";
+        const thumbnail = document.createElement("img");
+        thumbnail.src = image.dataUrl;
+        thumbnail.alt = image.name;
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "composer-image-remove";
+        remove.title = "Remover imagem";
+        remove.setAttribute("aria-label", `Remover ${image.name}`);
+        remove.textContent = "×";
+        remove.addEventListener("click", () => {
+            state.pendingImages = state.pendingImages.filter(candidate => candidate.id !== image.id);
+            renderChatImagePreviews();
+        });
+        item.append(thumbnail, remove);
+        els.composerImagePreview.appendChild(item);
+    }
+}
+
+function clearChatImages() {
+    state.pendingImages = [];
+    if (els.composerImageInput) els.composerImageInput.value = "";
+    renderChatImagePreviews();
 }
 
 function fmtTime(ts) {
@@ -351,7 +443,7 @@ function renderMessages(msgs) {
     while (i < msgs.length) {
         const m = msgs[i];
         if (m.role === "user") {
-            const userBubble = buildUserBubble(m.content);
+            const userBubble = buildUserBubble(m.content, m.metadata?.images || []);
             attachUserActions(userBubble, m.content);
             inner.appendChild(userBubble);
             i++;
@@ -382,10 +474,30 @@ function renderMessages(msgs) {
     scrollToBottom();
 }
 
-function buildUserBubble(text) {
+function buildUserBubble(text, images = []) {
     const row = document.createElement("div");
     row.className = "message user";
     row.innerHTML = `${USER_AVATAR_HTML}<div class="bubble">${DOMPurify.sanitize(marked.parse(text || ""))}</div>`;
+    const bubble = row.querySelector(".bubble");
+    if (images.length) {
+        const gallery = document.createElement("div");
+        gallery.className = "message-image-gallery";
+        for (const image of images) {
+            if (image.dataUrl || image.data_url) {
+                const img = document.createElement("img");
+                img.src = image.dataUrl || image.data_url;
+                img.alt = image.name || "Imagem anexada";
+                img.loading = "lazy";
+                gallery.appendChild(img);
+            } else {
+                const attachment = document.createElement("span");
+                attachment.className = "message-image-attachment";
+                attachment.textContent = `Imagem: ${image.name || "anexo"}`;
+                gallery.appendChild(attachment);
+            }
+        }
+        bubble.prepend(gallery);
+    }
     return row;
 }
 
@@ -488,13 +600,19 @@ function scrollToBottom() { els.messages.scrollTop = els.messages.scrollHeight; 
 async function sendMessage() {
     if (state.busy) return;
     const text = els.input.value.trim();
-    if (!text) return;
+    const images = [...state.pendingImages];
+    if (!text && !images.length) return;
+    if (images.length && !currentModelSupportsVision()) {
+        alert("O modelo selecionado não aceita imagens.");
+        return;
+    }
     if (!state.currentSessionId) await newSession();
     const sid = state.currentSessionId;
     els.input.value = "";
     autoSize();
+    clearChatImages();
 
-    appendUserMessage(text, { editable: true });
+    appendUserMessage(text, { editable: Boolean(text), images });
     const assistantRow = appendAssistantPlaceholder();
     const bubble = assistantRow.querySelector(".bubble");
     const thinking = document.createElement("div");
@@ -511,6 +629,10 @@ async function sendMessage() {
             message: text,
             provider: state.config.provider,
             model: state.config.model,
+            images: images.map(image => ({
+                name: image.name,
+                data_url: image.dataUrl,
+            })),
         },
         assistantRow,
     });
@@ -700,7 +822,7 @@ function handleEvent(evt, ctx) {
 
 function appendUserMessage(text, opts = {}) {
     const inner = ensureInner();
-    const bubble = buildUserBubble(text);
+    const bubble = buildUserBubble(text, opts.images || []);
     if (opts.editable) {
         attachUserActions(bubble, text);
     }
@@ -1002,6 +1124,14 @@ async function uploadFiles(files) {
 window.addEventListener("dragenter", (e) => {
     e.preventDefault();
     state.dropCounter++;
+    const items = Array.from(e.dataTransfer?.items || []).filter(item => item.kind === "file");
+    const imageDrop = items.length > 0 && items.every(item => item.type.startsWith("image/"));
+    const dropText = els.dropOverlay.querySelector(".drop-text");
+    if (dropText) {
+        dropText.textContent = imageDrop && currentModelSupportsVision()
+            ? "Solte para anexar ao chat"
+            : "Solte arquivos ou pastas aqui";
+    }
     els.dropOverlay.classList.remove("hidden");
 });
 window.addEventListener("dragleave", (e) => {
@@ -1020,7 +1150,12 @@ window.addEventListener("drop", async (e) => {
     const items = e.dataTransfer.items;
     const files = e.dataTransfer.files;
     if (files && files.length) {
-        await uploadFiles(files);
+        const imageFiles = Array.from(files).filter(file => file.type.startsWith("image/"));
+        if (imageFiles.length === files.length && currentModelSupportsVision()) {
+            await addChatImages(imageFiles);
+        } else {
+            await uploadFiles(files);
+        }
     }
 });
 
@@ -1168,6 +1303,15 @@ function updateBadges() {
             c.classList.toggle("model-chip-active", c.dataset.model === model);
         });
     }
+    const hasVision = currentModelSupportsVision();
+    els.visionIndicator?.classList.toggle("hidden", !hasVision);
+    if (els.composerAttach) {
+        els.composerAttach.disabled = !hasVision;
+        els.composerAttach.title = hasVision
+            ? "Anexar imagem ao chat"
+            : "O modelo atual não aceita imagens";
+    }
+    if (!hasVision && state.pendingImages.length) clearChatImages();
 }
 
 // ============================================================
@@ -1213,6 +1357,16 @@ document.addEventListener("keydown", (e) => {
 els.form.addEventListener("submit", (e) => { e.preventDefault(); sendMessage(); });
 els.stopBtn.addEventListener("click", () => { if (state.abortController) state.abortController.abort(); });
 els.input.addEventListener("input", autoSize);
+els.input.addEventListener("paste", async (e) => {
+    const imageFiles = Array.from(e.clipboardData?.items || [])
+        .filter(item => item.kind === "file" && item.type.startsWith("image/"))
+        .map(item => item.getAsFile())
+        .filter(Boolean);
+    if (imageFiles.length) {
+        e.preventDefault();
+        await addChatImages(imageFiles);
+    }
+});
 els.input.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
@@ -1285,10 +1439,40 @@ els.researchTabs.forEach(tab => {
     });
 });
 
-// Composer attach (re-uses file input)
+// Ephemeral image attachments for the current chat message.
 if (els.composerAttach) {
-    els.composerAttach.addEventListener("click", () => els.fileInput && els.fileInput.click());
+    els.composerAttach.addEventListener("click", () => els.composerImageInput?.click());
 }
+els.composerImageInput?.addEventListener("change", async () => {
+    await addChatImages(els.composerImageInput.files);
+    els.composerImageInput.value = "";
+});
+for (const eventName of ["dragenter", "dragover"]) {
+    els.composerInputWrap?.addEventListener(eventName, (e) => {
+        const hasImages = Array.from(e.dataTransfer?.items || []).some(
+            item => item.kind === "file" && item.type.startsWith("image/"),
+        );
+        if (!hasImages) return;
+        e.preventDefault();
+        e.stopPropagation();
+        els.composerInputWrap.classList.add("image-drag-active");
+    });
+}
+els.composerInputWrap?.addEventListener("dragleave", (e) => {
+    if (!els.composerInputWrap.contains(e.relatedTarget)) {
+        els.composerInputWrap.classList.remove("image-drag-active");
+    }
+});
+els.composerInputWrap?.addEventListener("drop", async (e) => {
+    const images = Array.from(e.dataTransfer?.files || []).filter(file => file.type.startsWith("image/"));
+    if (!images.length) return;
+    e.preventDefault();
+    e.stopPropagation();
+    state.dropCounter = 0;
+    els.dropOverlay.classList.add("hidden");
+    els.composerInputWrap.classList.remove("image-drag-active");
+    await addChatImages(images);
+});
 if (els.composerViewProject) {
     els.composerViewProject.addEventListener("click", () => {
         // Visual placeholder — just open settings for now
@@ -1467,12 +1651,14 @@ async function logout() {
         abortController: null,
         tree: [],
         dropCounter: 0,
+        pendingImages: [],
     };
     els.messages.innerHTML = "";
     els.sessionList.innerHTML = "";
     els.workspaceList.innerHTML = "";
     els.treeContainer.innerHTML = "";
     els.sessionTitle.textContent = "Stupidex";
+    renderChatImagePreviews();
     showLogin();
     elsAuth.loginEmail.value = "";
     elsAuth.loginPassword.value = "";

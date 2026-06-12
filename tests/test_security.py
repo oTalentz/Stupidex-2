@@ -365,6 +365,84 @@ def test_stream_claim_is_exclusive():
     assert web._claim_stream("session-test") is not None
 
 
+def test_chat_image_validation_and_limits():
+    from stupidex import web
+    png = (
+        "data:image/png;base64,"
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Z6wAAAABJRU5ErkJggg=="
+    )
+    images, error = web._validate_chat_images([{"name": "shot.png", "data_url": png}])
+    assert error is None
+    assert images[0]["mime"] == "image/png"
+    assert images[0]["size"] > 0
+    _, error = web._validate_chat_images([{"data_url": png}] * (web.MAX_CHAT_IMAGES + 1))
+    assert "too many" in error
+    _, error = web._validate_chat_images([{"data_url": "data:image/png;base64,ZmFrZQ=="}])
+    assert "does not match" in error
+
+
+def test_non_vision_model_rejects_chat_images():
+    from stupidex import web
+    user, token = db.create_user("no_vision_user", "validpass123")
+    session = db.create_session(user.id, "deepseek-chat", "deepseek-chat")
+    png = (
+        "data:image/png;base64,"
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Z6wAAAABJRU5ErkJggg=="
+    )
+    response = web.app.test_client().post(
+        f"/api/sessions/{session.id}/chat",
+        json={"message": "analise", "images": [{"name": "shot.png", "data_url": png}]},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 400
+    assert "does not support" in response.get_json()["error"]
+
+
+def test_provider_capabilities_include_vision():
+    from stupidex.llm.providers import list_providers
+    providers = {provider["id"]: provider for provider in list_providers()}
+    assert providers["deepseek-v4-flash"]["supports_vision"] is True
+    assert providers["deepseek-chat"]["supports_vision"] is False
+
+
+def test_chat_image_binary_is_not_persisted():
+    from stupidex.llm.handle_input import AgentContext, stream_response
+
+    user, _ = db.create_user("ephemeral_image_user", "validpass123")
+    session = db.create_session(user.id, "deepseek-v4-flash", "deepseek-v4-flash")
+    data_url = "data:image/png;base64,iVBORw0KGgo="
+    ctx = AgentContext(
+        session_id=session.id,
+        provider_id="deepseek-v4-flash",
+        api_key="test-key",
+        model="deepseek-v4-flash",
+        base_url="https://example.invalid/v1",
+        user_id=user.id,
+    )
+    response = stream_response(
+        session.id,
+        "analise",
+        ctx,
+        images=[
+            {
+                "name": "shot.png",
+                "mime": "image/png",
+                "size": 8,
+                "data_url": data_url,
+            }
+        ],
+    )
+    next(response)
+    response.close()
+
+    message = db.get_messages(session.id)[0]
+    assert message.content == "analise"
+    assert message.metadata == {
+        "images": [{"name": "shot.png", "mime": "image/png", "size": 8}]
+    }
+    assert "data_url" not in message.metadata["images"][0]
+
+
 def cleanup():
     shutil.rmtree(_TMP, ignore_errors=True)
 

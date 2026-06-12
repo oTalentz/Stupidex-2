@@ -15,6 +15,7 @@ class ProviderConfig:
     default_model: str
     api_key_env: str | None = None
     needs_api_key: bool = False
+    supports_vision: bool = False
     description: str = ""
 
 
@@ -26,6 +27,7 @@ PROVIDERS: dict[str, ProviderConfig] = {
         default_model="deepseek-v4-flash",
         api_key_env="DEEPSEEK_API_KEY",
         needs_api_key=True,
+        supports_vision=True,
         description="DeepSeek V4 Flash — rápido, multimodal, recomendado",
     ),
     "deepseek-v4-pro": ProviderConfig(
@@ -35,6 +37,7 @@ PROVIDERS: dict[str, ProviderConfig] = {
         default_model="deepseek-v4-pro",
         api_key_env="DEEPSEEK_API_KEY",
         needs_api_key=True,
+        supports_vision=True,
         description="DeepSeek V4 Pro — mais capaz, mais lento",
     ),
     "deepseek-chat": ProviderConfig(
@@ -62,6 +65,7 @@ PROVIDERS: dict[str, ProviderConfig] = {
         default_model="gpt-4o-mini",
         api_key_env="OPENAI_API_KEY",
         needs_api_key=True,
+        supports_vision=True,
     ),
     "anthropic": ProviderConfig(
         id="anthropic",
@@ -70,6 +74,7 @@ PROVIDERS: dict[str, ProviderConfig] = {
         default_model="claude-3-5-sonnet-20241022",
         api_key_env="ANTHROPIC_API_KEY",
         needs_api_key=True,
+        supports_vision=True,
     ),
     "ollama": ProviderConfig(
         id="ollama",
@@ -98,6 +103,7 @@ def list_providers() -> list[dict]:
             "name": p.name,
             "model": p.default_model,
             "needs_api_key": p.needs_api_key,
+            "supports_vision": p.supports_vision,
             "api_key_env": p.api_key_env,
             "description": p.description,
         }

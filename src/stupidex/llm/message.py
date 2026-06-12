@@ -53,7 +53,7 @@ class ToolCall:
 class ChatMessage:
     """A message in a session, stored in the DB and exchanged with the LLM."""
     role: MessageRole
-    content: str = ""
+    content: str | list[dict[str, Any]] = ""
     type: MessageType = MessageType.TEXT
     tool_calls: list[ToolCall] = field(default_factory=list)
     tool_call_id: str | None = None
