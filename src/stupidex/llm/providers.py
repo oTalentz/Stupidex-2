@@ -86,10 +86,10 @@ PROVIDERS: dict[str, ProviderConfig] = {
         description="Modelos rodando localmente no Ollama",
     ),
     "puter-mistral": ProviderConfig(
-        id="puter-mistral",
+        id="puter",
         name="Puter Mistral (Grátis)",
-        base_url="https://api.puter.com/v2",
-        default_model="mistralai/mistral-large-2512",
+        base_url=None,
+        default_model="puter/mistralai/mistral-large-2512",
         needs_api_key=False,
         supports_vision=True,
         description="Mistral via Puter.com — API gratuita e ilimitada",
