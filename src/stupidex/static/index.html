@@ -227,9 +227,15 @@
             <!-- Pane 2: Workspace & Files (renamed from old sidebar/ws panel) -->
             <aside id="workspace-panel" class="workspace-panel">
                 <div class="workspace-header">
-                    <div class="workspace-title-wrap">
-                        <h2 class="workspace-title">Workspace</h2>
-                        <span id="ws-files-count" class="ws-count-badge"></span>
+                    <div class="workspace-heading">
+                        <p class="pane-eyebrow">Workspace</p>
+                        <div class="workspace-title-wrap">
+                            <h2 class="workspace-title">Stupidex</h2>
+                            <span
+                                id="ws-files-count"
+                                class="ws-count-badge"
+                            ></span>
+                        </div>
                     </div>
                     <div class="workspace-header-actions">
                         <button
@@ -254,13 +260,17 @@
 
                 <div class="workspace-content">
                     <div class="workspace-actions">
-                        <button id="upload-btn" class="ws-action primary">
-                            <i class="ph ph-upload-simple"></i>
-                            Upload Context
-                        </button>
-                        <button id="clone-btn" class="ws-action outline">
+                        <div class="workspace-action-title">
+                            <i class="ph ph-github-logo"></i>
+                            GitHub Repository
+                        </div>
+                        <button id="clone-btn" class="ws-action primary">
                             <i class="ph ph-git-branch"></i>
-                            Connect Repository
+                            Conectar repositorio
+                        </button>
+                        <button id="upload-btn" class="ws-action outline">
+                            <i class="ph ph-upload-simple"></i>
+                            Upload local
                         </button>
                         <button id="new-ws-btn" class="ws-action ghost">
                             <i class="ph ph-plus"></i>
@@ -302,7 +312,10 @@
 
                     <div class="workspace-section">
                         <div class="workspace-section-title">
-                            <span>Active Context</span>
+                            <span>
+                                <i class="ph ph-upload-simple"></i>
+                                Contexto ativo
+                            </span>
                             <span
                                 id="ws-active-badge"
                                 class="ws-mini-badge"
@@ -313,8 +326,15 @@
 
                     <div class="workspace-section">
                         <div class="workspace-section-title">
-                            <span>Files</span>
+                            <span>
+                                <i class="ph ph-database"></i>
+                                Arquivos do repo
+                            </span>
                         </div>
+                        <p class="workspace-section-hint">
+                            Clique em um arquivo para abrir e adicionar ao
+                            contexto.
+                        </p>
                         <div id="tree-container" class="tree-container"></div>
                     </div>
 
@@ -378,10 +398,8 @@
                 <!-- Top Toolbar -->
                 <header id="topbar" class="topbar">
                     <div class="topbar-left">
-                        <div class="conversation-mark" aria-hidden="true">
-                            <i class="ph ph-chat-circle-dots"></i>
-                        </div>
                         <div class="conversation-heading">
+                            <p class="pane-eyebrow">AI Research Workspace</p>
                             <h1 id="session-title" class="topbar-title">
                                 Stupidex
                             </h1>
@@ -448,60 +466,76 @@
                             id="composer-input-wrap"
                             class="composer-input-wrap"
                         >
-                            <div class="composer-attach-row">
-                                <button
-                                    type="button"
-                                    id="composer-attach"
-                                    class="composer-icon-btn"
-                                    title="Anexar imagem ao chat"
-                                >
-                                    <i class="ph ph-paperclip"></i>
-                                </button>
-                                <button
-                                    type="button"
-                                    id="composer-search"
-                                    class="composer-icon-btn"
-                                    title="Buscar na web"
-                                >
-                                    <i class="ph ph-globe"></i>
-                                </button>
-                                <div class="composer-attach-divider"></div>
-                                <button
-                                    type="button"
-                                    id="composer-view-project"
-                                    class="composer-view-project"
-                                >
-                                    <i class="ph ph-layout"></i>
-                                    View Project
-                                </button>
-                                <span
-                                    id="web-search-indicator"
-                                    class="web-search-indicator hidden"
-                                    title="Pesquisa web ativa para esta mensagem"
-                                >
-                                    <i class="ph ph-globe-hemisphere-west"></i>
-                                    Web
-                                </span>
-                                <span
-                                    id="vision-indicator"
-                                    class="vision-indicator hidden"
-                                    title="O modelo atual aceita imagens"
-                                >
-                                    <i class="ph ph-eye"></i>
-                                    Visão
-                                </span>
-                            </div>
+                            <textarea
+                                id="input"
+                                class="composer-input"
+                                placeholder="Pergunte, analise arquivos, gere código ou revise um repositório…"
+                                rows="1"
+                            ></textarea>
                             <div
                                 id="composer-image-preview"
                                 class="composer-image-preview hidden"
                             ></div>
-                            <textarea
-                                id="input"
-                                class="composer-input"
-                                placeholder="Pergunte algo, faça upload ou peça uma alteração…  (Shift+Enter para nova linha)"
-                                rows="1"
-                            ></textarea>
                             <div class="composer-bottom">
+                                <div class="composer-tools-left">
+                                    <button
+                                        type="button"
+                                        id="composer-attach"
+                                        class="composer-icon-btn"
+                                        title="Anexar imagem ao chat"
+                                    >
+                                        <i class="ph ph-paperclip"></i>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        id="composer-search"
+                                        class="composer-icon-btn"
+                                        title="Buscar na web"
+                                    >
+                                        <i class="ph ph-globe"></i>
+                                    </button>
+                                    <div
+                                        class="composer-attach-divider"
+                                    ></div>
+                                    <button
+                                        type="button"
+                                        id="composer-view-project"
+                                        class="composer-view-project"
+                                    >
+                                        <i class="ph ph-layout"></i>
+                                        Projeto
+                                    </button>
+                                    <span class="composer-context-stat">
+                                        <i class="ph ph-files"></i>
+                                        <span id="composer-file-summary"
+                                            >0 arquivos</span
+                                        >
+                                    </span>
+                                    <span class="composer-context-stat">
+                                        <i class="ph ph-github-logo"></i>
+                                        <span id="composer-repo-summary"
+                                            >sem repo</span
+                                        >
+                                    </span>
+                                    <span
+                                        id="web-search-indicator"
+                                        class="web-search-indicator hidden"
+                                        title="Pesquisa web ativa para esta mensagem"
+                                    >
+                                        <i
+                                            class="ph ph-globe-hemisphere-west"
+                                        ></i>
+                                        Web
+                                    </span>
+                                    <span
+                                        id="vision-indicator"
+                                        class="vision-indicator hidden"
+                                        title="O modelo atual aceita imagens"
+                                    >
+                                        <i class="ph ph-eye"></i>
+                                        Visão
+                                    </span>
+                                </div>
                                 <div id="status" class="status hidden"></div>
                                 <div class="composer-bottom-right">
                                     <button
@@ -558,10 +592,39 @@
 
                 <div class="research-content">
                     <div id="research-tab-sources" class="research-tab-pane">
-                        <p class="research-empty">
-                            Nenhuma fonte ainda. As fontes que o agente
-                            consultar aparecerão aqui.
-                        </p>
+                        <div class="research-insight-card">
+                            <i class="ph ph-info"></i>
+                            <span>
+                                Chat conectado ao backend Stupidex. Arquivos,
+                                ferramentas e GitHub permanecem disponíveis ao
+                                agente.
+                            </span>
+                        </div>
+                        <div class="research-metrics">
+                            <div class="research-metric">
+                                <strong id="research-active-count">0</strong>
+                                <span>arquivos ativos</span>
+                            </div>
+                            <div class="research-metric">
+                                <strong id="research-github-state">OFF</strong>
+                                <span>GitHub</span>
+                            </div>
+                        </div>
+                        <div class="research-model-card">
+                            <i class="ph ph-code"></i>
+                            <span>
+                                <strong>Modelo</strong>
+                                <small id="research-model-name"
+                                    >deepseek-v4-flash</small
+                                >
+                            </span>
+                        </div>
+                        <div id="research-sources-list">
+                            <p class="research-empty">
+                                Nenhuma fonte ainda. As fontes que o agente
+                                consultar aparecerão aqui.
+                            </p>
+                        </div>
                     </div>
                     <div
                         id="research-tab-notes"

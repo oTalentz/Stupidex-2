@@ -145,7 +145,13 @@ const els = {
   visionIndicator: $("vision-indicator"),
   webSearchIndicator: $("web-search-indicator"),
   composerViewProject: $("composer-view-project"),
+  composerFileSummary: $("composer-file-summary"),
+  composerRepoSummary: $("composer-repo-summary"),
   modelSwitcher: $("model-switcher"),
+  researchSourcesList: $("research-sources-list"),
+  researchActiveCount: $("research-active-count"),
+  researchGithubState: $("research-github-state"),
+  researchModelName: $("research-model-name"),
 
   // Trash & confirm modal
   railTrash: $("rail-trash"),
@@ -926,7 +932,7 @@ function scrollToBottom() {
 }
 
 function renderWebSources(content) {
-  const pane = els.researchTabPanes.sources;
+  const pane = els.researchSourcesList || els.researchTabPanes.sources;
   if (!pane) return;
   const sources = [];
   const pattern = /URL:\s+(https?:\/\/\S+)/g;
@@ -1395,6 +1401,33 @@ async function loadWorkspaces() {
   }
 }
 
+function updateWorkspaceIndicators() {
+  const workspaces = state.workspaces?.workspaces || [];
+  const active = workspaces.find(
+    (workspace) => workspace.id === state.workspaces.active_id,
+  );
+  const fileCount = active?.file_count || 0;
+  const hasRepository = active?.source === "git";
+
+  if (els.wsFilesCount) {
+    els.wsFilesCount.textContent = fileCount ? String(fileCount) : "";
+  }
+  if (els.wsActiveBadge) {
+    els.wsActiveBadge.textContent = active ? "1" : "0";
+  }
+  if (els.composerFileSummary) {
+    els.composerFileSummary.textContent = `${fileCount} arquivo${fileCount === 1 ? "" : "s"}`;
+  }
+  if (els.composerRepoSummary) {
+    els.composerRepoSummary.textContent = hasRepository
+      ? active.name
+      : "sem repo";
+  }
+  if (els.researchActiveCount) {
+    els.researchActiveCount.textContent = String(fileCount);
+  }
+}
+
 function renderWorkspaces() {
   els.workspaceList.innerHTML = "";
   for (const w of state.workspaces.workspaces) {
@@ -1453,6 +1486,7 @@ function renderWorkspaces() {
     li.addEventListener("click", () => activateWorkspace(w.id));
     els.workspaceList.appendChild(li);
   }
+  updateWorkspaceIndicators();
 }
 
 async function activateWorkspace(id) {
@@ -1854,6 +1888,13 @@ function renderGithubIntegration() {
     els.settingsGithubDescription,
     els.settingsGithubAction,
   );
+  if (els.researchGithubState) {
+    els.researchGithubState.textContent = state.github.connected ? "ON" : "OFF";
+    els.researchGithubState.classList.toggle(
+      "is-on",
+      state.github.connected,
+    );
+  }
 }
 
 async function loadGithubIntegration() {
@@ -2050,6 +2091,9 @@ async function loadConfig() {
 function updateBadges() {
   if (els.providerBadge) els.providerBadge.textContent = state.config.provider;
   if (els.modelBadge) els.modelBadge.textContent = state.config.model;
+  if (els.researchModelName) {
+    els.researchModelName.textContent = state.config.model;
+  }
   // v3: reflect the active model on the model chip switcher
   if (els.modelSwitcher) {
     const model = state.config.model || "deepseek-v4-flash";
