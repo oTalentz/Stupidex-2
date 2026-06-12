@@ -14,6 +14,7 @@ dependencies = [
     "gunicorn>=21.0",
     "waitress>=3.0",
     "cryptography>=42.0",
+    "duckduckgo-mcp-server==0.4.0",
 ]
 
 [project.scripts]

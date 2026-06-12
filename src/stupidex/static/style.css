@@ -195,12 +195,7 @@ body,
     background: var(--bg-main);
 }
 
-/* When research panel is open, expand grid */
-.app-shell:has(#research-panel:not(.research-hidden)) {
-    grid-template-columns: var(--nav-width) var(--workspace-width) 1fr var(
-            --research-width
-        );
-}
+/* Research panel removed from grid flow — uses fixed overlay instead */
 
 /* ============================================================
    Pane 1: Icon rail nav
@@ -634,15 +629,51 @@ body,
 .topbar {
     position: relative;
     height: var(--topbar-height);
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
-    justify-content: space-between;
     padding: 0 24px;
     border-bottom: 1px solid var(--border);
     background: var(--bg-elevated);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     z-index: 20;
+}
+.topbar-left,
+.topbar-right {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.topbar-left {
+    justify-self: start;
+}
+.topbar-center {
+    justify-self: center;
+}
+.topbar-right {
+    justify-self: end;
+}
+.topbar-action {
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--text);
+    border-radius: 9px;
+}
+.topbar-icon-action {
+    width: 32px;
+    padding: 0;
+    font-size: 16px;
+}
+.topbar-action:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-main);
+    border-color: var(--border-strong);
 }
 .topbar-title {
     font-size: 15px;
@@ -719,7 +750,7 @@ body,
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 6px 12px;
+    padding: 0 12px;
     border-radius: 8px;
     font-size: 12px;
     font-weight: 500;
@@ -1246,6 +1277,11 @@ body,
     background: rgba(255, 255, 255, 0.05);
     color: var(--text-main);
 }
+.composer-icon-btn.is-active {
+    color: #a5b4fc;
+    background: rgba(99, 102, 241, 0.14);
+    box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.28);
+}
 .composer-icon-btn:disabled {
     opacity: 0.35;
     cursor: not-allowed;
@@ -1278,7 +1314,7 @@ body,
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    margin-left: auto;
+    margin-left: 0;
     padding: 4px 8px;
     border-radius: 999px;
     color: #a5b4fc;
@@ -1286,6 +1322,22 @@ body,
     border: 1px solid rgba(99, 102, 241, 0.22);
     font-size: 10px;
     font-weight: 600;
+}
+.web-search-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-left: auto;
+    padding: 4px 8px;
+    border-radius: 999px;
+    color: #67e8f9;
+    background: rgba(6, 182, 212, 0.1);
+    border: 1px solid rgba(6, 182, 212, 0.22);
+    font-size: 10px;
+    font-weight: 600;
+}
+.web-search-indicator.hidden ~ .vision-indicator:not(.hidden) {
+    margin-left: auto;
 }
 .composer-image-preview {
     display: flex;
@@ -1422,24 +1474,29 @@ body,
    Pane 4: Research panel
    ============================================================ */
 .research-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    height: 100vh;
+    height: 100dvh;
+    width: var(--research-width);
     background: var(--bg-panel);
     border-left: 1px solid var(--border);
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    z-index: 15;
+    z-index: 60;
     transition:
         width 0.3s cubic-bezier(0.25, 0.8, 0.25, 1),
         opacity 0.3s,
         border-color 0.3s;
 }
 .research-hidden {
-    display: none;
     width: 0 !important;
     border-left-width: 0 !important;
     opacity: 0;
     overflow: hidden;
-    flex-shrink: 0;
+    pointer-events: none;
 }
 .research-header {
     height: 64px;
@@ -1961,9 +2018,6 @@ body,
     .app-shell {
         grid-template-columns: var(--nav-width) 240px 1fr;
     }
-    .app-shell:has(#research-panel:not(.research-hidden)) {
-        grid-template-columns: var(--nav-width) 240px 1fr var(--research-width);
-    }
 }
 @media (max-width: 860px) {
     .app-shell {
@@ -2012,13 +2066,13 @@ body,
    ============================================================ */
 
 /* Trash button in nav rail */
-.rail-trash {
+#rail-trash {
     position: relative;
 }
-.rail-trash.active {
+#rail-trash.active {
     background: var(--accent-soft);
 }
-.rail-trash.active .ph-trash {
+#rail-trash.active .ph-trash {
     color: var(--accent);
 }
 
@@ -2033,13 +2087,17 @@ body,
 
 /* Improved session menu */
 .context-menu {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: 10px;
     padding: 6px;
     z-index: 1000;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-    min-width: 180px;
+    width: 224px;
+    overflow: hidden;
 }
 
 .context-menu .menu-item {
@@ -2047,10 +2105,15 @@ body,
     align-items: center;
     gap: 8px;
     width: 100%;
+    min-height: 34px;
     padding: 8px 10px;
     border-radius: 6px;
     font-size: 13px;
     color: var(--text-main);
+    background: transparent;
+    border: 0;
+    text-align: left;
+    white-space: nowrap;
     transition: all 0.15s ease;
 }
 
@@ -2059,9 +2122,15 @@ body,
 }
 
 .context-menu .menu-icon {
-    font-size: 14px;
+    flex: 0 0 18px;
+    font-size: 16px;
     width: 18px;
     text-align: center;
+}
+.context-menu .menu-separator {
+    height: 1px;
+    margin: 4px 6px;
+    background: var(--border);
 }
 
 .context-menu .menu-danger {
@@ -2073,17 +2142,51 @@ body,
 }
 
 /* Confirm modal */
-#confirm-modal .modal-content {
-    max-width: 400px;
+.confirm-dialog {
+    width: min(440px, calc(100vw - 32px));
 }
 
 #confirm-modal .modal-body {
-    text-align: center;
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr);
+    gap: 14px;
+    align-items: start;
+    text-align: left;
 }
 
 #confirm-message {
-    color: var(--text-muted);
+    color: var(--text-main);
+    font-size: 14px;
+    font-weight: 500;
     margin: 0;
+}
+.confirm-icon {
+    width: 44px;
+    height: 44px;
+    display: grid;
+    place-items: center;
+    border-radius: 12px;
+    font-size: 21px;
+}
+.confirm-icon-danger {
+    color: #fca5a5;
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+}
+.confirm-icon-neutral {
+    color: #a5b4fc;
+    background: rgba(99, 102, 241, 0.12);
+    border: 1px solid rgba(99, 102, 241, 0.2);
+}
+.confirm-copy {
+    min-width: 0;
+    padding-top: 2px;
+}
+.confirm-detail {
+    margin: 7px 0 0;
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.5;
 }
 
 /* Danger button style */
@@ -2111,8 +2214,13 @@ body,
 
 /* Session more button */
 .session-more-btn {
-    opacity: 0.5;
-    padding: 4px 8px;
+    width: 26px;
+    height: 26px;
+    flex: 0 0 26px;
+    display: grid;
+    place-items: center;
+    opacity: 0.65;
+    padding: 0;
     border-radius: 6px;
     transition: all 0.15s ease;
 }
@@ -2124,4 +2232,72 @@ body,
 
 .session-more-btn .ph-dots-three {
     font-size: 16px;
+}
+.sessions-section-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.trash-session-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    flex: 0 0 auto;
+}
+.session-inline-action {
+    width: 26px;
+    height: 26px;
+    display: grid;
+    place-items: center;
+    border-radius: 6px;
+    color: var(--text-muted);
+    font-size: 14px;
+}
+.session-inline-action:hover {
+    color: var(--text-main);
+    background: var(--bg-card-hover);
+}
+.session-inline-danger:hover {
+    color: #fca5a5;
+    background: rgba(239, 68, 68, 0.12);
+}
+.research-source-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px;
+    margin-bottom: 8px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.02);
+    text-decoration: none;
+}
+.research-source-card:hover {
+    color: var(--text-main);
+    border-color: var(--border-strong);
+    background: rgba(255, 255, 255, 0.04);
+}
+.research-source-card > i {
+    margin-top: 2px;
+    color: var(--accent);
+}
+.research-source-copy {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+}
+.research-source-copy strong,
+.research-source-copy small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.research-source-copy strong {
+    font-size: 12px;
+    font-weight: 500;
+}
+.research-source-copy small {
+    color: var(--text-muted);
+    font-size: 10px;
 }

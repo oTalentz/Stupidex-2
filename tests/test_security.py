@@ -443,6 +443,76 @@ def test_chat_image_binary_is_not_persisted():
     assert "data_url" not in message.metadata["images"][0]
 
 
+def test_session_must_be_trashed_before_permanent_delete():
+    from stupidex import web
+
+    user, token = db.create_user("trash_flow_user", "validpass123")
+    session = db.create_session(user.id, "deepseek-chat", "deepseek-chat")
+    client = web.app.test_client()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    response = client.delete(f"/api/sessions/{session.id}", headers=headers)
+    assert response.status_code == 409
+
+    response = client.patch(
+        f"/api/sessions/{session.id}",
+        json={"trashed": True},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    trashed = client.get("/api/sessions?trashed=1", headers=headers).get_json()
+    assert [item["id"] for item in trashed] == [session.id]
+
+    response = client.delete(f"/api/sessions/{session.id}", headers=headers)
+    assert response.status_code == 200
+    assert db.get_session(session.id) is None
+
+
+def test_web_search_tool_is_opt_in():
+    from stupidex.llm.handle_input import AgentContext, _litellm_kwargs
+
+    ctx = AgentContext(
+        session_id="session",
+        provider_id="deepseek-chat",
+        api_key="test-key",
+        model="deepseek-chat",
+        base_url=None,
+    )
+    tool_names = {
+        tool["function"]["name"] for tool in _litellm_kwargs(ctx)["tools"]
+    }
+    assert "web_search" not in tool_names
+
+    ctx.web_search_enabled = True
+    tool_names = {
+        tool["function"]["name"] for tool in _litellm_kwargs(ctx)["tools"]
+    }
+    assert "web_search" in tool_names
+
+
+def test_web_search_rejects_invalid_query_without_starting_mcp():
+    from stupidex.llm.web_mcp import web_search
+
+    assert web_search("").startswith("ERROR:")
+    assert web_search("x" * 501).startswith("ERROR:")
+    assert web_search("python", region="invalid").startswith("ERROR:")
+
+
+def test_trashed_session_cannot_continue_chatting():
+    from stupidex import web
+
+    user, token = db.create_user("trashed_chat_user", "validpass123")
+    session = db.create_session(user.id, "deepseek-chat", "deepseek-chat")
+    db.set_trashed(session.id, True)
+    response = web.app.test_client().post(
+        f"/api/sessions/{session.id}/chat",
+        json={"message": "continue"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 409
+    assert response.get_json()["error"] == "session is in trash"
+
+
 def cleanup():
     shutil.rmtree(_TMP, ignore_errors=True)
 

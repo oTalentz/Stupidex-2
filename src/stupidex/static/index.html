@@ -66,7 +66,7 @@
             hljs.configure({ ignoreUnescapedHTML: true });
         </script>
 
-        <link rel="stylesheet" href="/static/style.css?v=9" />
+        <link rel="stylesheet" href="/static/style.css?v=11" />
         <!-- Puter.com Mistral API -->
         <script src="https://js.puter.com/v2/"></script>
     </head>
@@ -270,8 +270,9 @@
                     </div>
 
                     <div class="workspace-section">
-                        <div class="workspace-section-title">
-                            <span>Recent Chats</span>
+                        <div class="workspace-section-title sessions-section-heading">
+                            <span id="sessions-section-title">Recent Chats</span>
+                            <span id="trash-count" class="ws-mini-badge hidden"></span>
                         </div>
                         <nav
                             id="session-list"
@@ -321,7 +322,7 @@
                     <div class="topbar-right">
                         <button
                             id="theme-toggle"
-                            class="icon-btn"
+                            class="topbar-action topbar-icon-action"
                             title="Alternar tema"
                             aria-label="Alternar tema"
                         >
@@ -329,7 +330,7 @@
                         </button>
                         <button
                             id="research-toggle"
-                            class="research-toggle"
+                            class="topbar-action research-toggle"
                             title="Research Mode"
                         >
                             <i class="ph ph-book-open-text"></i>
@@ -376,6 +377,14 @@
                                     <i class="ph ph-layout"></i>
                                     View Project
                                 </button>
+                                <span
+                                    id="web-search-indicator"
+                                    class="web-search-indicator hidden"
+                                    title="Pesquisa web ativa para esta mensagem"
+                                >
+                                    <i class="ph ph-globe-hemisphere-west"></i>
+                                    Web
+                                </span>
                                 <span
                                     id="vision-indicator"
                                     class="vision-indicator hidden"
@@ -673,11 +682,12 @@
         <!-- Confirmation modal for delete actions -->
         <div
             id="confirm-modal"
-            class="modal hidden"
+            class="modal confirm-modal hidden"
             role="dialog"
             aria-modal="true"
+            aria-labelledby="confirm-title"
         >
-            <div class="modal-content" style="max-width: 400px">
+            <div class="modal-content confirm-dialog">
                 <div class="modal-header">
                     <h2 id="confirm-title">Confirmar</h2>
                     <button
@@ -689,9 +699,15 @@
                     </button>
                 </div>
                 <div class="modal-body">
-                    <p id="confirm-message">
-                        Tem certeza que deseja excluir este item?
-                    </p>
+                    <div id="confirm-icon" class="confirm-icon" aria-hidden="true">
+                        <i class="ph ph-trash"></i>
+                    </div>
+                    <div class="confirm-copy">
+                        <p id="confirm-message">
+                            Tem certeza que deseja excluir este item?
+                        </p>
+                        <p id="confirm-detail" class="confirm-detail"></p>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button id="cancel-confirm" class="ghost-btn">
@@ -704,6 +720,6 @@
             </div>
         </div>
 
-        <script src="/static/app.js?v=9"></script>
+        <script src="/static/app.js?v=11"></script>
     </body>
 </html>

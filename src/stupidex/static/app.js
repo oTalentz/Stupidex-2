@@ -99,21 +99,27 @@ const els = {
     graph: $("research-tab-graph"),
   },
   composerAttach: $("composer-attach"),
+  composerSearch: $("composer-search"),
   composerImageInput: $("composer-image-input"),
   composerImagePreview: $("composer-image-preview"),
   composerInputWrap: $("composer-input-wrap"),
   visionIndicator: $("vision-indicator"),
+  webSearchIndicator: $("web-search-indicator"),
   composerViewProject: $("composer-view-project"),
   modelSwitcher: $("model-switcher"),
 
   // Trash & confirm modal
   railTrash: $("rail-trash"),
+  sessionsSectionTitle: $("sessions-section-title"),
+  trashCount: $("trash-count"),
   confirmModal: $("confirm-modal"),
   closeConfirm: $("close-confirm"),
   cancelConfirm: $("cancel-confirm"),
   confirmDelete: $("confirm-delete"),
   confirmTitle: $("confirm-title"),
   confirmMessage: $("confirm-message"),
+  confirmDetail: $("confirm-detail"),
+  confirmIcon: $("confirm-icon"),
 };
 
 let state = {
@@ -133,6 +139,7 @@ let state = {
   pendingImages: [],
   confirmCallback: null,
   trashMode: false,
+  webSearchEnabled: false,
 };
 
 const MAX_CHAT_IMAGES = 4;
@@ -147,11 +154,19 @@ const CHAT_IMAGE_MAX_DISPLAY_WIDTH = 300;
 const CHAT_IMAGE_MAX_DISPLAY_HEIGHT = 300;
 
 // Confirm modal helper
-function showConfirm(title, message, onConfirm) {
+function showConfirm(title, message, onConfirm, options = {}) {
   els.confirmTitle.textContent = title;
   els.confirmMessage.textContent = message;
+  els.confirmDetail.textContent = options.detail || "";
+  els.confirmDetail.classList.toggle("hidden", !options.detail);
+  els.confirmDelete.textContent = options.confirmLabel || "Confirmar";
+  els.confirmDelete.classList.toggle("danger-btn", options.danger !== false);
+  els.confirmDelete.classList.toggle("primary-btn", options.danger === false);
+  els.confirmIcon.className = `confirm-icon ${options.danger === false ? "confirm-icon-neutral" : "confirm-icon-danger"}`;
+  els.confirmIcon.innerHTML = `<i class="ph ${options.icon || "ph-trash"}"></i>`;
   els.confirmModal.classList.remove("hidden");
   state.confirmCallback = onConfirm;
+  requestAnimationFrame(() => els.confirmDelete.focus());
 }
 
 function hideConfirm() {
@@ -287,13 +302,18 @@ function fmtTokens(n) {
 // ============================================================
 
 async function loadSessions() {
-  const r = await fetch("/api/sessions");
+  const r = await fetch("/api/sessions?include_trashed=1");
+  if (!r.ok) return;
   state.sessions = await r.json();
   renderSessions();
 }
 
 function renderSessions() {
   els.sessionList.innerHTML = "";
+  const trashedCount = state.sessions.filter((session) => session.trashed).length;
+  els.sessionsSectionTitle.textContent = state.trashMode ? "Lixeira" : "Recent Chats";
+  els.trashCount.textContent = trashedCount;
+  els.trashCount.classList.toggle("hidden", !state.trashMode || trashedCount === 0);
   const sessionsToShow = state.trashMode
     ? state.sessions.filter((s) => s.trashed)
     : state.sessions.filter((s) => !s.trashed);
@@ -315,10 +335,10 @@ function renderSessions() {
     if (s.pinned) li.classList.add("pinned");
     if (s.trashed) li.classList.add("trashed");
 
-    if (s.pinned) {
+    if (s.pinned && !s.trashed) {
       const pin = document.createElement("span");
       pin.className = "pin-icon";
-      pin.textContent = "★";
+      pin.innerHTML = '<i class="ph-fill ph-push-pin"></i>';
       pin.title = "Fixada";
       li.appendChild(pin);
     }
@@ -329,17 +349,54 @@ function renderSessions() {
     title.title = `${s.title}\n${s.message_count} mensagens · ${fmtTime(s.updated_at)}`;
     li.appendChild(title);
 
-    const more = document.createElement("button");
-    more.className = "session-more-btn";
-    more.innerHTML = '<i class="ph ph-dots-three"></i>';
-    more.title = "Mais ações";
-    more.addEventListener("click", (e) => {
-      e.stopPropagation();
-      showSessionMenu(s, li);
-    });
-    li.appendChild(more);
-
-    li.addEventListener("click", () => openSession(s.id));
+    if (s.trashed) {
+      const actions = document.createElement("div");
+      actions.className = "trash-session-actions";
+      const restore = document.createElement("button");
+      restore.type = "button";
+      restore.className = "session-inline-action";
+      restore.title = "Restaurar conversa";
+      restore.setAttribute("aria-label", `Restaurar ${s.title}`);
+      restore.innerHTML = '<i class="ph ph-arrow-counter-clockwise"></i>';
+      restore.addEventListener("click", async (event) => {
+        event.stopPropagation();
+        await restoreSession(s.id);
+      });
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "session-inline-action session-inline-danger";
+      remove.title = "Excluir permanentemente";
+      remove.setAttribute("aria-label", `Excluir permanentemente ${s.title}`);
+      remove.innerHTML = '<i class="ph ph-trash"></i>';
+      remove.addEventListener("click", (event) => {
+        event.stopPropagation();
+        showConfirm(
+          "Excluir permanentemente?",
+          `A conversa “${s.title || "Sem título"}” será removida.`,
+          () => deleteSession(s.id),
+          {
+            detail: "Todas as mensagens serão apagadas e esta ação não poderá ser desfeita.",
+            confirmLabel: "Excluir conversa",
+            icon: "ph-trash",
+          },
+        );
+      });
+      actions.append(restore, remove);
+      li.appendChild(actions);
+    } else {
+      const more = document.createElement("button");
+      more.type = "button";
+      more.className = "session-more-btn";
+      more.innerHTML = '<i class="ph-bold ph-dots-three"></i>';
+      more.title = "Mais ações";
+      more.setAttribute("aria-label", `Ações de ${s.title}`);
+      more.addEventListener("click", (event) => {
+        event.stopPropagation();
+        showSessionMenu(s, more);
+      });
+      li.appendChild(more);
+      li.addEventListener("click", () => openSession(s.id));
+    }
     els.sessionList.appendChild(li);
   }
 }
@@ -351,28 +408,22 @@ function showSessionMenu(session, anchorEl) {
   menu = document.createElement("div");
   menu.id = "session-menu";
   menu.className = "context-menu";
-  const isTrashed = session.trashed || false;
-
-  if (isTrashed) {
-    menu.innerHTML = `
-        <button data-act="restore" class="menu-item"><span class="menu-icon">↩</span> Restaurar</button>
-        <button data-act="delete-permanent" class="menu-item menu-danger"><span class="menu-icon">×</span> Apagar permanentemente</button>
-    `;
-  } else {
-    menu.innerHTML = `
-        <button data-act="rename" class="menu-item"><span class="menu-icon">✎</span> Renomear</button>
-        <button data-act="pin" class="menu-item"><span class="menu-icon">${session.pinned ? "☆" : "★"}</span> ${session.pinned ? "Desafixar" : "Fixar"}</button>
-        <button data-act="export-md" class="menu-item"><span class="menu-icon">↓</span> Exportar Markdown</button>
-        <button data-act="export-json" class="menu-item"><span class="menu-icon">↓</span> Exportar JSON</button>
-        <button data-act="clear" class="menu-item"><span class="menu-icon">⌫</span> Limpar mensagens</button>
-        <button data-act="archive" class="menu-item"><span class="menu-icon">${session.archived ? "↩" : "↓"}</span> ${session.archived ? "Reabrir" : "Arquivar"}</button>
-        <button data-act="trash" class="menu-item menu-danger"><span class="menu-icon">🗑️</span> Mover para lixeira</button>
-    `;
-  }
+  menu.setAttribute("role", "menu");
+  menu.innerHTML = `
+      <button data-act="rename" class="menu-item" role="menuitem"><i class="ph ph-pencil-simple menu-icon"></i><span>Renomear</span></button>
+      <button data-act="pin" class="menu-item" role="menuitem"><i class="ph ph-push-pin menu-icon"></i><span>${session.pinned ? "Desafixar" : "Fixar"}</span></button>
+      <div class="menu-separator"></div>
+      <button data-act="export-md" class="menu-item" role="menuitem"><i class="ph ph-file-md menu-icon"></i><span>Exportar Markdown</span></button>
+      <button data-act="export-json" class="menu-item" role="menuitem"><i class="ph ph-brackets-curly menu-icon"></i><span>Exportar JSON</span></button>
+      <div class="menu-separator"></div>
+      <button data-act="clear" class="menu-item" role="menuitem"><i class="ph ph-eraser menu-icon"></i><span>Limpar mensagens</span></button>
+      <button data-act="archive" class="menu-item" role="menuitem"><i class="ph ph-archive menu-icon"></i><span>${session.archived ? "Reabrir" : "Arquivar"}</span></button>
+      <button data-act="trash" class="menu-item menu-danger" role="menuitem"><i class="ph ph-trash menu-icon"></i><span>Mover para lixeira</span></button>
+  `;
   const rect = anchorEl.getBoundingClientRect();
   menu.style.position = "fixed";
-  menu.style.left = `${rect.right - 180}px`;
-  menu.style.top = `${rect.bottom + 2}px`;
+  menu.style.left = `${Math.max(8, Math.min(rect.right - 224, window.innerWidth - 232))}px`;
+  menu.style.top = `${Math.max(8, Math.min(rect.bottom + 6, window.innerHeight - 330))}px`;
   document.body.appendChild(menu);
 
   menu.addEventListener("click", async (e) => {
@@ -401,17 +452,23 @@ function showSessionMenu(session, anchorEl) {
       const fmt = act === "export-md" ? "md" : "json";
       window.open(`/api/sessions/${session.id}/export?format=${fmt}`);
     } else if (act === "clear") {
-      if (
-        !confirm(
-          "Limpar todas as mensagens desta conversa? (a sessão será mantida)",
-        )
-      )
-        return;
-      await fetch(`/api/sessions/${session.id}/clear`, { method: "POST" });
-      if (state.currentSessionId === session.id) {
-        els.messages.innerHTML = "";
-        renderWelcome();
-      }
+      showConfirm(
+        "Limpar mensagens?",
+        `O histórico de “${session.title || "Sem título"}” será apagado.`,
+        async () => {
+          await fetch(`/api/sessions/${session.id}/clear`, { method: "POST" });
+          if (state.currentSessionId === session.id) {
+            els.messages.innerHTML = "";
+            renderWelcome();
+          }
+          await loadSessions();
+        },
+        {
+          detail: "A conversa será mantida, mas as mensagens não poderão ser recuperadas.",
+          confirmLabel: "Limpar mensagens",
+          icon: "ph-eraser",
+        },
+      );
     } else if (act === "archive") {
       await fetch(`/api/sessions/${session.id}`, {
         method: "PATCH",
@@ -431,25 +488,11 @@ function showSessionMenu(session, anchorEl) {
         `Tem certeza que deseja mover "${session.title || "Esta conversa"}" para a lixeira?`,
         async () => {
           await moveSessionToTrash(session.id);
-          hideConfirm();
         },
-      );
-    } else if (act === "restore") {
-      await fetch(`/api/sessions/${session.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ trashed: false }),
-      });
-      const s = state.sessions.find((s) => s.id === session.id);
-      if (s) s.trashed = false;
-      await loadSessions();
-    } else if (act === "delete-permanent") {
-      showConfirm(
-        "Apagar permanentemente",
-        `Tem certeza que deseja apagar permanentemente "${session.title || "Esta conversa"}"? Esta ação não pode ser desfeita.`,
-        async () => {
-          await deleteSession(session.id);
-          hideConfirm();
+        {
+          detail: "Você poderá restaurar ou excluir definitivamente pela lixeira lateral.",
+          confirmLabel: "Mover para lixeira",
+          icon: "ph-trash",
         },
       );
     }
@@ -482,41 +525,45 @@ async function newSession() {
 
 async function openSession(id) {
   if (state.busy) return;
+  const target = state.sessions.find((session) => session.id === id);
+  if (!target || target.trashed) return;
   state.currentSessionId = id;
   renderSessions();
   await loadMessages(id);
-  const s = state.sessions.find((x) => x.id === id);
-  if (s) els.sessionTitle.textContent = s.title;
+  els.sessionTitle.textContent = target.title;
   els.workspacePanel.classList.remove("mobile-open");
 }
 
 async function moveSessionToTrash(id) {
-  await fetch(`/api/sessions/${id}`, {
+  const response = await fetch(`/api/sessions/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ trashed: true }),
   });
-  const session = state.sessions.find((s) => s.id === id);
-  if (session) {
-    session.trashed = true;
-  }
+  if (!response.ok)
+    throw new Error("Não foi possível mover a conversa para a lixeira.");
   if (state.currentSessionId === id) {
     state.currentSessionId = null;
     els.messages.innerHTML = "";
     renderWelcome();
     els.sessionTitle.textContent = "Stupidex";
   }
-  renderSessions();
+  await loadSessions();
+}
+
+async function restoreSession(id) {
+  const response = await fetch(`/api/sessions/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ trashed: false }),
+  });
+  if (!response.ok) throw new Error("Não foi possível restaurar a conversa.");
+  await loadSessions();
 }
 
 async function deleteSession(id) {
-  if (
-    !confirm(
-      "Apagar permanentemente essa conversa? Esta ação não pode ser desfeita.",
-    )
-  )
-    return;
-  await fetch(`/api/sessions/${id}`, { method: "DELETE" });
+  const response = await fetch(`/api/sessions/${id}`, { method: "DELETE" });
+  if (!response.ok) throw new Error("Não foi possível excluir a conversa.");
   state.sessions = state.sessions.filter((s) => s.id !== id);
   if (state.currentSessionId === id) {
     state.currentSessionId = null;
@@ -790,6 +837,57 @@ function scrollToBottom() {
   els.messages.scrollTop = els.messages.scrollHeight;
 }
 
+function renderWebSources(content) {
+  const pane = els.researchTabPanes.sources;
+  if (!pane) return;
+  const sources = [];
+  const pattern = /URL:\s+(https?:\/\/\S+)/g;
+  for (const match of content.matchAll(pattern)) {
+    try {
+      const url = new URL(match[1]);
+      if (!['http:', 'https:'].includes(url.protocol)) continue;
+      const previousLines = content
+        .slice(0, match.index)
+        .trim()
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean);
+      const title = [...previousLines]
+        .reverse()
+        .find((line) => !/^\d+\.$/.test(line) && !line.startsWith("Found "));
+      sources.push({ title: title || url.hostname, url: url.href });
+    } catch {}
+  }
+  pane.innerHTML = "";
+  for (const source of sources) {
+    const card = document.createElement("a");
+    card.className = "research-source-card";
+    card.href = source.url;
+    card.target = "_blank";
+    card.rel = "noopener noreferrer";
+    const icon = document.createElement("i");
+    icon.className = "ph ph-globe-hemisphere-west";
+    const copy = document.createElement("span");
+    copy.className = "research-source-copy";
+    const title = document.createElement("strong");
+    title.textContent = source.title;
+    const host = document.createElement("small");
+    host.textContent = new URL(source.url).hostname;
+    copy.append(title, host);
+    card.append(icon, copy);
+    pane.appendChild(card);
+  }
+  if (!sources.length) {
+    const empty = document.createElement("p");
+    empty.className = "research-empty";
+    empty.textContent = "A pesquisa não retornou fontes identificáveis.";
+    pane.appendChild(empty);
+  }
+  const count = document.querySelector('[data-tab="sources"] .research-tab-count');
+  if (count) count.textContent = String(sources.length);
+  if (sources.length) setResearchVisible(true);
+}
+
 // ============================================================
 // STREAMING
 // ============================================================
@@ -829,6 +927,7 @@ async function sendMessage() {
       message: text,
       provider: state.config.provider,
       model: state.config.model,
+      web_search: state.webSearchEnabled,
       images: images.map((image) => ({
         name: image.name,
         data_url: image.dataUrl,
@@ -968,6 +1067,9 @@ function handleEvent(evt, ctx) {
     }
     case "tool_result": {
       if (evt.content === "(running...)") return;
+      if (evt.name === "web_search" && !evt.error) {
+        renderWebSources(evt.content || "");
+      }
       const node = ctx.toolCallNodes.get(evt.id);
       if (!node) return;
       node.classList.toggle("tool-error", !!evt.error);
@@ -1657,11 +1759,19 @@ if (els.cancelConfirm) {
   els.cancelConfirm.addEventListener("click", hideConfirm);
 }
 if (els.confirmDelete) {
-  els.confirmDelete.addEventListener("click", () => {
-    if (state.confirmCallback) {
-      state.confirmCallback();
+  els.confirmDelete.addEventListener("click", async () => {
+    if (!state.confirmCallback) return;
+    const callback = state.confirmCallback;
+    els.confirmDelete.disabled = true;
+    try {
+      await callback();
+      hideConfirm();
+    } catch (error) {
+      els.confirmDetail.textContent = error.message || "Não foi possível concluir a ação.";
+      els.confirmDetail.classList.remove("hidden");
+    } finally {
+      els.confirmDelete.disabled = false;
     }
-    hideConfirm();
   });
 }
 if (els.confirmModal) {
@@ -1672,10 +1782,11 @@ if (els.confirmModal) {
 
 // Trash button
 if (els.railTrash) {
-  els.railTrash.addEventListener("click", () => {
+  els.railTrash.addEventListener("click", async () => {
     state.trashMode = !state.trashMode;
     els.railTrash.classList.toggle("active", state.trashMode);
-    renderSessions();
+    els.railTrash.setAttribute("aria-pressed", String(state.trashMode));
+    await loadSessions();
   });
 }
 els.input.addEventListener("input", autoSize);
@@ -1773,6 +1884,24 @@ if (els.composerAttach) {
   els.composerAttach.addEventListener("click", () =>
     els.composerImageInput?.click(),
   );
+}
+if (els.composerSearch) {
+  els.composerSearch.setAttribute("aria-pressed", "false");
+  els.composerSearch.addEventListener("click", () => {
+    state.webSearchEnabled = !state.webSearchEnabled;
+    els.composerSearch.classList.toggle("is-active", state.webSearchEnabled);
+    els.composerSearch.setAttribute(
+      "aria-pressed",
+      String(state.webSearchEnabled),
+    );
+    els.composerSearch.title = state.webSearchEnabled
+      ? "Pesquisa web ativa"
+      : "Ativar pesquisa web";
+    els.webSearchIndicator?.classList.toggle(
+      "hidden",
+      !state.webSearchEnabled,
+    );
+  });
 }
 els.composerImageInput?.addEventListener("change", async () => {
   await addChatImages(els.composerImageInput.files);
@@ -2019,6 +2148,9 @@ async function logout() {
     tree: [],
     dropCounter: 0,
     pendingImages: [],
+    confirmCallback: null,
+    trashMode: false,
+    webSearchEnabled: false,
   };
   els.messages.innerHTML = "";
   els.sessionList.innerHTML = "";
@@ -2026,6 +2158,8 @@ async function logout() {
   els.treeContainer.innerHTML = "";
   els.sessionTitle.textContent = "Stupidex";
   renderChatImagePreviews();
+  els.composerSearch?.classList.remove("is-active");
+  els.webSearchIndicator?.classList.add("hidden");
   showLogin();
   elsAuth.loginEmail.value = "";
   elsAuth.loginPassword.value = "";
@@ -2104,8 +2238,9 @@ async function bootApp() {
   updateBadges();
   await loadWorkspaces();
   await loadSessions();
-  if (state.sessions.length) {
-    openSession(state.sessions[0].id);
+  const firstActiveSession = state.sessions.find((session) => !session.trashed);
+  if (firstActiveSession) {
+    openSession(firstActiveSession.id);
   } else {
     renderWelcome();
   }
@@ -2115,9 +2250,14 @@ async function bootApp() {
 (async function init() {
   if (await checkAuth()) {
     showApp();
+    const timeout = setTimeout(() => {
+      renderWelcome();
+    }, 7000);
     try {
       await bootApp();
+      clearTimeout(timeout);
     } catch (e) {
+      clearTimeout(timeout);
       renderWelcome();
     }
   } else {

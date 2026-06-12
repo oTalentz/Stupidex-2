@@ -651,24 +651,26 @@ def create_session(
 
 
 def list_sessions(
-    user_id: str, include_archived: bool = False, include_trashed: bool = False
+    user_id: str,
+    include_archived: bool = False,
+    include_trashed: bool = False,
+    only_trashed: bool = False,
 ) -> list[Session]:
     with db_cursor() as cur:
-        if include_archived:
-            rows = cur.execute(
-                "SELECT s.id, s.user_id, s.title, s.created_at, s.updated_at, s.provider, s.model, "
-                "s.pinned, s.archived, s.trashed, (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) AS mc "
-                "FROM sessions s WHERE s.user_id = ? ORDER BY s.pinned DESC, s.updated_at DESC",
-                (user_id,),
-            ).fetchall()
-        else:
-            trashed_condition = "" if include_trashed else " AND s.trashed = 0"
-            rows = cur.execute(
-                "SELECT s.id, s.user_id, s.title, s.created_at, s.updated_at, s.provider, s.model, "
-                "s.pinned, s.archived, s.trashed, (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) AS mc "
-                f"FROM sessions s WHERE s.user_id = ? AND s.archived = 0{trashed_condition} ORDER BY s.pinned DESC, s.updated_at DESC",
-                (user_id,),
-            ).fetchall()
+        conditions = ["s.user_id = ?"]
+        if not include_archived:
+            conditions.append("s.archived = 0")
+        if only_trashed:
+            conditions.append("s.trashed = 1")
+        elif not include_trashed:
+            conditions.append("s.trashed = 0")
+        rows = cur.execute(
+            "SELECT s.id, s.user_id, s.title, s.created_at, s.updated_at, s.provider, s.model, "
+            "s.pinned, s.archived, s.trashed, (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) AS mc "
+            f"FROM sessions s WHERE {' AND '.join(conditions)} "
+            "ORDER BY s.pinned DESC, s.updated_at DESC",
+            (user_id,),
+        ).fetchall()
     return [_row_to_session(r) for r in rows]
 
 
@@ -676,7 +678,7 @@ def get_session(sid: str) -> Session | None:
     with db_cursor() as cur:
         row = cur.execute(
             "SELECT s.id, s.user_id, s.title, s.created_at, s.updated_at, s.provider, s.model, "
-            "s.pinned, s.archived, (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) AS mc "
+            "s.pinned, s.archived, s.trashed, (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) AS mc "
             "FROM sessions s WHERE s.id = ?",
             (sid,),
         ).fetchone()
@@ -725,8 +727,9 @@ def set_archived(sid: str, archived: bool) -> bool:
 def set_trashed(sid: str, trashed: bool) -> bool:
     with db_cursor() as cur:
         cur.execute(
-            "UPDATE sessions SET trashed = ?, updated_at = ? WHERE id = ?",
-            (1 if trashed else 0, time.time(), sid),
+            "UPDATE sessions SET trashed = ?, pinned = CASE WHEN ? THEN 0 ELSE pinned END, "
+            "updated_at = ? WHERE id = ?",
+            (1 if trashed else 0, 1 if trashed else 0, time.time(), sid),
         )
         return cur.rowcount > 0
 
@@ -753,11 +756,11 @@ def search_sessions(user_id: str, query: str) -> list[Session]:
         rows = cur.execute(
             """
             SELECT DISTINCT s.id, s.user_id, s.title, s.created_at, s.updated_at, s.provider, s.model,
-                   s.pinned, s.archived,
+                   s.pinned, s.archived, s.trashed,
                    (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) AS mc
             FROM sessions s
             LEFT JOIN messages m ON m.session_id = s.id
-            WHERE s.user_id = ? AND s.archived = 0
+            WHERE s.user_id = ? AND s.archived = 0 AND s.trashed = 0
               AND (s.title LIKE ? OR m.content LIKE ?)
             ORDER BY s.updated_at DESC
             LIMIT 100

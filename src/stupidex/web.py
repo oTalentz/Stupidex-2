@@ -660,11 +660,16 @@ def set_config():
 @rate_limited("default")
 def sessions_list():
     include_archived = request.args.get("include_archived") == "1"
+    include_trashed = request.args.get("include_trashed") == "1"
+    only_trashed = request.args.get("trashed") == "1"
     return jsonify(
         [
             s.to_dict()
             for s in db.list_sessions(
-                request.user.id, include_archived=include_archived
+                request.user.id,
+                include_archived=include_archived,
+                include_trashed=include_trashed or only_trashed,
+                only_trashed=only_trashed,
             )
         ]
     )
@@ -698,7 +703,9 @@ def sessions_create():
         or PROVIDERS[provider].default_model
     ).strip()[:200]
     # Per-user cap: 200 sessions
-    existing = db.list_sessions(request.user.id, include_archived=True)
+    existing = db.list_sessions(
+        request.user.id, include_archived=True, include_trashed=True
+    )
     if len(existing) >= 200:
         return jsonify(
             {"error": "session limit reached (200). Delete some first."}
@@ -738,6 +745,8 @@ def sessions_delete(sid):
     s = db.get_session_for_user(sid, request.user.id)
     if not s:
         return jsonify({"error": "not found"}), 404
+    if not s.trashed:
+        return jsonify({"error": "move the session to trash before deleting it"}), 409
     ev = _get_stream(sid)
     if ev:
         ev.set()
@@ -890,6 +899,8 @@ def session_regenerate(sid):
     s = db.get_session_for_user(sid, request.user.id)
     if not s:
         return jsonify({"error": "session not found"}), 404
+    if s.trashed:
+        return jsonify({"error": "session is in trash"}), 409
 
     data = request.get_json(silent=True) or {}
     user_text = (data.get("message") or "").strip()
@@ -914,6 +925,7 @@ def session_regenerate(sid):
         user_id=request.user.id,
         model_override=(data.get("model") or s.model),
     )
+    ctx.web_search_enabled = bool(last_user.metadata.get("web_search"))
     ctx.session_id = sid
     ctx.cancel_event = _claim_stream(sid)
     if ctx.cancel_event is None:
@@ -941,6 +953,8 @@ def _session_chat_impl(sid: str) -> Response:
     session = db.get_session_for_user(sid, request.user.id)
     if not session:
         return jsonify({"error": "session not found"}), 404
+    if session.trashed:
+        return jsonify({"error": "session is in trash"}), 409
 
     data = request.get_json(force=True) or {}
     user_msg = (data.get("message") or "").strip()
@@ -972,6 +986,7 @@ def _session_chat_impl(sid: str) -> Response:
         user_id=request.user.id,
         model_override=(data.get("model") or session.model),
     )
+    ctx.web_search_enabled = data.get("web_search") is True
     ctx.session_id = sid
     ctx.cancel_event = _claim_stream(sid)
     if ctx.cancel_event is None:
