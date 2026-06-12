@@ -71,7 +71,7 @@ Para clonar repositórios privados do GitHub, configure um GitHub OAuth App:
 1. **Criar App no GitHub**:
    - Acesse: https://github.com/settings/developers
    - New OAuth App
-   - Callback URL: `https://seu-dominio.com/api/integrations/github/callback`
+   - Callback URL: `https://seu-dominio.com/api/integrations/github/callback` (para desenvolvimento local: `http://localhost:5000/api/integrations/github/callback`)
 
 2. **Configurar variáveis de ambiente**:
 ```bash
@@ -81,7 +81,17 @@ GITHUB_REDIRECT_URI=https://seu-dominio.com/api/integrations/github/callback
 FRONTEND_URL=https://seu-dominio.com
 ```
 
+   **Para desenvolvimento local**:
+   ```bash
+   GITHUB_CLIENT_ID=seu_client_id
+   GITHUB_CLIENT_SECRET=seu_client_secret
+   GITHUB_REDIRECT_URI=http://localhost:5000/api/integrations/github/callback
+   FRONTEND_URL=http://localhost:5000
+   ```
+
 3. **Escopo**: O OAuth solicita o escopo `repo`, permitindo que o usuário conectado clone e atualize repositórios privados que tem acesso.
+
+   > **Importante**: Após configurar, reinicie o servidor. A integração será automaticamente detectada.
 
 ✅ **Repositórios públicos do GitHub e GitLab funcionam sem conexão**
 ✅ **Clonagem de repositórios privados do GitHub funciona com OAuth conectado**

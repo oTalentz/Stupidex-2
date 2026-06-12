@@ -1807,7 +1807,7 @@ function renderGithubIntegrationCard(card, title, description, action) {
     ? "Acesso habilitado para repositórios públicos e privados."
     : configured
       ? "Conecte sua conta para clonar repositórios privados."
-      : "Configure o OAuth do GitHub no servidor para habilitar projetos privados.";
+      : "Configure GITHUB_CLIENT_ID e GITHUB_CLIENT_SECRET no servidor. Consulte o README.";
   action.textContent = connected
     ? "Desconectar"
     : configured

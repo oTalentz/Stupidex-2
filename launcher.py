@@ -12,6 +12,7 @@ WSGI server selection (simplified — no more gunicorn churn):
 
 To stop: SIGTERM or Ctrl+C.
 """
+
 import logging
 import os
 import socket
@@ -20,7 +21,6 @@ import threading
 import time
 import webbrowser
 from pathlib import Path
-
 
 # ============================================================
 # Bootstrap: make `stupidex` package importable.
@@ -39,6 +39,7 @@ for _candidate in (_THIS_DIR, _THIS_DIR / "src", _THIS_DIR.parent):
 # ============================================================
 # Helpers
 # ============================================================
+
 
 def _find_free_port(preferred: int = 5000) -> int:
     for port in (preferred, 5001, 5002, 5003, 0):
@@ -67,6 +68,7 @@ def _setup_logging() -> None:
 # WSGI server selection
 # ============================================================
 
+
 def _run_server(app, host: str, port: int) -> None:
     """Start the WSGI server. Tries servers in order, catches everything."""
     _setup_logging()
@@ -94,14 +96,22 @@ def _run_server(app, host: str, port: int) -> None:
 
 def _try_waitress(app, host: str, port: int) -> None:
     from waitress import serve
+
     logging.info("Starting waitress on %s:%d", host, port)
-    serve(app, host=host, port=port, threads=8, ident="Stupidex",
-          connection_limit=100, channel_timeout=300)
+    serve(
+        app,
+        host=host,
+        port=port,
+        threads=8,
+        ident="Stupidex",
+        connection_limit=100,
+        channel_timeout=300,
+    )
 
 
 def _try_gunicorn(app, host: str, port: int) -> None:
-    from gunicorn.app.wsgiapp import WSGIApplication
     from gunicorn import config as gconfig
+    from gunicorn.app.wsgiapp import WSGIApplication
 
     cfg = gconfig.Config()
     cfg.set("bind", f"{host}:{port}")
@@ -123,12 +133,18 @@ def _try_flask(app, host: str, port: int) -> None:
 # Entry point
 # ============================================================
 
+
 def main() -> int:
     _setup_logging()
 
     # Default: enable shell tool unless explicitly disabled
     if os.environ.get("STUPIDEX_ENABLE_SHELL", "").lower() not in ("0", "false", "no"):
         os.environ.setdefault("STUPIDEX_ENABLE_SHELL", "1")
+
+    # GitHub OAuth configuration (optional, for private repository cloning)
+    # Set these environment variables to enable GitHub integration:
+    #   GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GITHUB_REDIRECT_URI, FRONTEND_URL
+    # See README.md for detailed setup instructions.
 
     # Auto-detect server mode. Cloud hosts (Square Cloud, Render, Fly, etc.)
     # often don't set PORT — but they run on Linux in a non-TTY container.
@@ -155,7 +171,13 @@ def main() -> int:
     if is_server:
         _validate_port_available(port)
 
-    logging.info("Stupidex starting: host=%s port=%d server=%s pid=%d", host, port, is_server, os.getpid())
+    logging.info(
+        "Stupidex starting: host=%s port=%d server=%s pid=%d",
+        host,
+        port,
+        is_server,
+        os.getpid(),
+    )
 
     from stupidex.web import app
 

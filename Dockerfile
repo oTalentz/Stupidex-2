@@ -22,6 +22,13 @@ ENV STUPIDEX_DEBUG=0
 ENV STUPIDEX_DATA_DIR=/data
 ENV STUPIDEX_ENABLE_SHELL=1
 
+# GitHub OAuth for private repository cloning (optional)
+# Uncomment and set these to enable GitHub integration:
+# ENV GITHUB_CLIENT_ID=your_client_id
+# ENV GITHUB_CLIENT_SECRET=your_client_secret
+# ENV GITHUB_REDIRECT_URI=https://your-domain.com/api/integrations/github/callback
+# ENV FRONTEND_URL=https://your-domain.com
+
 USER stupidex
 
 EXPOSE 5000

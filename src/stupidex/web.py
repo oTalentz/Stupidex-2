@@ -422,7 +422,17 @@ def _force_utf8_static(resp):
 
 @app.route("/api/health")
 def health():
-    return jsonify({"ok": True, "ts": time.time(), "v": "oauth-fix-v3"})
+    return jsonify(
+        {
+            "ok": True,
+            "ts": time.time(),
+            "v": "oauth-fix-v3",
+            "integrations": {
+                "github_configured": _github_configured(),
+                "google_configured": bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET),
+            },
+        }
+    )
 
 
 # ============================================================
@@ -597,7 +607,7 @@ def github_integration_connect():
         return jsonify(
             {
                 "error": "GitHub OAuth is not configured",
-                "detail": "Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET.",
+                "detail": "Server administrator must set GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, and GITHUB_REDIRECT_URI environment variables. See README.md for setup instructions.",
             }
         ), 501
 
@@ -617,8 +627,7 @@ def github_integration_connect():
         state,
         max_age=600,
         httponly=True,
-        secure=request.is_secure
-        or request.headers.get("X-Forwarded-Proto") == "https",
+        secure=request.is_secure or request.headers.get("X-Forwarded-Proto") == "https",
         samesite="Lax",
         path="/",
     )
@@ -646,7 +655,12 @@ def github_integration_callback():
     if not code:
         return jsonify({"error": "missing authorization code"}), 400
     if not _github_configured():
-        return jsonify({"error": "GitHub OAuth is not configured"}), 501
+        return jsonify(
+            {
+                "error": "GitHub OAuth is not configured",
+                "detail": "Server configuration changed. Please try connecting again.",
+            }
+        ), 501
 
     try:
         token_req = urllib.request.Request(
@@ -1540,15 +1554,18 @@ def workspaces_shell(ws_id):
     if ws_path is None:
         return jsonify({"error": "workspace not found"}), 404
     from stupidex.llm.tools import run_shell as run_shell_tool
+
     output = run_shell_tool(cmd, cwd=str(ws_path))
     tree_changed = False
     if "stdout:" in output or "stderr:" in output:
         tree_changed = True
-    return jsonify({
-        "output": output,
-        "code": 0,
-        "tree_changed": tree_changed,
-    })
+    return jsonify(
+        {
+            "output": output,
+            "code": 0,
+            "tree_changed": tree_changed,
+        }
+    )
 
 
 @app.route("/api/workspaces/<ws_id>/tree", methods=["GET"])
@@ -1598,6 +1615,14 @@ def workspaces_file(ws_id):
 
 def main():
     import os as _os
+
+    # Log warning if GitHub OAuth is not configured
+    if not _github_configured():
+        app.logger.warning(
+            "GitHub OAuth is not configured. Set GITHUB_CLIENT_ID, "
+            "GITHUB_CLIENT_SECRET, and GITHUB_REDIRECT_URI environment variables "
+            "to enable private repository cloning. See README.md for details."
+        )
 
     host = _os.environ.get("STUPIDEX_HOST", "0.0.0.0")
     port = int(_os.environ.get("STUPIDEX_PORT", _os.environ.get("PORT", "5000")))
