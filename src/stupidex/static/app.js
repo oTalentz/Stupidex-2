@@ -2704,6 +2704,9 @@ function updateUserProfileBanner() {
   const { avatar_url, username, email } = state.user;
   const displayName = username || email || "U";
 
+  // Set tooltip with user name
+  els.userProfileBanner.title = displayName;
+
   if (avatar_url) {
     els.userProfileAvatar.src = avatar_url;
     els.userProfileAvatar.style.display = "block";

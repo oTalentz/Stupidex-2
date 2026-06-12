@@ -6,7 +6,7 @@
 
 ### Pré-requisitos
 - Python 3.10+
-- Git (opcional, para clonagem de repositórios)
+- Git (recomendado, para clonagem de repositórios e versionamento local)
 
 ### Instalação
 
@@ -52,14 +52,15 @@ Dê duplo clique no `Stupidex.exe` para iniciar o servidor e abrir o navegador a
 - Autenticação web utiliza cookies `HttpOnly`; tokens bearer continuam suportados para clientes API
 - Configurações de provedor, modelo e API key são armazenadas por usuário
 - **Todas as chaves e tokens são criptografados em repouso** (Fernet)
-- Tokens OAuth do GitHub são criptografados e usados apenas pelo servidor ao baixar repositórios
-- **Execução de shell está desabilitada por padrão** - Habilite apenas em containers isolados:
+- Tokens OAuth do GitHub e Google são criptografados
+- **Execução de shell está habilitada por padrão no launcher** - Para ambientes de produção, configure:
   ```bash
   STUPIDEX_ENABLE_SHELL=1
-  # Opcionalmente, restrinja executáveis:
-  STUPIDEX_SHELL_COMMANDS="python,python3,pytest,node,npm"
+  # Opcionalmente, restrinja executáveis (git está incluído por padrão):
+  STUPIDEX_SHELL_COMMANDS="python,python3,pytest,node,npm,git"
   ```
 - Em produção, persista o diretório `STUPIDEX_DATA_DIR` (a imagem Docker usa `/data`)
+- **Workspace com git integrado**: Ao clonar repositórios, um diretório `.git` é criado automaticamente, permitindo versionamento local com commands como `git add`, `git commit`, `git push` (quando STUPIDEX_ENABLE_SHELL=1)
 
 ## 🔗 Integrações
 
@@ -83,6 +84,7 @@ FRONTEND_URL=https://seu-dominio.com
 3. **Escopo**: O OAuth solicita o escopo `repo`, permitindo que o usuário conectado clone e atualize repositórios privados que tem acesso.
 
 ✅ **Repositórios públicos do GitHub e GitLab funcionam sem conexão**
+✅ **Clonagem de repositórios privados do GitHub funciona com OAuth conectado**
 
 ### Google OAuth (Login)
 
@@ -98,6 +100,8 @@ GOOGLE_REDIRECT_URI=https://seu-dominio.com/api/auth/google/callback
 2. Configure as credenciais OAuth 2.0
 3. Adicione a URI de redirecionamento
 4. Habilite a API Google People
+
+✅ **Ao fazer login com Google, o avatar e nome do usuário são exibidos no banner de perfil**
 
 ## 📁 Estrutura do Projeto
 
@@ -174,6 +178,15 @@ python test_integration.py # Testes de integração
 - Streaming via SSE (Server-Sent Events)
 - Markdown com syntax highlighting
 - Suporta imagens no chat (modelos com visão)
+
+## ✨ Recursos Implementados
+
+- ✅ **Banner de perfil**: Exibe avatar e nome do usuário (via tooltip) acima da engrenagem de configurações
+- ✅ **Git integrado**: Workspaces clonados automaticamente inicializam um repositório git local com `.git`
+- ✅ **Shell seguro**: Execução de comandos shell com lista de executáveis permitidos (inclui git por padrão)
+- ✅ **Clonagem de repositórios privados**: Funciona com GitHub OAuth conectado
+- ✅ **Terminal widget**: Interface de terminal integrado no painel workspace
+- ✅ **Botão Git Pull**: Sincronização fácil com o repositório remoto
 
 ## 📝 Roadmap
 
