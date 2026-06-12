@@ -2783,3 +2783,144 @@ body,
     color: var(--text-muted);
     font-size: 10px;
 }
+
+/* ============================================================
+   Layout refinement
+   ============================================================ */
+:root {
+    --nav-width: 60px;
+    --workspace-width: 292px;
+    --research-width: 332px;
+    --topbar-height: 68px;
+    --content-width: 780px;
+}
+
+.nav-rail {
+    padding: 12px 0;
+}
+
+.workspace-header,
+.research-header {
+    height: var(--topbar-height);
+}
+
+.workspace-content {
+    padding: 14px 12px 20px;
+}
+
+.topbar {
+    padding-inline: 20px;
+}
+
+.messages {
+    padding: 0 28px 24px;
+}
+
+.messages-inner,
+.composer-form,
+.welcome {
+    width: 100%;
+    max-width: var(--content-width);
+}
+
+.messages-inner {
+    padding: 34px 0 28px;
+}
+
+.welcome {
+    min-height: 0;
+    align-items: flex-start;
+    justify-content: flex-start;
+    text-align: left;
+    padding: 32px 0;
+}
+
+.welcome h2 {
+    font-size: 24px;
+}
+
+.welcome p {
+    max-width: 640px;
+}
+
+.welcome .suggestions {
+    max-width: 640px;
+    margin-top: 24px;
+}
+
+.composer {
+    padding: 14px 28px 16px;
+    border-top: 0;
+    background: linear-gradient(to top, var(--bg-main) 72%, transparent);
+}
+
+.composer-input-wrap {
+    border-radius: 18px;
+    box-shadow: 0 14px 40px -18px rgba(0, 0, 0, 0.72);
+}
+
+.composer-input {
+    min-height: 38px;
+}
+
+@media (min-width: 1181px) {
+    .app-shell {
+        grid-template-columns:
+            var(--nav-width) var(--workspace-width) minmax(0, 1fr) 0;
+        transition: grid-template-columns 0.26s
+            cubic-bezier(0.25, 0.8, 0.25, 1);
+    }
+
+    .app-shell.research-open {
+        grid-template-columns:
+            var(--nav-width) var(--workspace-width) minmax(0, 1fr)
+            var(--research-width);
+    }
+
+    .research-panel {
+        position: relative;
+        inset: auto;
+        grid-column: 4;
+        width: 100%;
+        height: 100%;
+        min-width: 0;
+        z-index: 25;
+    }
+
+    .research-hidden {
+        width: 100% !important;
+    }
+}
+
+@media (max-width: 1320px) and (min-width: 1181px) {
+    :root {
+        --workspace-width: 252px;
+        --research-width: 310px;
+        --content-width: 700px;
+    }
+
+    .topbar-center {
+        display: none;
+    }
+}
+
+@media (max-width: 1400px) and (min-width: 1181px) {
+    .research-open .topbar-center {
+        display: none;
+    }
+}
+
+@media (max-width: 860px) {
+    :root {
+        --nav-width: 56px;
+    }
+
+    .messages,
+    .composer {
+        padding-inline: 14px;
+    }
+
+    .welcome {
+        padding-top: 24px;
+    }
+}

@@ -2228,6 +2228,7 @@ els.themeToggle.addEventListener("click", () => {
 
 function setResearchVisible(visible) {
   if (!els.researchPanel) return;
+  const appShell = document.getElementById("main-app");
   if (visible) {
     els.researchPanel.classList.remove("research-hidden");
     els.researchToggle && els.researchToggle.classList.add("is-active");
@@ -2235,6 +2236,7 @@ function setResearchVisible(visible) {
     els.researchPanel.classList.add("research-hidden");
     els.researchToggle && els.researchToggle.classList.remove("is-active");
   }
+  appShell?.classList.toggle("research-open", visible);
   try {
     localStorage.setItem("stupidex-research-open", visible ? "1" : "0");
   } catch (e) {}
