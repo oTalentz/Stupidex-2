@@ -1,5 +1,6 @@
 import os
 import re
+import shlex
 import shutil
 import subprocess
 from pathlib import Path
@@ -85,7 +86,7 @@ def _resolve(path: str, base: Path) -> Path:
 def _sandbox_guard(resolved: Path, workspace_dir: Path) -> str | None:
     """Validate `resolved` is within `workspace_dir`. Returns error msg or None."""
     if not _is_path_within(resolved, workspace_dir):
-        return f"SECURITY: path outside workspace"
+        return "SECURITY: path outside workspace"
     return None
 
 
@@ -100,16 +101,16 @@ def read_file(path: str, working_dir: str = ".") -> str:
     if err := _sandbox_guard(p, base):
         return err
     if not p.exists():
-        return f"ERROR: file not found"
+        return "ERROR: file not found"
     if p.is_dir():
-        return f"ERROR: path is a directory"
+        return "ERROR: path is a directory"
     size = p.stat().st_size
     if size > MAX_FILE_BYTES:
         return f"ERROR: file too large ({size} bytes, max {MAX_FILE_BYTES})"
     try:
         return p.read_text(encoding="utf-8")
     except UnicodeDecodeError:
-        return f"ERROR: file is not valid UTF-8 (binary?)"
+        return "ERROR: file is not valid UTF-8 (binary?)"
 
 
 def write_file(path: str, content: str, working_dir: str = ".") -> str:
@@ -134,11 +135,11 @@ def edit_file(
     if err := _sandbox_guard(p, base):
         return err
     if not p.exists():
-        return f"ERROR: file not found"
+        return "ERROR: file not found"
     original = p.read_text(encoding="utf-8")
     count = original.count(old_text)
     if count == 0:
-        return f"ERROR: old_text not found"
+        return "ERROR: old_text not found"
     if count > 1 and not replace_all:
         return f"ERROR: old_text matches {count} locations; pass replace_all=true or use a more specific snippet"
     updated = original.replace(old_text, new_text) if replace_all else original.replace(old_text, new_text, 1)
@@ -152,9 +153,9 @@ def list_dir(path: str = ".", working_dir: str = ".") -> str:
     if err := _sandbox_guard(p, base):
         return err
     if not p.exists():
-        return f"ERROR: directory not found"
+        return "ERROR: directory not found"
     if not p.is_dir():
-        return f"ERROR: not a directory"
+        return "ERROR: not a directory"
     entries = []
     for entry in sorted(p.iterdir(), key=lambda e: (not e.is_dir(), e.name.lower())):
         if any(part.startswith(".git") for part in entry.parts) and entry.name == ".git":
@@ -174,14 +175,14 @@ def search_files(path: str, pattern: str, recursive: bool = True, working_dir: s
     if err := _sandbox_guard(p, base):
         return err
     if not p.exists():
-        return f"ERROR: path not found"
+        return "ERROR: path not found"
     rx = re.compile(pattern)
     matches: list[str] = []
     if p.is_file():
         try:
             content = p.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):
-            return f"ERROR: cannot read file"
+            return "ERROR: cannot read file"
         for i, line in enumerate(content.splitlines(), 1):
             if rx.search(line):
                 matches.append(line.rstrip()[:200])
@@ -206,7 +207,7 @@ def mkdir(path: str, working_dir: str = ".") -> str:
     if err := _sandbox_guard(p, base):
         return err
     p.mkdir(parents=True, exist_ok=True)
-    return f"OK: created directory"
+    return "OK: created directory"
 
 
 def delete(path: str, working_dir: str = ".") -> str:
@@ -215,12 +216,14 @@ def delete(path: str, working_dir: str = ".") -> str:
     if err := _sandbox_guard(p, base):
         return err
     if not p.exists():
-        return f"ERROR: path not found"
+        return "ERROR: path not found"
+    if p.resolve() == base.resolve():
+        return "SECURITY: refusing to delete workspace root"
     if p.is_dir():
         shutil.rmtree(p)
-        return f"OK: removed directory"
+        return "OK: removed directory"
     p.unlink()
-    return f"OK: removed file"
+    return "OK: removed file"
 
 
 def run_shell(command: str, cwd: str | None = None, timeout: int = DEFAULT_SHELL_TIMEOUT) -> str:
@@ -230,31 +233,57 @@ def run_shell(command: str, cwd: str | None = None, timeout: int = DEFAULT_SHELL
     block dangerous command patterns that could escape the sandbox even with a
     contained cwd.
     """
-    # 1. Enforce cwd is within the workspace
-    work = Path(cwd).resolve() if cwd else Path.cwd()
-    workspace_root = Path(os.environ.get("STUPIDEX_WORKSPACE_ROOT", str(Path.cwd()))).resolve()
-    if not _is_path_within(work, workspace_root):
-        return f"SECURITY: shell cwd is outside the workspace"
+    if os.environ.get("STUPIDEX_ENABLE_SHELL", "").lower() not in {"1", "true", "yes"}:
+        return "SECURITY: shell execution is disabled by the server"
 
-    # 2. Block dangerous patterns
+    # 1. The forced cwd is the sandbox root; no process-global state is used.
+    work = Path(cwd).resolve() if cwd else Path.cwd()
+    workspace_root = work
+    if not _is_path_within(work, workspace_root):
+        return "SECURITY: shell cwd is outside the workspace"
+
+    # 2. Reject shell syntax and parse an argv without invoking a command shell.
     cmd_lc = command.lower()
     for rx in _SHELL_BLOCKED_RX:
         if rx.search(cmd_lc):
-            return f"SECURITY: command blocked by sandbox policy"
+            return "SECURITY: command blocked by sandbox policy"
+    if any(token in command for token in ("|", "&", ";", "<", ">", "`", "$(", "\n", "\r")):
+        return "SECURITY: shell operators are not allowed"
+    try:
+        argv = shlex.split(command, posix=os.name != "nt")
+    except ValueError:
+        return "ERROR: invalid command quoting"
+    if os.name == "nt":
+        argv = [arg[1:-1] if len(arg) >= 2 and arg[0] == arg[-1] and arg[0] in {'"', "'"} else arg for arg in argv]
+    if not argv:
+        return "ERROR: empty command"
+    allowed = {
+        item.strip().lower()
+        for item in os.environ.get(
+            "STUPIDEX_SHELL_COMMANDS",
+            "python,python3,pytest,node,npm,npx,pnpm,yarn,cargo,go,dotnet,make,cmake",
+        ).split(",")
+        if item.strip()
+    }
+    executable = Path(argv[0]).name.lower()
+    if executable not in allowed:
+        return f"SECURITY: executable '{executable}' is not allowed"
 
     # 3. Clamp timeout
     timeout = max(1, min(int(timeout or DEFAULT_SHELL_TIMEOUT), MAX_SHELL_TIMEOUT))
 
-    # 4. Drop privileges: never run as root even if we are
+    # 4. Use a minimal environment. OS-level container isolation is still
+    # required when this opt-in capability is enabled on a shared server.
     env = {
-        "PATH": "/usr/local/bin:/usr/bin:/bin",
+        "PATH": os.environ.get("PATH", os.defpath),
         "HOME": str(work),
         "LANG": "C.UTF-8",
+        "NO_COLOR": "1",
     }
     try:
         result = subprocess.run(
-            command,
-            shell=True,
+            argv,
+            shell=False,
             cwd=str(work),
             capture_output=True,
             text=True,
@@ -276,18 +305,41 @@ def run_shell(command: str, cwd: str | None = None, timeout: int = DEFAULT_SHELL
 
 def git(args: str, cwd: str | None = None) -> str:
     work = Path(cwd).resolve() if cwd else Path.cwd()
-    workspace_root = Path(os.environ.get("STUPIDEX_WORKSPACE_ROOT", str(Path.cwd()))).resolve()
+    workspace_root = work
     if not _is_path_within(work, workspace_root):
-        return f"SECURITY: git cwd is outside the workspace"
+        return "SECURITY: git cwd is outside the workspace"
     # Only allow safe git subcommands
-    safe = {"status", "log", "diff", "show", "branch", "remote", "ls-files",
-            "ls-tree", "rev-parse", "fetch", "add", "commit", "push", "pull",
-            "stash", "tag", "checkout", "switch", "restore", "reset", "revert",
-            "merge", "rebase", "init", "config"}
-    first = (args or "").strip().split(maxsplit=1)[0:1]
-    if not first or first[0] not in safe:
-        return f"SECURITY: git subcommand not allowed"
-    return run_shell(f"git {args}", cwd=str(work), timeout=120)
+    safe = {"status", "log", "diff", "show", "ls-files", "ls-tree", "rev-parse"}
+    if any(token in args for token in ("|", "&", ";", "<", ">", "`", "$(", "\n", "\r")):
+        return "SECURITY: git shell operators are not allowed"
+    try:
+        parsed = shlex.split(args, posix=os.name != "nt")
+    except ValueError:
+        return "ERROR: invalid git arguments"
+    if not parsed or parsed[0] not in safe:
+        return "SECURITY: git subcommand not allowed"
+    cmd = [
+        "git", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false",
+        "-c", "diff.external=", "--no-pager", *parsed,
+    ]
+    env = {
+        "PATH": os.environ.get("PATH", os.defpath),
+        "HOME": str(work),
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_PAGER": "cat",
+        "LANG": "C.UTF-8",
+    }
+    try:
+        result = subprocess.run(
+            cmd, cwd=str(work), capture_output=True, text=True, timeout=120,
+            env=env, shell=False,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+        return f"ERROR: git failed: {exc}"
+    stdout = (result.stdout or "")[:MAX_SHELL_OUTPUT_BYTES]
+    stderr = (result.stderr or "")[:MAX_SHELL_OUTPUT_BYTES]
+    return "\n".join(part for part in (stdout.rstrip(), stderr.rstrip(), f"[exit {result.returncode}]") if part)
 
 
 def _wd_arg(working_dir: str | None) -> str:

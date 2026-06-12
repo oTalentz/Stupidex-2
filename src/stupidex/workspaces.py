@@ -9,10 +9,14 @@ Workspaces can be populated by:
   - Direct write/edit via the agent's tools (sandboxed to the workspace)
 """
 import json
+import re
 import shutil
-import subprocess
+import tempfile
 import time
+import urllib.parse
+import urllib.request
 import uuid
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -20,6 +24,12 @@ from typing import Any
 from .config import DATA_DIR
 
 WORKSPACES_BASE = DATA_DIR / "workspaces"
+MAX_WORKSPACE_BYTES = 200 * 1024 * 1024
+MAX_WORKSPACE_FILES = 10_000
+MAX_ARCHIVE_BYTES = 50 * 1024 * 1024
+MAX_FILE_BYTES = 20 * 1024 * 1024
+_WS_ID_RX = re.compile(r"^[0-9a-f]{12}$")
+_ARCHIVE_HOSTS = {"codeload.github.com", "github.com", "gitlab.com", "www.gitlab.com"}
 
 
 def _user_dir(user_id: str) -> Path:
@@ -48,6 +58,8 @@ class Workspace:
 
 
 def _meta_path(user_id: str, ws_id: str) -> Path:
+    if not _WS_ID_RX.fullmatch(ws_id or ""):
+        return _user_dir(user_id) / ".invalid" / ".stupidex.json"
     return _user_dir(user_id) / ws_id / ".stupidex.json"
 
 
@@ -150,6 +162,8 @@ def get_active_workspace(user_id: str) -> Workspace | None:
 
 
 def set_active_workspace(user_id: str, ws_id: str) -> bool:
+    if not _WS_ID_RX.fullmatch(ws_id or ""):
+        return False
     if not (_user_dir(user_id) / ws_id).exists():
         return False
     _user_dir(user_id).mkdir(parents=True, exist_ok=True)
@@ -158,6 +172,8 @@ def set_active_workspace(user_id: str, ws_id: str) -> bool:
 
 
 def delete_workspace(user_id: str, ws_id: str) -> bool:
+    if not _WS_ID_RX.fullmatch(ws_id or ""):
+        return False
     p = _user_dir(user_id) / ws_id
     if not p.exists():
         return False
@@ -181,6 +197,8 @@ def touch(user_id: str, ws_id: str) -> None:
 
 
 def workspace_path(user_id: str, ws_id: str) -> Path | None:
+    if not _WS_ID_RX.fullmatch(ws_id or ""):
+        return None
     p = _user_dir(user_id) / ws_id
     return p if p.exists() else None
 
@@ -199,60 +217,16 @@ def init_from_upload(user_id: str, ws_id: str) -> Workspace:
 
 
 def init_from_git(user_id: str, ws_id: str, url: str, branch: str | None) -> tuple[Workspace, str]:
-    ws_path = _user_dir(user_id) / ws_id
-    if not ws_path.exists():
+    ws_path = workspace_path(user_id, ws_id)
+    if ws_path is None:
         raise ValueError("workspace not found")
-    if _has_git():
-        return _git_clone(user_id, ws_id, url, branch)
     return _download_archive(user_id, ws_id, url, branch)
 
 
-def _has_git() -> bool:
-    try:
-        subprocess.run(["git", "--version"], capture_output=True, check=True, timeout=5)
-        return True
-    except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
-        return False
-
-
-def _git_clone(user_id: str, ws_id: str, url: str, branch: str | None) -> tuple[Workspace, str]:
-    ws_path = _user_dir(user_id) / ws_id
-    meta_file = ws_path / ".stupidex.json"
-    meta_backup: Path | None = None
-    if meta_file.exists():
-        meta_backup = ws_path.parent / f".stupidex.tmp.{ws_id}"
-        meta_file.rename(meta_backup)
-    try:
-        cmd = ["git", "clone"]
-        if branch:
-            cmd += ["-b", branch]
-        cmd += [url, str(ws_path)]
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
-        if proc.returncode != 0:
-            for child in ws_path.iterdir():
-                shutil.rmtree(child, ignore_errors=True) if child.is_dir() else child.unlink(missing_ok=True)
-            raise RuntimeError(f"git clone failed (exit {proc.returncode}): {proc.stderr.strip()}")
-        meta = _read_meta(user_id, ws_id)
-        if meta is None:
-            meta = _default_meta(ws_id)
-        meta["source"] = "git"
-        meta["git_url"] = url
-        meta["git_branch"] = branch
-        ws_obj = Workspace(**meta)
-        _write_meta(user_id, ws_obj)
-        return ws_obj, proc.stderr
-    finally:
-        if meta_backup is not None and meta_backup.exists():
-            meta_backup.rename(meta_file) if not meta_file.exists() else meta_backup.unlink()
-
-
 def _download_archive(user_id: str, ws_id: str, url: str, branch: str | None) -> tuple[Workspace, str]:
-    import tempfile
-    import urllib.request
-    import zipfile
-
     ws_path = _user_dir(user_id) / ws_id
     meta_file = ws_path / ".stupidex.json"
+    original_meta = _read_meta(user_id, ws_id)
     meta_backup: Path | None = None
     if meta_file.exists():
         meta_backup = ws_path.parent / f".stupidex.tmp.{ws_id}"
@@ -268,30 +242,16 @@ def _download_archive(user_id: str, ws_id: str, url: str, branch: str | None) ->
         )
 
     try:
-        with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
-            tmp_path = Path(tmp.name)
-        urllib.request.urlretrieve(archive_url, tmp_path)
-        with zipfile.ZipFile(tmp_path) as zf:
-            names = zf.namelist()
-            if not names:
-                raise RuntimeError("archive empty")
-            top = names[0].split("/")[0]
-            for member in names:
-                if member.endswith("/") or ".." in Path(member).parts:
-                    continue
-                rel = member[len(top) + 1:] if member.startswith(top + "/") else member
-                if not rel:
-                    continue
-                dest = ws_path / rel
-                if not str(dest.resolve()).startswith(str(ws_path.resolve())):
-                    continue
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                with zf.open(member) as src, open(dest, "wb") as out:
-                    out.write(src.read())
-        tmp_path.unlink(missing_ok=True)
-        meta = _read_meta(user_id, ws_id)
-        if meta is None:
-            meta = _default_meta(ws_id)
+        tmp_path = _download_archive_file(archive_url)
+        stage = Path(tempfile.mkdtemp(prefix=f".{ws_id}-", dir=ws_path.parent))
+        try:
+            _extract_archive(tmp_path, stage)
+            for child in stage.iterdir():
+                shutil.move(str(child), str(ws_path / child.name))
+        finally:
+            tmp_path.unlink(missing_ok=True)
+            shutil.rmtree(stage, ignore_errors=True)
+        meta = original_meta or _default_meta(ws_id)
         meta["source"] = "git"
         meta["git_url"] = url
         meta["git_branch"] = branch
@@ -305,14 +265,15 @@ def _download_archive(user_id: str, ws_id: str, url: str, branch: str | None) ->
 
 def _archive_url_for(url: str, branch: str | None) -> str | None:
     from urllib.parse import urlparse
-    ref = branch or "HEAD"
+    ref = urllib.parse.quote(branch or "HEAD", safe="-._/")
     parsed = urlparse(url)
     host = (parsed.netloc or "").lower()
     path = parsed.path.rstrip("/")
     if not path.endswith(".git"):
         path += ".git"
     if host in ("github.com", "www.github.com"):
-        return f"https://codeload.github.com{path[:-4]}/zip/refs/heads/{ref}"
+        suffix = f"refs/heads/{ref}" if branch else "HEAD"
+        return f"https://codeload.github.com{path[:-4]}/zip/{suffix}"
     if host in ("gitlab.com", "www.gitlab.com"):
         return f"https://gitlab.com{path[:-4]}/-/archive/{ref}.zip"
     return None
@@ -323,40 +284,102 @@ def git_pull(user_id: str, ws_id: str) -> tuple[bool, str]:
     if not ws or ws.source != "git" or not ws.git_url:
         return False, "workspace is not a git repository"
     try:
-        import urllib.request
-        import zipfile
-
         ws_path = _user_dir(user_id) / ws_id
         archive_url = _archive_url_for(ws.git_url, ws.git_branch or None)
         if not archive_url:
             return False, "cannot determine archive URL"
-        with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
-            tmp_path = Path(tmp.name)
-        urllib.request.urlretrieve(archive_url, tmp_path)
-        for child in ws_path.iterdir():
-            if child.name == ".stupidex.json":
-                continue
-            shutil.rmtree(child, ignore_errors=True) if child.is_dir() else child.unlink(missing_ok=True)
-        with zipfile.ZipFile(tmp_path) as zf:
-            names = zf.namelist()
-            top = names[0].split("/")[0] if names else ""
-            for member in names:
-                if member.endswith("/") or ".." in Path(member).parts:
+        tmp_path = _download_archive_file(archive_url)
+        stage = Path(tempfile.mkdtemp(prefix=f".{ws_id}-pull-", dir=ws_path.parent))
+        try:
+            _extract_archive(tmp_path, stage)
+            for child in ws_path.iterdir():
+                if child.name == ".stupidex.json":
                     continue
-                rel = member[len(top) + 1:] if member.startswith(top + "/") else member
-                if not rel:
-                    continue
-                dest = ws_path / rel
-                if not str(dest.resolve()).startswith(str(ws_path.resolve())):
-                    continue
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                with zf.open(member) as src, open(dest, "wb") as out:
-                    out.write(src.read())
-        tmp_path.unlink(missing_ok=True)
+                shutil.rmtree(child, ignore_errors=True) if child.is_dir() else child.unlink(missing_ok=True)
+            for child in stage.iterdir():
+                shutil.move(str(child), str(ws_path / child.name))
+        finally:
+            tmp_path.unlink(missing_ok=True)
+            shutil.rmtree(stage, ignore_errors=True)
         touch(user_id, ws_id)
         return True, f"re-downloaded {archive_url}"
     except Exception as exc:
         return False, f"pull failed: {exc}"
+
+
+def _download_archive_file(url: str) -> Path:
+    request = urllib.request.Request(url, headers={"User-Agent": "Stupidex/0.1"})
+    tmp_path: Path | None = None
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            final = urllib.parse.urlparse(response.geturl())
+            if final.scheme != "https" or (final.hostname or "").lower() not in _ARCHIVE_HOSTS:
+                raise RuntimeError("archive redirect left the allowed hosts")
+            declared = int(response.headers.get("Content-Length") or 0)
+            if declared > MAX_ARCHIVE_BYTES:
+                raise RuntimeError("repository archive is too large")
+            with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
+                tmp_path = Path(tmp.name)
+                total = 0
+                while True:
+                    chunk = response.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    total += len(chunk)
+                    if total > MAX_ARCHIVE_BYTES:
+                        raise RuntimeError("repository archive is too large")
+                    tmp.write(chunk)
+        return tmp_path
+    except Exception:
+        if tmp_path is not None:
+            tmp_path.unlink(missing_ok=True)
+        raise
+
+
+def _extract_archive(archive: Path, destination: Path) -> None:
+    with zipfile.ZipFile(archive) as zf:
+        files = [info for info in zf.infolist() if not info.is_dir()]
+        if not files:
+            raise RuntimeError("archive empty")
+        if len(files) > MAX_WORKSPACE_FILES:
+            raise RuntimeError("archive contains too many files")
+        expanded = sum(info.file_size for info in files)
+        if expanded > MAX_WORKSPACE_BYTES:
+            raise RuntimeError("expanded archive is too large")
+        if any(info.file_size > MAX_FILE_BYTES for info in files):
+            raise RuntimeError("archive contains an oversized file")
+        if any((info.external_attr >> 16) & 0o170000 == 0o120000 for info in files):
+            raise RuntimeError("archive symlinks are not allowed")
+
+        names = [info.filename for info in files]
+        top = names[0].split("/")[0] if names else ""
+        for info in files:
+            if info.flag_bits & 0x1:
+                raise RuntimeError("encrypted archives are not allowed")
+            member = info.filename.replace("\\", "/")
+            if "\x00" in member or ".." in Path(member).parts:
+                raise RuntimeError("archive contains an invalid path")
+            rel = member[len(top) + 1:] if member.startswith(top + "/") else member
+            if not rel:
+                continue
+            if Path(rel).as_posix() == ".stupidex.json":
+                raise RuntimeError("archive contains a reserved file name")
+            target = (destination / rel).resolve()
+            try:
+                target.relative_to(destination.resolve())
+            except ValueError as exc:
+                raise RuntimeError("archive path escapes workspace") from exc
+            target.parent.mkdir(parents=True, exist_ok=True)
+            written = 0
+            with zf.open(info) as src, open(target, "wb") as dst:
+                while True:
+                    chunk = src.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    written += len(chunk)
+                    if written > MAX_FILE_BYTES:
+                        raise RuntimeError("archive member exceeded its declared limit")
+                    dst.write(chunk)
 
 
 # ============================================================
@@ -367,8 +390,6 @@ def file_tree(user_id: str, ws_id: str, max_depth: int = 6) -> list[dict]:
     root = _user_dir(user_id) / ws_id
     if not root.exists():
         return []
-    out: list[dict] = []
-
     def _collect_children(p: Path, rel: str, depth: int) -> list[dict]:
         if depth > max_depth:
             return []

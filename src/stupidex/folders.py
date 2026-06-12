@@ -3,7 +3,6 @@
 Persists a list of named folders and the active one in ~/.stupidex/config.json.
 """
 import json
-import os
 import uuid
 from pathlib import Path
 

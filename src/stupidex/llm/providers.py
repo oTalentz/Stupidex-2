@@ -2,10 +2,9 @@
 
 Each provider knows its model and how to talk to the LLM via litellm.
 """
-import os
 from dataclasses import dataclass
 
-from ..config import AppConfig, DEFAULT_BASE_URL, DEFAULT_MODEL
+from ..config import AppConfig, DEFAULT_BASE_URL
 
 
 @dataclass

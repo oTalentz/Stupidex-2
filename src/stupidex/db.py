@@ -11,6 +11,7 @@ Migrations:
   v5 – Google OAuth (email, avatar_url, oauth_provider)
 """
 import json
+import hashlib
 import secrets
 import sqlite3
 import threading
@@ -18,8 +19,9 @@ import time
 import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Iterator
+
+from cryptography.fernet import Fernet, InvalidToken
 
 try:
     from werkzeug.security import check_password_hash, generate_password_hash
@@ -60,6 +62,49 @@ _TOKEN_BYTES = 32
 _MIN_PASSWORD_LEN = 8
 _MAX_PASSWORD_LEN = 200
 _MAX_USERNAME_LEN = 50
+_MAX_MODEL_LEN = 200
+_DUMMY_PASSWORD_HASH = generate_password_hash("stupidex-invalid-password")
+_KEY_LOCK = threading.Lock()
+_KEY_FILE = DATA_DIR / ".keyvault"
+_FERNET: Fernet | None = None
+
+
+def _fernet() -> Fernet:
+    global _FERNET
+    with _KEY_LOCK:
+        if _FERNET is not None:
+            return _FERNET
+        if _KEY_FILE.exists():
+            key = _KEY_FILE.read_bytes().strip()
+        else:
+            key = Fernet.generate_key()
+            _KEY_FILE.parent.mkdir(parents=True, exist_ok=True)
+            tmp = _KEY_FILE.with_suffix(".tmp")
+            tmp.write_bytes(key)
+            try:
+                tmp.chmod(0o600)
+            except OSError:
+                pass
+            tmp.replace(_KEY_FILE)
+        _FERNET = Fernet(key)
+        return _FERNET
+
+
+def _encrypt_secret(value: str | None) -> str:
+    if not value:
+        return ""
+    return "enc:v1:" + _fernet().encrypt(value.encode("utf-8")).decode("ascii")
+
+
+def _decrypt_secret(value: str | None) -> str:
+    if not value:
+        return ""
+    if not value.startswith("enc:v1:"):
+        return value
+    try:
+        return _fernet().decrypt(value[7:].encode("ascii")).decode("utf-8")
+    except (InvalidToken, ValueError):
+        return ""
 
 # Per-user login throttling: at most N failures in M seconds before a temporary lock.
 _LOGIN_FAIL_LIMIT = 8
@@ -81,6 +126,9 @@ class User:
     email: str | None = None
     avatar_url: str | None = None
     oauth_provider: str | None = None
+    provider: str = ""
+    model: str = ""
+    custom_model: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -225,6 +273,12 @@ _MIGRATIONS: list[str] = [
     """
     CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_provider ON users(email, oauth_provider) WHERE email != '';
     """,
+    # v7 — per-user LLM preferences
+    """
+    ALTER TABLE users ADD COLUMN provider TEXT NOT NULL DEFAULT '';
+    ALTER TABLE users ADD COLUMN model TEXT NOT NULL DEFAULT '';
+    ALTER TABLE users ADD COLUMN custom_model TEXT NOT NULL DEFAULT '';
+    """,
 ]
 
 
@@ -298,9 +352,15 @@ def _record_login_failure(key: str) -> None:
     # NOTE: must be careful with lock order. We hold _LOGIN_FAIL_LOCK and
     # then acquire _LOGIN_BLOCKED_LOCK — never the reverse, to avoid deadlock.
     should_block_until: float | None = None
+    now = time.time()
     with _LOGIN_FAIL_LOCK:
+        if len(_LOGIN_FAIL) > 10_000:
+            cutoff = now - _LOGIN_FAIL_WINDOW
+            for stale_key in [k for k, values in _LOGIN_FAIL.items() if not values or values[-1] < cutoff]:
+                _LOGIN_FAIL.pop(stale_key, None)
+        if key not in _LOGIN_FAIL and len(_LOGIN_FAIL) >= 20_000:
+            return
         history = _LOGIN_FAIL.setdefault(key, [])
-        now = time.time()
         history[:] = [t for t in history if t > now - _LOGIN_FAIL_WINDOW]
         history.append(now)
         if len(history) >= _LOGIN_FAIL_LIMIT:
@@ -359,7 +419,8 @@ def find_or_create_oauth_user(email: str, name: str, avatar_url: str, provider: 
 
     with db_cursor() as cur:
         row = cur.execute(
-            "SELECT id, username, password_hash, api_key, email, avatar_url, oauth_provider, created_at, last_login "
+            "SELECT id, username, password_hash, api_key, email, avatar_url, oauth_provider, "
+            "provider, model, custom_model, created_at, last_login "
             "FROM users WHERE email = ? AND oauth_provider = ?",
             (email, provider),
         ).fetchone()
@@ -389,8 +450,19 @@ def find_or_create_oauth_user(email: str, name: str, avatar_url: str, provider: 
             )
 
     token = _create_token(uid)
-    user = User(id=uid, username=name, created_at=now, last_login=now,
-                email=email, avatar_url=avatar_url, oauth_provider=provider)
+    user = User(
+        id=uid,
+        username=(row["username"] if row else username),
+        created_at=(row["created_at"] if row else now),
+        last_login=now,
+        api_key=(_decrypt_secret(row["api_key"]) if row else None),
+        email=email,
+        avatar_url=avatar_url,
+        oauth_provider=provider,
+        provider=(row["provider"] if row else ""),
+        model=(row["model"] if row else ""),
+        custom_model=(row["custom_model"] if row else ""),
+    )
     return user, token
 
 
@@ -405,11 +477,11 @@ def authenticate_user(username: str, password: str) -> tuple[User, str]:
     # to avoid user-enumeration timing attacks.
     with db_cursor() as cur:
         row = cur.execute(
-            "SELECT id, username, password_hash, api_key, created_at FROM users WHERE username = ?",
+            "SELECT id, username, password_hash, api_key, provider, model, custom_model, created_at "
+            "FROM users WHERE username = ?",
             (username,),
         ).fetchone()
-    dummy_hash = "pbkdf2_sha256$1$00$00"  # 1 iter so the check is fast
-    valid = check_password_hash(row["password_hash"] if row else dummy_hash, password)
+    valid = check_password_hash(row["password_hash"] if row else _DUMMY_PASSWORD_HASH, password)
     if not row or not valid:
         _record_login_failure(key)
         raise ValueError("invalid username or password")
@@ -419,17 +491,19 @@ def authenticate_user(username: str, password: str) -> tuple[User, str]:
     with db_cursor() as cur:
         cur.execute("UPDATE users SET last_login = ? WHERE id = ?", (time.time(), row["id"]))
     user = User(id=row["id"], username=row["username"], created_at=row["created_at"],
-                last_login=time.time(), api_key=row["api_key"])
+                last_login=time.time(), api_key=_decrypt_secret(row["api_key"]), provider=row["provider"],
+                model=row["model"], custom_model=row["custom_model"])
     return user, token
 
 
 def _create_token(user_id: str) -> str:
     token = secrets.token_hex(_TOKEN_BYTES)
+    stored_token = _token_digest(token)
     now = time.time()
     with db_cursor() as cur:
         cur.execute(
             "INSERT INTO auth_tokens(token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
-            (token, user_id, now, now + 86400 * 90),  # 90-day tokens
+            (stored_token, user_id, now, now + 86400 * 30),
         )
     return token
 
@@ -439,27 +513,59 @@ def validate_token(token: str) -> User | None:
     if not token:
         return None
     with db_cursor() as cur:
+        stored_token = _token_digest(token)
         row = cur.execute(
-            "SELECT u.id, u.username, u.api_key, u.email, u.avatar_url, u.oauth_provider, u.created_at, u.last_login "
+            "SELECT u.id, u.username, u.api_key, u.email, u.avatar_url, u.oauth_provider, "
+            "u.provider, u.model, u.custom_model, u.created_at, u.last_login, t.token AS stored_token "
             "FROM auth_tokens t JOIN users u ON u.id = t.user_id "
-            "WHERE t.token = ? AND t.expires_at > ?",
-            (token, time.time()),
+            "WHERE t.token IN (?, ?) AND t.expires_at > ?",
+            (stored_token, token, time.time()),
         ).fetchone()
+        if row and row["stored_token"] == token:
+            cur.execute("UPDATE auth_tokens SET token = ? WHERE token = ?", (stored_token, token))
     if not row:
         return None
     return User(id=row["id"], username=row["username"], created_at=row["created_at"],
-                last_login=row["last_login"], api_key=row["api_key"],
-                email=row["email"], avatar_url=row["avatar_url"], oauth_provider=row["oauth_provider"])
+                last_login=row["last_login"], api_key=_decrypt_secret(row["api_key"]),
+                email=row["email"], avatar_url=row["avatar_url"], oauth_provider=row["oauth_provider"],
+                provider=row["provider"], model=row["model"], custom_model=row["custom_model"])
 
 
 def logout_token(token: str) -> None:
     with db_cursor() as cur:
-        cur.execute("DELETE FROM auth_tokens WHERE token = ?", (token,))
+        cur.execute("DELETE FROM auth_tokens WHERE token IN (?, ?)", (_token_digest(token), token))
 
 
 def update_user_api_key(user_id: str, api_key: str | None) -> None:
     with db_cursor() as cur:
-        cur.execute("UPDATE users SET api_key = ? WHERE id = ?", (api_key or "", user_id))
+        cur.execute("UPDATE users SET api_key = ? WHERE id = ?", (_encrypt_secret(api_key), user_id))
+
+
+def update_user_config(
+    user_id: str,
+    *,
+    provider: str,
+    model: str,
+    custom_model: str,
+    api_key: str | None = None,
+    clear_api_key: bool = False,
+) -> None:
+    provider = provider.strip()[:100]
+    model = model.strip()[:_MAX_MODEL_LEN]
+    custom_model = custom_model.strip()[:_MAX_MODEL_LEN]
+    with db_cursor() as cur:
+        cur.execute(
+            "UPDATE users SET provider = ?, model = ?, custom_model = ? WHERE id = ?",
+            (provider, model, custom_model, user_id),
+        )
+        if api_key is not None:
+            cur.execute("UPDATE users SET api_key = ? WHERE id = ?", (_encrypt_secret(api_key.strip()), user_id))
+        elif clear_api_key:
+            cur.execute("UPDATE users SET api_key = '' WHERE id = ?", (user_id,))
+
+
+def _token_digest(token: str) -> str:
+    return "sha256:" + hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 # ============================================================

@@ -12,22 +12,21 @@ from . import _bootstrap  # noqa: F401 — must come first
 import json
 import logging
 import threading
-import time
 import traceback
 from collections.abc import Generator
 from dataclasses import dataclass
 
 import litellm
 
-# Silence the litellm "Provider List" log spam
-litellm.suppress_debug_info = True
-logging.getLogger("litellm").setLevel(logging.WARNING)
-
 from .. import db
 from .. import workspaces as workspaces_module
 from .message import ChatMessage, MessageRole, MessageType, ToolCall, Usage
-from .providers import PROVIDERS, get_provider, resolve_request_model
+from .providers import get_provider
 from .tools import TOOL_DEFINITIONS, TOOL_FUNCTIONS
+
+# Silence the litellm "Provider List" log spam
+litellm.suppress_debug_info = True
+logging.getLogger("litellm").setLevel(logging.WARNING)
 
 MAX_TOOL_ITERATIONS = 20
 MAX_HISTORY_MESSAGES = 200  # safety net
@@ -169,10 +168,6 @@ def _resolve_working_dir(args: dict, user_id: str = "") -> None:
     active = _active_workspace_path(user_id)
     if active:
         args["working_dir"] = active
-        # Expose the workspace root to subprocess-based tools so the
-        # `run_shell` sandbox can also enforce containment.
-        import os
-        os.environ["STUPIDEX_WORKSPACE_ROOT"] = active
 
 
 def _resolve_cwd(args: dict, user_id: str = "") -> None:
@@ -180,8 +175,6 @@ def _resolve_cwd(args: dict, user_id: str = "") -> None:
     active = _active_workspace_path(user_id)
     if active:
         args["cwd"] = active
-        import os
-        os.environ["STUPIDEX_WORKSPACE_ROOT"] = active
 
 
 def _litellm_kwargs(ctx: AgentContext) -> dict:
@@ -306,6 +299,18 @@ def stream_response(
         if chunk_usage:
             last_usage = chunk_usage
 
+        if cancelled:
+            if pending_text:
+                db.append_message(
+                    session_id,
+                    MessageRole.ASSISTANT.value,
+                    pending_text,
+                    MessageType.TEXT.value,
+                    metadata={"cancelled": True},
+                )
+            yield {"type": "cancelled", "content": pending_text}
+            return
+
         # No tool calls → final assistant turn, persist and finish.
         if not pending_calls:
             msg = ChatMessage(
@@ -411,6 +416,10 @@ def stream_response(
                 tool_call_id=call.id, metadata={"error": is_error, "tool_name": call.name},
             )
 
+    if cancelled:
+        yield {"type": "cancelled", "content": pending_text}
+        return
+
     err = f"agent exceeded {MAX_TOOL_ITERATIONS} tool iterations"
     db.append_message(session_id, MessageRole.SYSTEM.value, err, MessageType.TEXT.value)
     yield {"type": "error", "content": err}
@@ -425,12 +434,17 @@ def _extract_usage(chunk) -> Usage:
     )
 
 
-def build_context(provider_id: str, api_key_override: str | None, user_id: str = "") -> AgentContext:
+def build_context(
+    provider_id: str,
+    api_key_override: str | None,
+    user_id: str = "",
+    model_override: str = "",
+) -> AgentContext:
     """Build an AgentContext for a request from a session or default config."""
     from ..config import load_config
     cfg = load_config()
     provider = get_provider(provider_id or cfg.provider)
-    model = (cfg.custom_model or provider.default_model).strip()
+    model = (model_override or provider.default_model).strip()
     api_key = api_key_override or cfg.api_key
     return AgentContext(
         session_id="",

@@ -22,6 +22,7 @@ const els = {
     newChatBtn: $("new-chat-btn"),
     openSettings: $("open-settings"),
     logoutBtn: $("logout-btn"),
+    railWorkspace: $("rail-workspace"),
 
     workspacePanel: $("workspace-panel"),
     workspaceList: $("workspace-list"),
@@ -92,7 +93,7 @@ const els = {
 
 let state = {
     providers: [],
-    config: { provider: "deepseek-v4-flash", model: "deepseek-v4-flash", has_api_key: true },
+    config: { provider: "deepseek-v4-flash", model: "deepseek-v4-flash", has_api_key: false },
     workspaces: { workspaces: [], active_id: null },
     sessions: [],
     currentSessionId: null,
@@ -250,6 +251,7 @@ async function openSession(id) {
     await loadMessages(id);
     const s = state.sessions.find(x => x.id === id);
     if (s) els.sessionTitle.textContent = s.title;
+    els.workspacePanel.classList.remove("mobile-open");
 }
 
 async function deleteSession(id) {
@@ -505,7 +507,11 @@ async function sendMessage() {
     await runChat({
         sid, text, bubble, thinking,
         url: `/api/sessions/${sid}/chat`,
-        body: { message: text },
+        body: {
+            message: text,
+            provider: state.config.provider,
+            model: state.config.model,
+        },
         assistantRow,
     });
 }
@@ -519,7 +525,10 @@ async function runChat({ sid, text, bubble, thinking, url, body, assistantRow })
             body: JSON.stringify(body),
             signal: state.abortController.signal,
         });
-        if (!resp.ok || !resp.body) throw new Error(`HTTP ${resp.status}`);
+        if (!resp.ok || !resp.body) {
+            const payload = await resp.json().catch(() => ({}));
+            throw new Error(payload.error || `HTTP ${resp.status}`);
+        }
         await consumeStream(resp.body, { bubble, thinking, assistantRow });
     } catch (err) {
         if (err.name === "AbortError") {
@@ -778,7 +787,7 @@ async function regenerateLast() {
     await runChat({
         sid, text: "", bubble, thinking,
         url: `/api/sessions/${sid}/regenerate`,
-        body: {},
+        body: { provider: state.config.provider, model: state.config.model },
         assistantRow,
     });
 }
@@ -1166,6 +1175,9 @@ function updateBadges() {
 // ============================================================
 
 els.newChatBtn.addEventListener("click", newSession);
+els.railWorkspace.addEventListener("click", () => {
+    els.workspacePanel.classList.toggle("mobile-open");
+});
 els.openSettings.addEventListener("click", openSettings);
 $("logout-btn").addEventListener("click", async () => {
     if (!confirm("Sair da conta?")) return;
@@ -1286,13 +1298,26 @@ if (els.composerViewProject) {
 
 // Model chip switcher
 if (els.modelSwitcher) {
-    els.modelSwitcher.addEventListener("click", (e) => {
+    els.modelSwitcher.addEventListener("click", async (e) => {
         const chip = e.target.closest(".model-chip");
         if (!chip) return;
-        els.modelSwitcher.querySelectorAll(".model-chip").forEach(c =>
-            c.classList.toggle("model-chip-active", c === chip));
         const model = chip.dataset.model;
-        try { localStorage.setItem("stupidex-model", model); } catch (e) {}
+        const previous = state.config;
+        state.config = { ...state.config, provider: model, model, custom_model: "" };
+        updateBadges();
+        try {
+            const response = await fetch("/api/config", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ provider: model, custom_model: "" }),
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            state.config = await response.json();
+            updateBadges();
+        } catch {
+            state.config = previous;
+            updateBadges();
+        }
     });
 }
 
@@ -1400,12 +1425,12 @@ window.fetch = function(url, opts = {}) {
 };
 
 async function checkAuth() {
-    const token = getToken();
-    if (!token) return false;
     try {
+        const token = getToken();
         const r = await _origFetch("/api/auth/me", {
-            headers: { Authorization: "Bearer " + token },
+            headers: token ? { Authorization: "Bearer " + token } : {},
         });
+        if (r.ok && token) clearToken();
         return r.ok;
     } catch {
         return false;
@@ -1423,12 +1448,18 @@ function showApp() {
 }
 
 async function logout() {
-    try { await _origFetch("/api/auth/logout", { method: "POST", headers: { Authorization: "Bearer " + getToken() } }); } catch {}
+    const token = getToken();
+    try {
+        await _origFetch("/api/auth/logout", {
+            method: "POST",
+            headers: token ? { Authorization: "Bearer " + token } : {},
+        });
+    } catch {}
     clearToken();
     if (state.abortController) try { state.abortController.abort(); } catch {}
     state = {
         providers: [],
-        config: { provider: "deepseek-v4-flash", model: "deepseek-v4-flash", has_api_key: true },
+        config: { provider: "deepseek-v4-flash", model: "deepseek-v4-flash", has_api_key: false },
         workspaces: { workspaces: [], active_id: null },
         sessions: [],
         currentSessionId: null,
@@ -1471,8 +1502,8 @@ elsAuth.loginForm.addEventListener("submit", async (e) => {
 
 async function handleLoginResponse(r, email) {
     const data = await r.json().catch(() => ({}));
-    if (r.ok && data.token) {
-        setToken(data.token);
+    if (r.ok) {
+        clearToken();
         showApp();
         await bootApp();
         return;
@@ -1491,8 +1522,8 @@ async function tryLogin(email, password) {
             body: JSON.stringify({ username: email, password }),
         });
         const data = await r.json().catch(() => ({}));
-        if (r.ok && data.token) {
-            setToken(data.token);
+        if (r.ok) {
+            clearToken();
             showApp();
             await bootApp();
         } else {

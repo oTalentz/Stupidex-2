@@ -24,6 +24,14 @@ stupidex-web
 
 Then open `http://127.0.0.1:5000` in your browser.
 
+## Security defaults
+
+- Web authentication uses an `HttpOnly` cookie; bearer tokens remain supported for API clients.
+- Provider, model and API key settings are stored per user. API keys are encrypted at rest.
+- Agent shell execution is disabled by default. Enable it only inside an isolated container with
+  `STUPIDEX_ENABLE_SHELL=1`; optionally restrict executables with `STUPIDEX_SHELL_COMMANDS`.
+- Production deployments must persist `STUPIDEX_DATA_DIR` (the Docker image uses `/data`).
+
 ### Standalone executable (no Python required)
 
 ```bash

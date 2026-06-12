@@ -9,7 +9,6 @@ The shim returns a dummy encoding that always says "0 tokens" — this
 is fine for chat (token counting is only used for cost estimation,
 not for the actual request).
 """
-import os
 import sys
 
 

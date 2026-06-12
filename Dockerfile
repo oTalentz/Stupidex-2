@@ -5,6 +5,10 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/*
 
+RUN useradd --create-home --uid 10001 stupidex \
+    && mkdir -p /data \
+    && chown -R stupidex:stupidex /app /data
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -15,6 +19,10 @@ ENV PYTHONPATH=/app/src
 ENV STUPIDEX_HOST=0.0.0.0
 ENV STUPIDEX_PORT=5000
 ENV STUPIDEX_DEBUG=0
+ENV STUPIDEX_DATA_DIR=/data
+ENV STUPIDEX_ENABLE_SHELL=0
+
+USER stupidex
 
 EXPOSE 5000
 

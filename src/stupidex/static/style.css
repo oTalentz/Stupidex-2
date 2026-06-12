@@ -186,8 +186,12 @@ body,
 .app-shell {
     display: grid;
     grid-template-columns: var(--nav-width) var(--workspace-width) 1fr;
+    grid-template-rows: minmax(0, 1fr);
     height: 100vh;
+    height: 100dvh;
+    min-height: 0;
     width: 100%;
+    align-items: stretch;
     background: var(--bg-main);
 }
 
@@ -210,6 +214,8 @@ body,
     align-items: center;
     padding: 14px 0;
     z-index: 30;
+    height: 100%;
+    min-height: 0;
 }
 .nav-rail-logo {
     width: 40px;
@@ -301,6 +307,8 @@ body,
     overflow: hidden;
     min-width: 0;
     box-shadow: var(--shadow-panel);
+    height: 100%;
+    min-height: 0;
 }
 .workspace-header {
     height: 56px;
@@ -615,15 +623,16 @@ body,
    ============================================================ */
 .main-area {
     position: relative;
+    display: grid;
+    grid-template-rows: var(--topbar-height) minmax(0, 1fr) auto;
     min-width: 0;
+    min-height: 0;
+    height: 100%;
     overflow: hidden;
     background: var(--bg-main);
 }
 .topbar {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
+    position: relative;
     height: var(--topbar-height);
     display: flex;
     align-items: center;
@@ -740,14 +749,11 @@ body,
    Messages
    ============================================================ */
 .messages {
-    position: absolute;
-    top: var(--topbar-height);
-    left: 0;
-    right: 0;
-    bottom: 0;
+    position: relative;
+    min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 0 24px 120px 24px;
+    padding: 0 24px 24px;
     text-align: center;
     background:
         radial-gradient(
@@ -1140,12 +1146,10 @@ body,
    Composer (floating input bar)
    ============================================================ */
 .composer {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    padding: 8px 24px 18px;
-    background: linear-gradient(to top, var(--bg-main) 50%, transparent 100%);
+    position: relative;
+    padding: 10px 24px 14px;
+    background: var(--bg-main);
+    border-top: 1px solid var(--border-soft);
     z-index: 10;
     display: flex;
     flex-direction: column;
@@ -1343,6 +1347,7 @@ body,
         border-color 0.3s;
 }
 .research-hidden {
+    display: none;
     width: 0 !important;
     border-left-width: 0 !important;
     opacity: 0;
@@ -1878,10 +1883,36 @@ body,
         grid-template-columns: var(--nav-width) 1fr;
     }
     .workspace-panel {
-        display: none;
+        display: flex;
+        position: fixed;
+        top: 0;
+        bottom: 0;
+        left: var(--nav-width);
+        width: min(320px, calc(100vw - var(--nav-width)));
+        z-index: 40;
+        transform: translateX(calc(-100% - var(--nav-width)));
+        transition: transform 0.2s ease;
+    }
+    .workspace-panel.mobile-open {
+        transform: translateX(0);
     }
     .topbar-center {
         display: none;
+    }
+    .topbar {
+        padding: 0 14px;
+    }
+    .messages {
+        padding: 0 14px 16px;
+    }
+    .composer {
+        padding: 8px 12px 10px;
+    }
+    .composer-view-project {
+        display: none;
+    }
+    .bubble {
+        max-width: calc(100% - 42px);
     }
     :root[data-theme="light"] #theme-toggle .ph-sun,
     :root[data-theme="light"] #theme-toggle .ph-moon {

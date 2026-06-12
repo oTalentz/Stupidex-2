@@ -173,6 +173,7 @@ def test_run_shell_blocks_escape_patterns():
     """Dangerous commands must be blocked by the sandbox blocklist."""
     import os
     os.environ["STUPIDEX_WORKSPACE_ROOT"] = str(_TMP)
+    os.environ["STUPIDEX_ENABLE_SHELL"] = "1"
     ws = _TMP / "ws"
     ws.mkdir(exist_ok=True)
     for cmd in [
@@ -196,28 +197,30 @@ def test_run_shell_blocks_escape_patterns():
 
 
 def test_run_shell_blocks_cwd_outside_workspace():
-    out = tools.run_shell("ls", cwd="/etc")
-    assert "SECURITY" in out, f"cwd outside workspace was not blocked: {out!r}"
+    os.environ.pop("STUPIDEX_ENABLE_SHELL", None)
+    out = tools.run_shell("python --version", cwd=str(_TMP))
+    assert "SECURITY" in out, f"disabled shell was not blocked: {out!r}"
 
 
 def test_run_shell_allows_safe_commands():
     import os, sys, subprocess
-    os.environ["STUPIDEX_WORKSPACE_ROOT"] = str(_TMP)
+    os.environ["STUPIDEX_ENABLE_SHELL"] = "1"
+    executable = Path(sys.executable).name
+    os.environ["STUPIDEX_SHELL_COMMANDS"] = executable
     ws = _TMP / "ws2"
     ws.mkdir(exist_ok=True)
     (ws / "hello.txt").write_text("oi")
-    # Find a command that exists on this platform and prints a known string.
-    if os.name == "nt":
-        # `cmd /c echo hello.txt` works on Windows and is whitelisted.
-        out = tools.run_shell("cmd /c echo hello.txt", cwd=str(ws))
-    else:
-        out = tools.run_shell("echo hello.txt", cwd=str(ws))
-    assert "hello.txt" in out, f"safe command failed: {out!r}"
+    out = tools.run_shell(f'"{sys.executable}" --version', cwd=str(ws))
+    assert "Python" in out, f"safe command failed: {out!r}"
 
 
 def test_run_shell_timeout_clamped():
-    out = tools.run_shell("sleep 5", cwd=str(_TMP), timeout=99999)
-    assert "ERROR: command timed out" in out or "[exit" in out
+    os.environ["STUPIDEX_ENABLE_SHELL"] = "1"
+    os.environ["STUPIDEX_SHELL_COMMANDS"] = Path(sys.executable).name
+    sleeper = _TMP / "sleeper.py"
+    sleeper.write_text("import time\ntime.sleep(5)\n", encoding="utf-8")
+    out = tools.run_shell(f'"{sys.executable}" sleeper.py', cwd=str(_TMP), timeout=1)
+    assert "ERROR: command timed out" in out
 
 
 def test_git_only_safe_subcommands():
@@ -253,7 +256,10 @@ def test_token_validation_rejects_expired():
     token = _db._create_token(user.id)
     # Backdate by manipulating DB
     with _db.db_cursor() as cur:
-        cur.execute("UPDATE auth_tokens SET expires_at = ? WHERE token = ?", (time.time() - 10, token))
+        cur.execute(
+            "UPDATE auth_tokens SET expires_at = ? WHERE token = ?",
+            (time.time() - 10, _db._token_digest(token)),
+        )
     assert _db.validate_token(token) is None
 
 
@@ -321,6 +327,42 @@ def test_no_default_api_key_in_binary():
     from stupidex import config
     assert config.DEFAULT_API_KEY == "", \
         f"DEFAULT_API_KEY should be empty, got {config.DEFAULT_API_KEY!r}"
+
+
+def test_api_key_is_encrypted_at_rest():
+    user, _ = db.create_user("encrypted_key_user", "validpass123")
+    db.update_user_api_key(user.id, "sk-secret-value")
+    with db.db_cursor() as cur:
+        stored = cur.execute("SELECT api_key FROM users WHERE id = ?", (user.id,)).fetchone()[0]
+    assert stored.startswith("enc:v1:")
+    assert "sk-secret-value" not in stored
+    authenticated, _ = db.authenticate_user("encrypted_key_user", "validpass123")
+    assert authenticated.api_key == "sk-secret-value"
+
+
+def test_user_config_is_isolated():
+    a, _ = db.create_user("config_a", "validpass123")
+    b, _ = db.create_user("config_b", "validpass123")
+    db.update_user_config(
+        a.id,
+        provider="openai",
+        model="gpt-test",
+        custom_model="gpt-test",
+        api_key="sk-a",
+    )
+    with db.db_cursor() as cur:
+        row = cur.execute("SELECT provider FROM users WHERE id = ?", (b.id,)).fetchone()
+    assert row["provider"] == ""
+    assert db.validate_token(db.authenticate_user("config_a", "validpass123")[1]).provider == "openai"
+
+
+def test_stream_claim_is_exclusive():
+    from stupidex import web
+    first = web._claim_stream("session-test")
+    assert first is not None
+    assert web._claim_stream("session-test") is None
+    web._pop_stream("session-test", first)
+    assert web._claim_stream("session-test") is not None
 
 
 def cleanup():

@@ -6,8 +6,9 @@ Sources, in priority order:
   3. Project-level .env (./.env, loaded via python-dotenv)
   4. Hard-coded defaults
 
-The API key is stored ONLY in the config file (or env), never in
-the database. The web layer exposes has_api_key to the UI, never the value.
+Deployment-level API keys may come from this config or the environment.
+Per-user API keys are encrypted by the database layer. The web API exposes
+only has_api_key, never the secret value.
 """
 import json
 import os
@@ -113,7 +114,13 @@ def has_api_key() -> bool:
 def save_config(cfg: AppConfig) -> None:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     data = asdict(cfg)
-    CONFIG_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    tmp = CONFIG_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    try:
+        tmp.chmod(0o600)
+    except OSError:
+        pass
+    tmp.replace(CONFIG_FILE)
 
 
 def update_config(**kwargs) -> AppConfig:
