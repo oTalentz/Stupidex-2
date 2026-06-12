@@ -40,12 +40,20 @@ const els = {
   workspaceList: $("workspace-list"),
   treeContainer: $("tree-container"),
   refreshWs: $("ws-refresh"),
+  gitPullBtn: $("ws-git-pull"),
   uploadBtn: $("upload-btn"),
   cloneBtn: $("clone-btn"),
   newWsBtn: $("new-ws-btn"),
   fileInput: $("file-input"),
   wsFilesCount: $("ws-files-count"),
   wsActiveBadge: $("ws-active-badge"),
+
+  // Terminal widget elements
+  terminalWidget: $("terminal-widget"),
+  terminalOutput: $("terminal-output"),
+  terminalInput: $("terminal-input"),
+  closeTerminal: $("close-terminal"),
+  openTerminalBtn: null, // Will be created dynamically
 
   sessionTitle: $("session-title"),
   sessionTime: $("session-time"),
@@ -1402,7 +1410,9 @@ function renderWorkspaces() {
         e.stopPropagation();
         sync.classList.add("syncing");
         try {
-          const r = await fetch(`/api/workspaces/${w.id}/pull`, { method: "POST" });
+          const r = await fetch(`/api/workspaces/${w.id}/pull`, {
+            method: "POST",
+          });
           const data = await r.json();
           if (data.ok) {
             await loadWorkspaces();
@@ -1546,12 +1556,146 @@ els.refreshWs.addEventListener("click", () => {
   if (state.workspaces.active_id) loadTree(state.workspaces.active_id);
   loadWorkspaces();
 });
+els.gitPullBtn?.addEventListener("click", async () => {
+  const wsId = state.workspaces.active_id;
+  if (!wsId) return;
+  try {
+    const response = await fetch(`/api/workspaces/${wsId}/pull`, {
+      method: "POST",
+    });
+    const data = await response.json();
+    if (data.ok) {
+      alert(`Git Pull realizado: ${data.output || "Atualizado"}`);
+      if (state.workspaces.active_id) loadTree(state.workspaces.active_id);
+      loadWorkspaces();
+    } else {
+      alert(`Erro ao fazer pull: ${data.output || "Erro desconhecido"}`);
+    }
+  } catch (err) {
+    alert(`Falha na requisição: ${err.message}`);
+  }
+});
 
 els.fileInput.addEventListener("change", async () => {
   if (!els.fileInput.files.length) return;
   await uploadFiles(els.fileInput.files);
   els.fileInput.value = "";
 });
+
+// ============================================================
+// TERMINAL WIDGET
+// ============================================================
+
+function initTerminalWidget() {
+  if (!els.terminalWidget) return;
+
+  // Create open terminal button in workspace header
+  const openTerminal = document.createElement("button");
+  openTerminal.id = "open-terminal";
+  openTerminal.className = "icon-btn";
+  openTerminal.title = "Abrir Terminal";
+  openTerminal.innerHTML = '<i class="ph ph-terminal"></i>';
+
+  // Insert before ws-menu button
+  const wsMenu = document.getElementById("ws-menu");
+  if (wsMenu) {
+    wsMenu.before(openTerminal);
+    els.openTerminalBtn = openTerminal;
+  }
+
+  openTerminal.addEventListener("click", () => {
+    els.terminalWidget.classList.remove("hidden");
+    els.terminalInput.focus();
+    printToTerminal("Terminal pronto. Digite um comando...", "system");
+  });
+
+  els.closeTerminal?.addEventListener("click", () => {
+    els.terminalWidget.classList.add("hidden");
+  });
+
+  let commandHistory = [];
+  let historyIndex = -1;
+
+  els.terminalInput?.addEventListener("keydown", async (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const cmd = els.terminalInput.value.trim();
+      if (!cmd) return;
+
+      // Add to history
+      commandHistory.push(cmd);
+      historyIndex = commandHistory.length;
+
+      printToTerminal(`$ ${cmd}`, "input");
+      els.terminalInput.value = "";
+
+      await executeShellCommand(cmd);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      if (commandHistory.length > 0) {
+        if (historyIndex <= 0) historyIndex = 0;
+        else if (historyIndex > commandHistory.length)
+          historyIndex = commandHistory.length;
+
+        if (historyIndex > 0) {
+          historyIndex--;
+          els.terminalInput.value = commandHistory[historyIndex];
+        }
+      }
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (commandHistory.length > 0) {
+        historyIndex++;
+        if (historyIndex < commandHistory.length) {
+          els.terminalInput.value = commandHistory[historyIndex];
+        } else {
+          historyIndex = commandHistory.length;
+          els.terminalInput.value = "";
+        }
+      }
+    }
+  });
+}
+
+function printToTerminal(text, type = "output") {
+  if (!els.terminalOutput) return;
+  const line = document.createElement("div");
+  line.className = `terminal-line terminal-${type}`;
+  line.textContent = text;
+  els.terminalOutput.appendChild(line);
+  els.terminalOutput.scrollTop = els.terminalOutput.scrollHeight;
+}
+
+async function executeShellCommand(cmd) {
+  const wsId = state.workspaces.active_id;
+  if (!wsId) {
+    printToTerminal("Erro: Nenhum workspace ativo", "error");
+    return;
+  }
+
+  printToTerminal("Executando...", "system");
+
+  try {
+    const response = await fetch(`/api/workspaces/${wsId}/shell`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ command: cmd }),
+    });
+
+    const data = await response.json();
+
+    if (data.error) {
+      printToTerminal(data.error, "error");
+    } else {
+      printToTerminal(data.output || "Comando executado", "output");
+    }
+  } catch (err) {
+    printToTerminal(`Erro: ${err.message}`, "error");
+  }
+}
+
+// Initialize terminal on boot
+initTerminalWidget();
 
 async function uploadFiles(files) {
   let wsId = state.workspaces.active_id;
@@ -2200,7 +2344,9 @@ if (els.modelSwitcher) {
 
 // Shell widget wire-up
 if (els.shellRun && els.shellInput) {
-  els.shellRun.addEventListener("click", () => runShellCommand(els.shellInput.value));
+  els.shellRun.addEventListener("click", () =>
+    runShellCommand(els.shellInput.value),
+  );
   els.shellInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
@@ -2508,8 +2654,14 @@ async function runShellCommand(cmd) {
       const lines = data.output.split("\n");
       for (const line of lines) {
         if (line.startsWith("stdout:") || line.startsWith("stderr:")) continue;
-        if (line.startsWith("[exit")) { appendShellLine("exit", line); continue; }
-        if (line.includes("SECURITY") || line.includes("ERROR:")) { appendShellLine("error", line); continue; }
+        if (line.startsWith("[exit")) {
+          appendShellLine("exit", line);
+          continue;
+        }
+        if (line.includes("SECURITY") || line.includes("ERROR:")) {
+          appendShellLine("error", line);
+          continue;
+        }
         if (line.trim()) appendShellLine("stdout", line);
       }
     }
@@ -2587,15 +2739,33 @@ function openProfile() {
     els.profileModalAvatar.style.color = "var(--accent)";
     els.profileModalAvatar.style.fontSize = "20px";
     els.profileModalAvatar.style.fontWeight = "600";
-    els.profileModalAvatar.textContent = (u.username || u.email || "U").charAt(0).toUpperCase();
+    els.profileModalAvatar.textContent = (u.username || u.email || "U")
+      .charAt(0)
+      .toUpperCase();
   }
   els.profileUsername.textContent = u.username || u.email || "—";
   els.profileEmail.textContent = u.email || "—";
   const provider = u.oauth_provider || "email";
-  els.profileProvider.textContent = provider === "google" ? "Google" : provider === "github" ? "GitHub" : "Email e senha";
-  els.profileOauthBadge.textContent = provider === "google" ? "⋮ Gmail" : provider === "github" ? "⊞ GitHub" : "⊡ Local";
+  els.profileProvider.textContent =
+    provider === "google"
+      ? "Google"
+      : provider === "github"
+        ? "GitHub"
+        : "Email e senha";
+  els.profileOauthBadge.textContent =
+    provider === "google"
+      ? "⋮ Gmail"
+      : provider === "github"
+        ? "⊞ GitHub"
+        : "⊡ Local";
   const created = u.created_at ? new Date(u.created_at * 1000) : null;
-  els.profileMemberSince.textContent = created ? created.toLocaleDateString("pt-BR", { year: "numeric", month: "long", day: "numeric" }) : "—";
+  els.profileMemberSince.textContent = created
+    ? created.toLocaleDateString("pt-BR", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    : "—";
   const count = (state.workspaces?.workspaces || []).length;
   els.profileWsCount.textContent = count;
   els.profileModal.classList.remove("hidden");

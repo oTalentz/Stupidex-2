@@ -232,6 +232,13 @@
                     </div>
                     <div class="workspace-header-actions">
                         <button
+                            id="ws-git-pull"
+                            class="icon-btn"
+                            title="Git Pull - Sincronizar com repositório"
+                        >
+                            <i class="ph ph-git-pull-request"></i>
+                        </button>
+                        <button
                             id="ws-refresh"
                             class="icon-btn"
                             title="Atualizar"
@@ -260,6 +267,38 @@
                         </button>
                     </div>
 
+                    <div id="terminal-widget" class="terminal-widget hidden">
+                        <div class="terminal-header">
+                            <span class="terminal-title">
+                                <i class="ph ph-terminal"></i>
+                                Terminal
+                            </span>
+                            <button
+                                id="close-terminal"
+                                class="icon-btn terminal-close"
+                                title="Fechar"
+                            >
+                                <i class="ph ph-x"></i>
+                            </button>
+                        </div>
+                        <div class="terminal-body">
+                            <div
+                                id="terminal-output"
+                                class="terminal-output"
+                            ></div>
+                            <div class="terminal-input-row">
+                                <span class="terminal-prompt">$</span>
+                                <input
+                                    id="terminal-input"
+                                    type="text"
+                                    class="terminal-input"
+                                    placeholder="Digite um comando..."
+                                    autocomplete="off"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="workspace-section">
                         <div class="workspace-section-title">
                             <span>Active Context</span>
@@ -281,14 +320,33 @@
                     <div class="workspace-section">
                         <div class="workspace-section-title">
                             <span>Terminal</span>
-                            <button id="shell-clear" class="icon-btn ws-section-btn" title="Limpar"><i class="ph ph-trash"></i></button>
+                            <button
+                                id="shell-clear"
+                                class="icon-btn ws-section-btn"
+                                title="Limpar"
+                            >
+                                <i class="ph ph-trash"></i>
+                            </button>
                         </div>
                         <div class="shell-wrap">
                             <div id="shell-output" class="shell-output"></div>
                             <div class="shell-input-row">
                                 <span class="shell-prompt">$</span>
-                                <input id="shell-input" type="text" class="shell-input" placeholder="Run a command..." autocomplete="off" spellcheck="false" />
-                                <button id="shell-run" class="ghost-btn" title="Executar"><i class="ph ph-play"></i></button>
+                                <input
+                                    id="shell-input"
+                                    type="text"
+                                    class="shell-input"
+                                    placeholder="Run a command..."
+                                    autocomplete="off"
+                                    spellcheck="false"
+                                />
+                                <button
+                                    id="shell-run"
+                                    class="ghost-btn"
+                                    title="Executar"
+                                >
+                                    <i class="ph ph-play"></i>
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -778,42 +836,86 @@
         </div>
 
         <!-- Profile modal -->
-        <div id="profile-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="profile-title">
+        <div
+            id="profile-modal"
+            class="modal hidden"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="profile-title"
+        >
             <div class="modal-content profile-modal-content">
                 <div class="profile-header">
-                    <img id="profile-modal-avatar" class="profile-modal-avatar" src="" alt="Avatar" />
+                    <img
+                        id="profile-modal-avatar"
+                        class="profile-modal-avatar"
+                        src=""
+                        alt="Avatar"
+                    />
                     <div class="profile-header-info">
                         <h2 id="profile-title">Perfil</h2>
-                        <span id="profile-oauth-badge" class="profile-oauth-badge"></span>
+                        <span
+                            id="profile-oauth-badge"
+                            class="profile-oauth-badge"
+                        ></span>
                     </div>
-                    <button id="close-profile" class="icon-btn" aria-label="Fechar"><i class="ph ph-x"></i></button>
+                    <button
+                        id="close-profile"
+                        class="icon-btn"
+                        aria-label="Fechar"
+                    >
+                        <i class="ph ph-x"></i>
+                    </button>
                 </div>
                 <div class="modal-body">
                     <div class="profile-details">
                         <div class="profile-field">
                             <span class="profile-field-label">Usuário</span>
-                            <span id="profile-username" class="profile-field-value">—</span>
+                            <span
+                                id="profile-username"
+                                class="profile-field-value"
+                                >—</span
+                            >
                         </div>
                         <div class="profile-field">
                             <span class="profile-field-label">Email</span>
-                            <span id="profile-email" class="profile-field-value">—</span>
+                            <span id="profile-email" class="profile-field-value"
+                                >—</span
+                            >
                         </div>
                         <div class="profile-field">
                             <span class="profile-field-label">Provedor</span>
-                            <span id="profile-provider" class="profile-field-value">—</span>
+                            <span
+                                id="profile-provider"
+                                class="profile-field-value"
+                                >—</span
+                            >
                         </div>
                         <div class="profile-field">
-                            <span class="profile-field-label">Membro desde</span>
-                            <span id="profile-member-since" class="profile-field-value">—</span>
+                            <span class="profile-field-label"
+                                >Membro desde</span
+                            >
+                            <span
+                                id="profile-member-since"
+                                class="profile-field-value"
+                                >—</span
+                            >
                         </div>
                         <div class="profile-field">
-                            <span class="profile-field-label">Workspaces ativos</span>
-                            <span id="profile-ws-count" class="profile-field-value">0</span>
+                            <span class="profile-field-label"
+                                >Workspaces ativos</span
+                            >
+                            <span
+                                id="profile-ws-count"
+                                class="profile-field-value"
+                                >0</span
+                            >
                         </div>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button id="close-profile-btn" class="ghost-btn">Fechar</button>
+                    <button id="close-profile-btn" class="ghost-btn">
+                        Fechar
+                    </button>
                 </div>
             </div>
         </div>
