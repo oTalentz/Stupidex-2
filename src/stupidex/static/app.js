@@ -1962,6 +1962,7 @@ els.settingsModal.addEventListener("click", (e) => {
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     if (!els.settingsModal.classList.contains("hidden")) closeSettings();
+    else if (!els.profileModal.classList.contains("hidden")) closeProfile();
     else if (!els.cloneModal.classList.contains("hidden"))
       els.cloneModal.classList.add("hidden");
     else if (!els.fileModal.classList.contains("hidden"))
@@ -2198,14 +2199,16 @@ if (els.modelSwitcher) {
 }
 
 // Shell widget wire-up
-els.shellRun.addEventListener("click", () => runShellCommand(els.shellInput.value));
-els.shellInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") {
-    e.preventDefault();
-    runShellCommand(els.shellInput.value);
-  }
-});
-els.shellClear.addEventListener("click", clearShell);
+if (els.shellRun && els.shellInput) {
+  els.shellRun.addEventListener("click", () => runShellCommand(els.shellInput.value));
+  els.shellInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      runShellCommand(els.shellInput.value);
+    }
+  });
+}
+if (els.shellClear) els.shellClear.addEventListener("click", clearShell);
 
 // Periodic file tree refresh (every 45s)
 setInterval(() => {
@@ -2546,22 +2549,46 @@ async function loadUserProfile() {
 function updateUserProfileBanner() {
   if (!els.userProfileBanner) return;
 
-  const { avatar_url } = state.user;
+  const { avatar_url, username, email } = state.user;
+  const displayName = username || email || "U";
 
   if (avatar_url) {
     els.userProfileAvatar.src = avatar_url;
     els.userProfileAvatar.style.display = "block";
-    els.userProfileBanner.classList.remove("hidden");
+    els.userProfileAvatar.style.backgroundColor = "transparent";
+    els.userProfileAvatar.style.color = "transparent";
+    els.userProfileAvatar.alt = displayName;
   } else {
     els.userProfileAvatar.src = "";
-    els.userProfileAvatar.style.display = "none";
-    els.userProfileBanner.classList.add("hidden");
+    els.userProfileAvatar.style.display = "flex";
+    els.userProfileAvatar.style.alignItems = "center";
+    els.userProfileAvatar.style.justifyContent = "center";
+    els.userProfileAvatar.style.backgroundColor = "var(--accent-soft)";
+    els.userProfileAvatar.style.color = "var(--accent)";
+    els.userProfileAvatar.style.fontSize = "14px";
+    els.userProfileAvatar.style.fontWeight = "600";
+    els.userProfileAvatar.textContent = displayName.charAt(0).toUpperCase();
   }
+  els.userProfileBanner.classList.remove("hidden");
 }
 
 function openProfile() {
   const u = state.user || {};
-  els.profileModalAvatar.src = u.avatar_url || "";
+  if (u.avatar_url) {
+    els.profileModalAvatar.src = u.avatar_url;
+    els.profileModalAvatar.style.display = "block";
+    els.profileModalAvatar.textContent = "";
+  } else {
+    els.profileModalAvatar.src = "";
+    els.profileModalAvatar.style.display = "flex";
+    els.profileModalAvatar.style.alignItems = "center";
+    els.profileModalAvatar.style.justifyContent = "center";
+    els.profileModalAvatar.style.backgroundColor = "var(--accent-soft)";
+    els.profileModalAvatar.style.color = "var(--accent)";
+    els.profileModalAvatar.style.fontSize = "20px";
+    els.profileModalAvatar.style.fontWeight = "600";
+    els.profileModalAvatar.textContent = (u.username || u.email || "U").charAt(0).toUpperCase();
+  }
   els.profileUsername.textContent = u.username || u.email || "—";
   els.profileEmail.textContent = u.email || "—";
   const provider = u.oauth_provider || "email";
