@@ -1,4 +1,5 @@
 """Core message and tool call data classes."""
+
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -52,6 +53,7 @@ class ToolCall:
 @dataclass
 class ChatMessage:
     """A message in a session, stored in the DB and exchanged with the LLM."""
+
     role: MessageRole
     content: str | list[dict[str, Any]] = ""
     type: MessageType = MessageType.TEXT
@@ -75,3 +77,29 @@ class ChatMessage:
         if self.role == MessageRole.TOOL and self.tool_call_id:
             msg["tool_call_id"] = self.tool_call_id
         return msg
+
+
+def filter_valid_tool_messages(history: list["ChatMessage"]) -> list["ChatMessage"]:
+    """Filter out tool messages that don't have a corresponding assistant message with tool_calls.
+
+    This is needed for DeepSeek and other providers that require tool messages to be
+    preceded by an assistant message with tool_calls.
+    """
+    if not history:
+        return history
+
+    filtered = []
+    for i, msg in enumerate(history):
+        # Always include system, user, and assistant messages
+        if msg.role in (MessageRole.SYSTEM, MessageRole.USER, MessageRole.ASSISTANT):
+            filtered.append(msg)
+        # Only include tool messages if preceded by an assistant message with tool_calls
+        elif msg.role == MessageRole.TOOL:
+            if (
+                i > 0
+                and filtered[-1].role == MessageRole.ASSISTANT
+                and filtered[-1].tool_calls
+            ):
+                filtered.append(msg)
+            # Otherwise skip this tool message (it's orphaned)
+    return filtered

@@ -125,6 +125,8 @@ def _active_workspace_path(user_id: str) -> str | None:
 
 def _history_for_llm(session_id: str, user_id: str = "") -> list[ChatMessage]:
     """Load the persisted history for a session and prepend the system message."""
+    from .message import filter_valid_tool_messages
+
     raw = db.get_messages(session_id)
     history: list[ChatMessage] = []
     if not raw or raw[0].role != MessageRole.SYSTEM:
@@ -135,6 +137,8 @@ def _history_for_llm(session_id: str, user_id: str = "") -> list[ChatMessage]:
         history.append(_reconstruct(r))
     if len(history) > MAX_HISTORY_MESSAGES:
         history = [history[0]] + history[-MAX_HISTORY_MESSAGES + 1 :]
+    # Filter out orphaned tool messages (fixes DeepSeek error)
+    history = filter_valid_tool_messages(history)
     return history
 
 
