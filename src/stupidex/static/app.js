@@ -1,12 +1,24 @@
 /* Stupidex client v2 — Workspaces, drag&drop, file tree, git clone */
 
 // Safely configure external libraries (they may fail to load from CDN).
-try { hljs && hljs.configure({ ignoreUnescapedHTML: true }); } catch (e) {}
 try {
-    marked && marked.setOptions({ breaks: true, gfm: true, highlight: function(code, lang) {
-        try { return lang && hljs && hljs.getLanguage(lang) ? hljs.highlight(code, { language: lang }).value : (hljs && hljs.highlightAuto(code).value); }
-        catch (e) { return code; }
-    }});
+  hljs && hljs.configure({ ignoreUnescapedHTML: true });
+} catch (e) {}
+try {
+  marked &&
+    marked.setOptions({
+      breaks: true,
+      gfm: true,
+      highlight: function (code, lang) {
+        try {
+          return lang && hljs && hljs.getLanguage(lang)
+            ? hljs.highlight(code, { language: lang }).value
+            : hljs && hljs.highlightAuto(code).value;
+        } catch (e) {
+          return code;
+        }
+      },
+    });
 } catch (e) {}
 
 // Avatar HTML for the assistant. Uses the Stupidex logo with a graceful
@@ -17,206 +29,257 @@ const USER_AVATAR_HTML = `<div class="avatar user">U</div>`;
 const $ = (id) => document.getElementById(id);
 
 const els = {
-    sidebar: $("sidebar"),
-    sessionList: $("session-list"),
-    newChatBtn: $("new-chat-btn"),
-    openSettings: $("open-settings"),
-    logoutBtn: $("logout-btn"),
-    railWorkspace: $("rail-workspace"),
+  sidebar: $("sidebar"),
+  sessionList: $("session-list"),
+  newChatBtn: $("new-chat-btn"),
+  openSettings: $("open-settings"),
+  logoutBtn: $("logout-btn"),
+  railWorkspace: $("rail-workspace"),
 
-    workspacePanel: $("workspace-panel"),
-    workspaceList: $("workspace-list"),
-    treeContainer: $("tree-container"),
-    refreshWs: $("ws-refresh"),
-    uploadBtn: $("upload-btn"),
-    cloneBtn: $("clone-btn"),
-    newWsBtn: $("new-ws-btn"),
-    fileInput: $("file-input"),
-    wsFilesCount: $("ws-files-count"),
-    wsActiveBadge: $("ws-active-badge"),
+  workspacePanel: $("workspace-panel"),
+  workspaceList: $("workspace-list"),
+  treeContainer: $("tree-container"),
+  refreshWs: $("ws-refresh"),
+  uploadBtn: $("upload-btn"),
+  cloneBtn: $("clone-btn"),
+  newWsBtn: $("new-ws-btn"),
+  fileInput: $("file-input"),
+  wsFilesCount: $("ws-files-count"),
+  wsActiveBadge: $("ws-active-badge"),
 
-    sessionTitle: $("session-title"),
-    messages: $("messages"),
-    form: $("form"),
-    input: $("input"),
-    sendBtn: $("send-btn"),
-    stopBtn: $("stop-btn"),
-    status: $("status"),
+  sessionTitle: $("session-title"),
+  messages: $("messages"),
+  form: $("form"),
+  input: $("input"),
+  sendBtn: $("send-btn"),
+  stopBtn: $("stop-btn"),
+  status: $("status"),
 
-    providerBadge: $("provider-badge"),
-    modelBadge: $("model-badge"),
+  providerBadge: $("provider-badge"),
+  modelBadge: $("model-badge"),
 
-    settingsModal: $("settings-modal"),
-    closeSettings: $("close-settings"),
-    cancelSettings: $("cancel-settings"),
-    saveSettings: $("save-settings"),
-    providerSelect: $("provider-select"),
-    apiKeyField: $("api-key-field"),
-    apiKeyInput: $("api-key-input"),
-    apiKeyStatus: $("api-key-status"),
-    apiKeyHint: $("api-key-hint"),
-    toggleKeyBtn: $("toggle-key-visibility"),
-    modelInput: $("model-input"),
+  settingsModal: $("settings-modal"),
+  closeSettings: $("close-settings"),
+  cancelSettings: $("cancel-settings"),
+  saveSettings: $("save-settings"),
+  providerSelect: $("provider-select"),
+  apiKeyField: $("api-key-field"),
+  apiKeyInput: $("api-key-input"),
+  apiKeyStatus: $("api-key-status"),
+  apiKeyHint: $("api-key-hint"),
+  toggleKeyBtn: $("toggle-key-visibility"),
+  modelInput: $("model-input"),
 
-    themeToggle: $("theme-toggle"),
+  themeToggle: $("theme-toggle"),
 
-    cloneModal: $("clone-modal"),
-    closeClone: $("close-clone"),
-    cancelClone: $("cancel-clone"),
-    confirmClone: $("confirm-clone"),
-    cloneUrl: $("clone-url"),
-    cloneBranch: $("clone-branch"),
-    cloneName: $("clone-name"),
-    cloneStatus: $("clone-status"),
+  cloneModal: $("clone-modal"),
+  closeClone: $("close-clone"),
+  cancelClone: $("cancel-clone"),
+  confirmClone: $("confirm-clone"),
+  cloneUrl: $("clone-url"),
+  cloneBranch: $("clone-branch"),
+  cloneName: $("clone-name"),
+  cloneStatus: $("clone-status"),
 
-    fileModal: $("file-modal"),
-    closeFile: $("close-file"),
-    fileModalTitle: $("file-modal-title"),
-    fileModalContent: $("file-modal-content"),
+  fileModal: $("file-modal"),
+  closeFile: $("close-file"),
+  fileModalTitle: $("file-modal-title"),
+  fileModalContent: $("file-modal-content"),
 
-    dropOverlay: $("drop-overlay"),
+  dropOverlay: $("drop-overlay"),
 
-    // v3 premium UI elements
-    researchPanel: $("research-panel"),
-    researchToggle: $("research-toggle"),
-    closeResearch: $("close-research"),
-    researchTabs: document.querySelectorAll(".research-tab"),
-    researchTabPanes: {
-        sources: $("research-tab-sources"),
-        notes: $("research-tab-notes"),
-        graph: $("research-tab-graph"),
-    },
-    composerAttach: $("composer-attach"),
-    composerImageInput: $("composer-image-input"),
-    composerImagePreview: $("composer-image-preview"),
-    composerInputWrap: $("composer-input-wrap"),
-    visionIndicator: $("vision-indicator"),
-    composerViewProject: $("composer-view-project"),
-    modelSwitcher: $("model-switcher"),
+  // v3 premium UI elements
+  researchPanel: $("research-panel"),
+  researchToggle: $("research-toggle"),
+  closeResearch: $("close-research"),
+  researchTabs: document.querySelectorAll(".research-tab"),
+  researchTabPanes: {
+    sources: $("research-tab-sources"),
+    notes: $("research-tab-notes"),
+    graph: $("research-tab-graph"),
+  },
+  composerAttach: $("composer-attach"),
+  composerImageInput: $("composer-image-input"),
+  composerImagePreview: $("composer-image-preview"),
+  composerInputWrap: $("composer-input-wrap"),
+  visionIndicator: $("vision-indicator"),
+  composerViewProject: $("composer-view-project"),
+  modelSwitcher: $("model-switcher"),
+
+  // Trash & confirm modal
+  railTrash: $("rail-trash"),
+  confirmModal: $("confirm-modal"),
+  closeConfirm: $("close-confirm"),
+  cancelConfirm: $("cancel-confirm"),
+  confirmDelete: $("confirm-delete"),
+  confirmTitle: $("confirm-title"),
+  confirmMessage: $("confirm-message"),
 };
 
 let state = {
-    providers: [],
-    config: { provider: "deepseek-v4-flash", model: "deepseek-v4-flash", has_api_key: false },
-    workspaces: { workspaces: [], active_id: null },
-    sessions: [],
-    currentSessionId: null,
-    busy: false,
-    abortController: null,
-    tree: [],
-    dropCounter: 0,
-    pendingImages: [],
+  providers: [],
+  config: {
+    provider: "deepseek-v4-flash",
+    model: "deepseek-v4-flash",
+    has_api_key: false,
+  },
+  workspaces: { workspaces: [], active_id: null },
+  sessions: [],
+  currentSessionId: null,
+  busy: false,
+  abortController: null,
+  tree: [],
+  dropCounter: 0,
+  pendingImages: [],
+  confirmCallback: null,
+  trashMode: false,
 };
 
 const MAX_CHAT_IMAGES = 4;
 const MAX_CHAT_IMAGE_BYTES = 5 * 1024 * 1024;
-const CHAT_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+const CHAT_IMAGE_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+]);
+const CHAT_IMAGE_MAX_DISPLAY_WIDTH = 300;
+const CHAT_IMAGE_MAX_DISPLAY_HEIGHT = 300;
+
+// Confirm modal helper
+function showConfirm(title, message, onConfirm) {
+  els.confirmTitle.textContent = title;
+  els.confirmMessage.textContent = message;
+  els.confirmModal.classList.remove("hidden");
+  state.confirmCallback = onConfirm;
+}
+
+function hideConfirm() {
+  els.confirmModal.classList.add("hidden");
+  state.confirmCallback = null;
+}
 
 function escapeHtml(s) {
-    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 function fmtSize(n) {
-    if (n < 1024) return n + " B";
-    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
-    return (n / 1024 / 1024).toFixed(1) + " MB";
+  if (n < 1024) return n + " B";
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+  return (n / 1024 / 1024).toFixed(1) + " MB";
 }
 
 function currentProvider() {
-    return state.providers.find(p => p.id === state.config.provider) || null;
+  return state.providers.find((p) => p.id === state.config.provider) || null;
 }
 
 function currentModelSupportsVision() {
-    return Boolean(currentProvider()?.supports_vision);
+  return Boolean(currentProvider()?.supports_vision);
 }
 
 function fileToDataUrl(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = () => reject(new Error(`Não foi possível ler ${file.name || "a imagem"}`));
-        reader.readAsDataURL(file);
-    });
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () =>
+      reject(new Error(`Não foi possível ler ${file.name || "a imagem"}`));
+    reader.readAsDataURL(file);
+  });
 }
 
 async function addChatImages(fileList) {
-    const files = Array.from(fileList || []).filter(file => file.type.startsWith("image/"));
-    if (!files.length) return;
-    if (!currentModelSupportsVision()) {
-        alert("O modelo selecionado não aceita imagens. Escolha um modelo com visão.");
-        return;
+  const files = Array.from(fileList || []).filter((file) =>
+    file.type.startsWith("image/"),
+  );
+  if (!files.length) return;
+  if (!currentModelSupportsVision()) {
+    alert(
+      "O modelo selecionado não aceita imagens. Escolha um modelo com visão.",
+    );
+    return;
+  }
+  const available = MAX_CHAT_IMAGES - state.pendingImages.length;
+  if (available <= 0) {
+    alert(
+      `Você pode anexar no máximo ${MAX_CHAT_IMAGES} imagens por mensagem.`,
+    );
+    return;
+  }
+  for (const file of files.slice(0, available)) {
+    if (!CHAT_IMAGE_TYPES.has(file.type)) {
+      alert(`Formato não suportado: ${file.type || file.name}`);
+      continue;
     }
-    const available = MAX_CHAT_IMAGES - state.pendingImages.length;
-    if (available <= 0) {
-        alert(`Você pode anexar no máximo ${MAX_CHAT_IMAGES} imagens por mensagem.`);
-        return;
+    if (file.size > MAX_CHAT_IMAGE_BYTES) {
+      alert(`${file.name || "Imagem"} excede o limite de 5 MB.`);
+      continue;
     }
-    for (const file of files.slice(0, available)) {
-        if (!CHAT_IMAGE_TYPES.has(file.type)) {
-            alert(`Formato não suportado: ${file.type || file.name}`);
-            continue;
-        }
-        if (file.size > MAX_CHAT_IMAGE_BYTES) {
-            alert(`${file.name || "Imagem"} excede o limite de 5 MB.`);
-            continue;
-        }
-        try {
-            state.pendingImages.push({
-                id: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
-                name: file.name || "imagem-colada.png",
-                type: file.type,
-                size: file.size,
-                dataUrl: await fileToDataUrl(file),
-            });
-        } catch (error) {
-            alert(error.message);
-        }
+    try {
+      state.pendingImages.push({
+        id:
+          globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
+        name: file.name || "imagem-colada.png",
+        type: file.type,
+        size: file.size,
+        dataUrl: await fileToDataUrl(file),
+      });
+    } catch (error) {
+      alert(error.message);
     }
-    renderChatImagePreviews();
+  }
+  renderChatImagePreviews();
 }
 
 function renderChatImagePreviews() {
-    els.composerImagePreview.innerHTML = "";
-    els.composerImagePreview.classList.toggle("hidden", state.pendingImages.length === 0);
-    for (const image of state.pendingImages) {
-        const item = document.createElement("div");
-        item.className = "composer-image-item";
-        const thumbnail = document.createElement("img");
-        thumbnail.src = image.dataUrl;
-        thumbnail.alt = image.name;
-        const remove = document.createElement("button");
-        remove.type = "button";
-        remove.className = "composer-image-remove";
-        remove.title = "Remover imagem";
-        remove.setAttribute("aria-label", `Remover ${image.name}`);
-        remove.textContent = "×";
-        remove.addEventListener("click", () => {
-            state.pendingImages = state.pendingImages.filter(candidate => candidate.id !== image.id);
-            renderChatImagePreviews();
-        });
-        item.append(thumbnail, remove);
-        els.composerImagePreview.appendChild(item);
-    }
+  els.composerImagePreview.innerHTML = "";
+  els.composerImagePreview.classList.toggle(
+    "hidden",
+    state.pendingImages.length === 0,
+  );
+  for (const image of state.pendingImages) {
+    const item = document.createElement("div");
+    item.className = "composer-image-item";
+    const thumbnail = document.createElement("img");
+    thumbnail.src = image.dataUrl;
+    thumbnail.alt = image.name;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "composer-image-remove";
+    remove.title = "Remover imagem";
+    remove.setAttribute("aria-label", `Remover ${image.name}`);
+    remove.textContent = "×";
+    remove.addEventListener("click", () => {
+      state.pendingImages = state.pendingImages.filter(
+        (candidate) => candidate.id !== image.id,
+      );
+      renderChatImagePreviews();
+    });
+    item.append(thumbnail, remove);
+    els.composerImagePreview.appendChild(item);
+  }
 }
 
 function clearChatImages() {
-    state.pendingImages = [];
-    if (els.composerImageInput) els.composerImageInput.value = "";
-    renderChatImagePreviews();
+  state.pendingImages = [];
+  if (els.composerImageInput) els.composerImageInput.value = "";
+  renderChatImagePreviews();
 }
 
 function fmtTime(ts) {
-    if (!ts) return "";
-    const d = new Date(ts * 1000);
-    const now = new Date();
-    if (d.toDateString() === now.toDateString())
-        return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    return d.toLocaleDateString();
+  if (!ts) return "";
+  const d = new Date(ts * 1000);
+  const now = new Date();
+  if (d.toDateString() === now.toDateString())
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleDateString();
 }
 
 function fmtTokens(n) {
-    if (n < 1000) return n;
-    return (n / 1000).toFixed(1) + "k";
+  if (n < 1000) return n;
+  return (n / 1000).toFixed(1) + "k";
 }
 
 // ============================================================
@@ -224,138 +287,243 @@ function fmtTokens(n) {
 // ============================================================
 
 async function loadSessions() {
-    const r = await fetch("/api/sessions");
-    state.sessions = await r.json();
-    renderSessions();
+  const r = await fetch("/api/sessions");
+  state.sessions = await r.json();
+  renderSessions();
 }
 
 function renderSessions() {
-    els.sessionList.innerHTML = "";
-    for (const s of state.sessions) {
-        const li = document.createElement("div");
-        li.className = "session-item" + (s.id === state.currentSessionId ? " active" : "");
-        if (s.pinned) li.classList.add("pinned");
+  els.sessionList.innerHTML = "";
+  const sessionsToShow = state.trashMode
+    ? state.sessions.filter((s) => s.trashed)
+    : state.sessions.filter((s) => !s.trashed);
 
-        if (s.pinned) {
-            const pin = document.createElement("span");
-            pin.className = "pin-icon";
-            pin.textContent = "★";
-            pin.title = "Fixada";
-            li.appendChild(pin);
-        }
+  if (sessionsToShow.length === 0) {
+    const emptyMsg = document.createElement("div");
+    emptyMsg.className = "sessions-empty";
+    emptyMsg.textContent = state.trashMode
+      ? "A lixeira está vazia"
+      : "Nenhuma conversa ainda. Clique em + para começar.";
+    els.sessionList.appendChild(emptyMsg);
+    return;
+  }
 
-        const title = document.createElement("div");
-        title.className = "title";
-        title.textContent = s.title || "Nova conversa";
-        title.title = `${s.title}\n${s.message_count} mensagens · ${fmtTime(s.updated_at)}`;
-        li.appendChild(title);
+  for (const s of sessionsToShow) {
+    const li = document.createElement("div");
+    li.className =
+      "session-item" + (s.id === state.currentSessionId ? " active" : "");
+    if (s.pinned) li.classList.add("pinned");
+    if (s.trashed) li.classList.add("trashed");
 
-        const more = document.createElement("button");
-        more.className = "delete";
-        more.textContent = "⋯";
-        more.title = "Mais ações";
-        more.addEventListener("click", (e) => {
-            e.stopPropagation();
-            showSessionMenu(s, li);
-        });
-        li.appendChild(more);
-
-        li.addEventListener("click", () => openSession(s.id));
-        els.sessionList.appendChild(li);
+    if (s.pinned) {
+      const pin = document.createElement("span");
+      pin.className = "pin-icon";
+      pin.textContent = "★";
+      pin.title = "Fixada";
+      li.appendChild(pin);
     }
+
+    const title = document.createElement("div");
+    title.className = "title";
+    title.textContent = s.title || "Nova conversa";
+    title.title = `${s.title}\n${s.message_count} mensagens · ${fmtTime(s.updated_at)}`;
+    li.appendChild(title);
+
+    const more = document.createElement("button");
+    more.className = "session-more-btn";
+    more.innerHTML = '<i class="ph ph-dots-three"></i>';
+    more.title = "Mais ações";
+    more.addEventListener("click", (e) => {
+      e.stopPropagation();
+      showSessionMenu(s, li);
+    });
+    li.appendChild(more);
+
+    li.addEventListener("click", () => openSession(s.id));
+    els.sessionList.appendChild(li);
+  }
 }
 
 function showSessionMenu(session, anchorEl) {
-    // Reuse a single floating menu
-    let menu = document.getElementById("session-menu");
-    if (menu) menu.remove();
-    menu = document.createElement("div");
-    menu.id = "session-menu";
-    menu.className = "context-menu";
+  // Reuse a single floating menu
+  let menu = document.getElementById("session-menu");
+  if (menu) menu.remove();
+  menu = document.createElement("div");
+  menu.id = "session-menu";
+  menu.className = "context-menu";
+  const isTrashed = session.trashed || false;
+
+  if (isTrashed) {
     menu.innerHTML = `
-        <button data-act="rename"><span>✎</span> Renomear</button>
-        <button data-act="pin"><span>${session.pinned ? "☆" : "★"}</span> ${session.pinned ? "Desafixar" : "Fixar"}</button>
-        <button data-act="export-md"><span>↓</span> Exportar Markdown</button>
-        <button data-act="export-json"><span>↓</span> Exportar JSON</button>
-        <button data-act="clear"><span>⌫</span> Limpar mensagens</button>
-        <button data-act="archive"><span>${session.archived ? "↩" : "↓"}</span> ${session.archived ? "Reabrir" : "Arquivar"}</button>
-        <button data-act="delete" class="danger"><span>×</span> Apagar permanentemente</button>
+        <button data-act="restore" class="menu-item"><span class="menu-icon">↩</span> Restaurar</button>
+        <button data-act="delete-permanent" class="menu-item menu-danger"><span class="menu-icon">×</span> Apagar permanentemente</button>
     `;
-    const rect = anchorEl.getBoundingClientRect();
-    menu.style.position = "fixed";
-    menu.style.left = `${rect.right - 180}px`;
-    menu.style.top = `${rect.bottom + 2}px`;
-    document.body.appendChild(menu);
+  } else {
+    menu.innerHTML = `
+        <button data-act="rename" class="menu-item"><span class="menu-icon">✎</span> Renomear</button>
+        <button data-act="pin" class="menu-item"><span class="menu-icon">${session.pinned ? "☆" : "★"}</span> ${session.pinned ? "Desafixar" : "Fixar"}</button>
+        <button data-act="export-md" class="menu-item"><span class="menu-icon">↓</span> Exportar Markdown</button>
+        <button data-act="export-json" class="menu-item"><span class="menu-icon">↓</span> Exportar JSON</button>
+        <button data-act="clear" class="menu-item"><span class="menu-icon">⌫</span> Limpar mensagens</button>
+        <button data-act="archive" class="menu-item"><span class="menu-icon">${session.archived ? "↩" : "↓"}</span> ${session.archived ? "Reabrir" : "Arquivar"}</button>
+        <button data-act="trash" class="menu-item menu-danger"><span class="menu-icon">🗑️</span> Mover para lixeira</button>
+    `;
+  }
+  const rect = anchorEl.getBoundingClientRect();
+  menu.style.position = "fixed";
+  menu.style.left = `${rect.right - 180}px`;
+  menu.style.top = `${rect.bottom + 2}px`;
+  document.body.appendChild(menu);
 
-    menu.addEventListener("click", async (e) => {
-        const btn = e.target.closest("button");
-        if (!btn) return;
-        const act = btn.dataset.act;
-        menu.remove();
-        if (act === "rename") {
-            const t = prompt("Novo título:", session.title);
-            if (t) { await fetch(`/api/sessions/${session.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: t }) }); await loadSessions(); }
-        } else if (act === "pin") {
-            await fetch(`/api/sessions/${session.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pinned: !session.pinned }) });
-            await loadSessions();
-        } else if (act === "export-md" || act === "export-json") {
-            const fmt = act === "export-md" ? "md" : "json";
-            window.open(`/api/sessions/${session.id}/export?format=${fmt}`);
-        } else if (act === "clear") {
-            if (!confirm("Limpar todas as mensagens desta conversa? (a sessão será mantida)")) return;
-            await fetch(`/api/sessions/${session.id}/clear`, { method: "POST" });
-            if (state.currentSessionId === session.id) { els.messages.innerHTML = ""; renderWelcome(); }
-        } else if (act === "archive") {
-            await fetch(`/api/sessions/${session.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ archived: !session.archived }) });
-            if (state.currentSessionId === session.id && session.archived === false) { state.currentSessionId = null; els.messages.innerHTML = ""; renderWelcome(); els.sessionTitle.textContent = "Stupidex"; }
-            await loadSessions();
-        } else if (act === "delete") {
-            await deleteSession(session.id);
-        }
-    });
+  menu.addEventListener("click", async (e) => {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    const act = btn.dataset.act;
+    menu.remove();
+    if (act === "rename") {
+      const t = prompt("Novo título:", session.title);
+      if (t) {
+        await fetch(`/api/sessions/${session.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: t }),
+        });
+        await loadSessions();
+      }
+    } else if (act === "pin") {
+      await fetch(`/api/sessions/${session.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pinned: !session.pinned }),
+      });
+      await loadSessions();
+    } else if (act === "export-md" || act === "export-json") {
+      const fmt = act === "export-md" ? "md" : "json";
+      window.open(`/api/sessions/${session.id}/export?format=${fmt}`);
+    } else if (act === "clear") {
+      if (
+        !confirm(
+          "Limpar todas as mensagens desta conversa? (a sessão será mantida)",
+        )
+      )
+        return;
+      await fetch(`/api/sessions/${session.id}/clear`, { method: "POST" });
+      if (state.currentSessionId === session.id) {
+        els.messages.innerHTML = "";
+        renderWelcome();
+      }
+    } else if (act === "archive") {
+      await fetch(`/api/sessions/${session.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ archived: !session.archived }),
+      });
+      if (state.currentSessionId === session.id && session.archived === false) {
+        state.currentSessionId = null;
+        els.messages.innerHTML = "";
+        renderWelcome();
+        els.sessionTitle.textContent = "Stupidex";
+      }
+      await loadSessions();
+    } else if (act === "trash") {
+      showConfirm(
+        "Mover para lixeira",
+        `Tem certeza que deseja mover "${session.title || "Esta conversa"}" para a lixeira?`,
+        async () => {
+          await moveSessionToTrash(session.id);
+          hideConfirm();
+        },
+      );
+    } else if (act === "restore") {
+      await fetch(`/api/sessions/${session.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trashed: false }),
+      });
+      const s = state.sessions.find((s) => s.id === session.id);
+      if (s) s.trashed = false;
+      await loadSessions();
+    } else if (act === "delete-permanent") {
+      showConfirm(
+        "Apagar permanentemente",
+        `Tem certeza que deseja apagar permanentemente "${session.title || "Esta conversa"}"? Esta ação não pode ser desfeita.`,
+        async () => {
+          await deleteSession(session.id);
+          hideConfirm();
+        },
+      );
+    }
+  });
 
-    const closeOnOutside = (e) => {
-        if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener("click", closeOnOutside); }
-    };
-    setTimeout(() => document.addEventListener("click", closeOnOutside), 0);
+  const closeOnOutside = (e) => {
+    if (!menu.contains(e.target)) {
+      menu.remove();
+      document.removeEventListener("click", closeOnOutside);
+    }
+  };
+  setTimeout(() => document.addEventListener("click", closeOnOutside), 0);
 }
 
 async function newSession() {
-    const r = await fetch("/api/sessions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-    });
-    if (!r.ok) return;
-    const s = await r.json();
-    state.sessions.unshift(s);
-    state.currentSessionId = s.id;
-    renderSessions();
-    renderWelcome();
-    els.sessionTitle.textContent = s.title;
-    els.input.focus();
+  const r = await fetch("/api/sessions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  if (!r.ok) return;
+  const s = await r.json();
+  state.sessions.unshift(s);
+  state.currentSessionId = s.id;
+  renderSessions();
+  renderWelcome();
+  els.sessionTitle.textContent = s.title;
+  els.input.focus();
 }
 
 async function openSession(id) {
-    if (state.busy) return;
-    state.currentSessionId = id;
-    renderSessions();
-    await loadMessages(id);
-    const s = state.sessions.find(x => x.id === id);
-    if (s) els.sessionTitle.textContent = s.title;
-    els.workspacePanel.classList.remove("mobile-open");
+  if (state.busy) return;
+  state.currentSessionId = id;
+  renderSessions();
+  await loadMessages(id);
+  const s = state.sessions.find((x) => x.id === id);
+  if (s) els.sessionTitle.textContent = s.title;
+  els.workspacePanel.classList.remove("mobile-open");
+}
+
+async function moveSessionToTrash(id) {
+  await fetch(`/api/sessions/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ trashed: true }),
+  });
+  const session = state.sessions.find((s) => s.id === id);
+  if (session) {
+    session.trashed = true;
+  }
+  if (state.currentSessionId === id) {
+    state.currentSessionId = null;
+    els.messages.innerHTML = "";
+    renderWelcome();
+    els.sessionTitle.textContent = "Stupidex";
+  }
+  renderSessions();
 }
 
 async function deleteSession(id) {
-    if (!confirm("Apagar essa conversa?")) return;
-    await fetch(`/api/sessions/${id}`, { method: "DELETE" });
-    state.sessions = state.sessions.filter(s => s.id !== id);
-    if (state.currentSessionId === id) {
-        state.currentSessionId = null;
-        renderWelcome();
-        els.sessionTitle.textContent = "Stupidex";
-    }
-    renderSessions();
+  if (
+    !confirm(
+      "Apagar permanentemente essa conversa? Esta ação não pode ser desfeita.",
+    )
+  )
+    return;
+  await fetch(`/api/sessions/${id}`, { method: "DELETE" });
+  state.sessions = state.sessions.filter((s) => s.id !== id);
+  if (state.currentSessionId === id) {
+    state.currentSessionId = null;
+    renderWelcome();
+    els.sessionTitle.textContent = "Stupidex";
+  }
+  renderSessions();
 }
 
 // ============================================================
@@ -363,27 +531,29 @@ async function deleteSession(id) {
 // ============================================================
 
 async function loadMessages(sid) {
-    const r = await fetch(`/api/sessions/${sid}/messages`);
-    const msgs = await r.json();
-    renderMessages(msgs);
+  const r = await fetch(`/api/sessions/${sid}/messages`);
+  const msgs = await r.json();
+  renderMessages(msgs);
 }
 
 function renderWelcome() {
-    const loading = document.querySelector(".messages-loading");
-    if (loading) loading.remove();
-    els.messages.innerHTML = "";
-    const wrap = document.createElement("div");
-    wrap.className = "welcome";
-    const hasWs = state.workspaces.active_id;
-    wrap.innerHTML = hasWs ? `
+  const loading = document.querySelector(".messages-loading");
+  if (loading) loading.remove();
+  els.messages.innerHTML = "";
+  const wrap = document.createElement("div");
+  wrap.className = "welcome";
+  const hasWs = state.workspaces.active_id;
+  wrap.innerHTML = hasWs
+    ? `
         <h2>Como posso ajudar hoje?</h2>
-        <p>Estou com o workspace <strong>${escapeHtml(state.workspaces.workspaces.find(w => w.id === hasWs)?.name || "ativo")}</strong> carregado. Peça uma alteração, descreva um bug, ou me peça para explorar o código.</p>
-    ` : `
+        <p>Estou com o workspace <strong>${escapeHtml(state.workspaces.workspaces.find((w) => w.id === hasWs)?.name || "ativo")}</strong> carregado. Peça uma alteração, descreva um bug, ou me peça para explorar o código.</p>
+    `
+    : `
         <h2>Como posso ajudar hoje?</h2>
         <p>Antes de tudo, faça <strong>upload</strong> de arquivos ou <strong>clone um repositório</strong> no painel à esquerda. Aí posso ler, editar e rodar o código pra você.</p>
     `;
-    if (!hasWs) {
-        wrap.innerHTML += `
+  if (!hasWs) {
+    wrap.innerHTML += `
             <div class="suggestions">
                 <div class="suggestion" data-action="upload">📤 Enviar arquivos</div>
                 <div class="suggestion" data-action="clone">⎘ Clonar repositório</div>
@@ -391,21 +561,21 @@ function renderWelcome() {
                 <div class="suggestion" data-action="example">💬 Exemplo de pergunta</div>
             </div>
         `;
-        wrap.querySelectorAll(".suggestion").forEach(s => {
-            s.addEventListener("click", () => {
-                const a = s.dataset.action;
-                if (a === "upload") els.uploadBtn.click();
-                else if (a === "clone") els.cloneBtn.click();
-                else if (a === "new") els.newWsBtn.click();
-                else if (a === "example") {
-                    els.input.value = "Liste os arquivos do projeto e me dê um resumo.";
-                    els.input.focus();
-                    autoSize();
-                }
-            });
-        });
-    } else {
-        wrap.innerHTML += `
+    wrap.querySelectorAll(".suggestion").forEach((s) => {
+      s.addEventListener("click", () => {
+        const a = s.dataset.action;
+        if (a === "upload") els.uploadBtn.click();
+        else if (a === "clone") els.cloneBtn.click();
+        else if (a === "new") els.newWsBtn.click();
+        else if (a === "example") {
+          els.input.value = "Liste os arquivos do projeto e me dê um resumo.";
+          els.input.focus();
+          autoSize();
+        }
+      });
+    });
+  } else {
+    wrap.innerHTML += `
             <div class="suggestions">
                 <div class="suggestion">📂 Resumir o projeto</div>
                 <div class="suggestion">🐛 Procurar bugs</div>
@@ -413,530 +583,599 @@ function renderWelcome() {
                 <div class="suggestion">🧪 Rodar testes</div>
             </div>
         `;
-        const prompts = [
-            "Resuma a estrutura deste projeto e me diga o que ele faz.",
-            "Procure bugs óbvios nos arquivos Python.",
-            "Crie um README.md básico para o projeto.",
-            "Rode os testes e me diga o que falhou.",
-        ];
-        wrap.querySelectorAll(".suggestion").forEach((s, i) => {
-            s.addEventListener("click", () => {
-                els.input.value = prompts[i];
-                els.input.focus();
-                autoSize();
-            });
-        });
-    }
-    els.messages.appendChild(wrap);
+    const prompts = [
+      "Resuma a estrutura deste projeto e me diga o que ele faz.",
+      "Procure bugs óbvios nos arquivos Python.",
+      "Crie um README.md básico para o projeto.",
+      "Rode os testes e me diga o que falhou.",
+    ];
+    wrap.querySelectorAll(".suggestion").forEach((s, i) => {
+      s.addEventListener("click", () => {
+        els.input.value = prompts[i];
+        els.input.focus();
+        autoSize();
+      });
+    });
+  }
+  els.messages.appendChild(wrap);
 }
 
 function renderMessages(msgs) {
-    const loading = document.querySelector(".messages-loading");
-    if (loading) loading.remove();
-    els.messages.innerHTML = "";
-    if (!msgs.length) { renderWelcome(); return; }
-    const inner = document.createElement("div");
-    inner.className = "messages-inner";
-    els.messages.appendChild(inner);
+  const loading = document.querySelector(".messages-loading");
+  if (loading) loading.remove();
+  els.messages.innerHTML = "";
+  if (!msgs.length) {
+    renderWelcome();
+    return;
+  }
+  const inner = document.createElement("div");
+  inner.className = "messages-inner";
+  els.messages.appendChild(inner);
 
-    let i = 0;
-    while (i < msgs.length) {
-        const m = msgs[i];
-        if (m.role === "user") {
-            const userBubble = buildUserBubble(m.content, m.metadata?.images || []);
-            attachUserActions(userBubble, m.content);
-            inner.appendChild(userBubble);
-            i++;
-        } else if (m.role === "assistant" && m.type === "text") {
-            const aBubble = buildAssistantBubble(m);
-            // Convert to row so we can attach actions; we re-attach the bubble inside
-            const row = document.createElement("div");
-            row.className = "message assistant";
-            row.innerHTML = `${ASSISTANT_AVATAR_HTML}<div class="bubble"></div>`;
-            row.querySelector(".bubble").innerHTML = aBubble.querySelector(".bubble").innerHTML;
-            attachAssistantActions(row);
-            inner.appendChild(row);
-            // Re-highlight code blocks
-            row.querySelectorAll("pre code").forEach(block => { try { hljs.highlightElement(block); } catch {} });
-            i++;
-        } else if (m.role === "assistant" && m.type === "tool_call") {
-            const group = buildAssistantGroup(m, msgs, i);
-            attachAssistantActions(group.el);
-            inner.appendChild(group.el);
-            i = group.next;
-        } else if (m.role === "tool") {
-            inner.appendChild(buildToolResultBlock(m, null));
-            i++;
-        } else {
-            i++;
-        }
+  let i = 0;
+  while (i < msgs.length) {
+    const m = msgs[i];
+    if (m.role === "user") {
+      const userBubble = buildUserBubble(m.content, m.metadata?.images || []);
+      attachUserActions(userBubble, m.content);
+      inner.appendChild(userBubble);
+      i++;
+    } else if (m.role === "assistant" && m.type === "text") {
+      const aBubble = buildAssistantBubble(m);
+      // Convert to row so we can attach actions; we re-attach the bubble inside
+      const row = document.createElement("div");
+      row.className = "message assistant";
+      row.innerHTML = `${ASSISTANT_AVATAR_HTML}<div class="bubble"></div>`;
+      row.querySelector(".bubble").innerHTML =
+        aBubble.querySelector(".bubble").innerHTML;
+      attachAssistantActions(row);
+      inner.appendChild(row);
+      // Re-highlight code blocks
+      row.querySelectorAll("pre code").forEach((block) => {
+        try {
+          hljs.highlightElement(block);
+        } catch {}
+      });
+      i++;
+    } else if (m.role === "assistant" && m.type === "tool_call") {
+      const group = buildAssistantGroup(m, msgs, i);
+      attachAssistantActions(group.el);
+      inner.appendChild(group.el);
+      i = group.next;
+    } else if (m.role === "tool") {
+      inner.appendChild(buildToolResultBlock(m, null));
+      i++;
+    } else {
+      i++;
     }
-    scrollToBottom();
+  }
+  scrollToBottom();
 }
 
 function buildUserBubble(text, images = []) {
-    const row = document.createElement("div");
-    row.className = "message user";
-    row.innerHTML = `${USER_AVATAR_HTML}<div class="bubble">${DOMPurify.sanitize(marked.parse(text || ""))}</div>`;
-    const bubble = row.querySelector(".bubble");
-    if (images.length) {
-        const gallery = document.createElement("div");
-        gallery.className = "message-image-gallery";
-        for (const image of images) {
-            if (image.dataUrl || image.data_url) {
-                const img = document.createElement("img");
-                img.src = image.dataUrl || image.data_url;
-                img.alt = image.name || "Imagem anexada";
-                img.loading = "lazy";
-                gallery.appendChild(img);
-            } else {
-                const attachment = document.createElement("span");
-                attachment.className = "message-image-attachment";
-                attachment.textContent = `Imagem: ${image.name || "anexo"}`;
-                gallery.appendChild(attachment);
-            }
-        }
-        bubble.prepend(gallery);
+  const row = document.createElement("div");
+  row.className = "message user";
+  row.innerHTML = `${USER_AVATAR_HTML}<div class="bubble">${DOMPurify.sanitize(marked.parse(text || ""))}</div>`;
+  const bubble = row.querySelector(".bubble");
+  if (images.length) {
+    const gallery = document.createElement("div");
+    gallery.className = "message-image-gallery";
+    for (const image of images) {
+      if (image.dataUrl || image.data_url) {
+        const img = document.createElement("img");
+        img.src = image.dataUrl || image.data_url;
+        img.alt = image.name || "Imagem anexada";
+        img.loading = "lazy";
+        gallery.appendChild(img);
+      } else {
+        const attachment = document.createElement("span");
+        attachment.className = "message-image-attachment";
+        attachment.textContent = `Imagem: ${image.name || "anexo"}`;
+        gallery.appendChild(attachment);
+      }
     }
-    return row;
+    bubble.prepend(gallery);
+  }
+  return row;
 }
 
 function buildAssistantBubble(m) {
-    const row = document.createElement("div");
-    row.className = "message assistant";
-    row.innerHTML = `${ASSISTANT_AVATAR_HTML}<div class="bubble">${DOMPurify.sanitize(marked.parse(m.content || ""))}</div>`;
-    return row;
+  const row = document.createElement("div");
+  row.className = "message assistant";
+  row.innerHTML = `${ASSISTANT_AVATAR_HTML}<div class="bubble">${DOMPurify.sanitize(marked.parse(m.content || ""))}</div>`;
+  return row;
 }
 
 function buildAssistantGroup(m, all, start) {
-    const row = document.createElement("div");
-    row.className = "message assistant";
-    row.innerHTML = `${ASSISTANT_AVATAR_HTML}<div class="bubble"></div>`;
-    const bubble = row.querySelector(".bubble");
-    if (m.content && m.content.trim()) {
-        const text = document.createElement("div");
-        text.innerHTML = DOMPurify.sanitize(marked.parse(m.content));
-        bubble.appendChild(text);
-    }
-    const calls = m.tool_calls || [];
-    const toolMap = {};
-    let j = start + 1;
-    while (j < all.length && all[j].role === "tool") {
-        if (all[j].tool_call_id) toolMap[all[j].tool_call_id] = all[j];
-        j++;
-    }
-    if (calls.length) {
-        for (const c of calls) bubble.appendChild(buildToolCallBlock(c, toolMap[c.id]));
-    }
-    return { el: row, next: j };
+  const row = document.createElement("div");
+  row.className = "message assistant";
+  row.innerHTML = `${ASSISTANT_AVATAR_HTML}<div class="bubble"></div>`;
+  const bubble = row.querySelector(".bubble");
+  if (m.content && m.content.trim()) {
+    const text = document.createElement("div");
+    text.innerHTML = DOMPurify.sanitize(marked.parse(m.content));
+    bubble.appendChild(text);
+  }
+  const calls = m.tool_calls || [];
+  const toolMap = {};
+  let j = start + 1;
+  while (j < all.length && all[j].role === "tool") {
+    if (all[j].tool_call_id) toolMap[all[j].tool_call_id] = all[j];
+    j++;
+  }
+  if (calls.length) {
+    for (const c of calls)
+      bubble.appendChild(buildToolCallBlock(c, toolMap[c.id]));
+  }
+  return { el: row, next: j };
 }
 
 function buildToolCallBlock(call, result) {
-    const block = document.createElement("div");
-    block.className = "tool-block";
-    let headerLabel = call.name || "(tool)";
-    if (call.arguments && call.arguments !== "{}") {
-        try {
-            const parsed = JSON.parse(call.arguments);
-            const first = Object.entries(parsed).find(([k]) => k !== "working_dir" && k !== "cwd");
-            if (first) headerLabel = `${call.name} ${first[0]}=${JSON.stringify(first[1])}`;
-        } catch {}
-    }
-    if (result && result.metadata && result.metadata.error) block.classList.add("tool-error");
-    if (!result) block.classList.add("tool-pending");
+  const block = document.createElement("div");
+  block.className = "tool-block";
+  let headerLabel = call.name || "(tool)";
+  if (call.arguments && call.arguments !== "{}") {
+    try {
+      const parsed = JSON.parse(call.arguments);
+      const first = Object.entries(parsed).find(
+        ([k]) => k !== "working_dir" && k !== "cwd",
+      );
+      if (first)
+        headerLabel = `${call.name} ${first[0]}=${JSON.stringify(first[1])}`;
+    } catch {}
+  }
+  if (result && result.metadata && result.metadata.error)
+    block.classList.add("tool-error");
+  if (!result) block.classList.add("tool-pending");
 
-    const header = document.createElement("div");
-    header.className = "tool-block-header";
-    header.innerHTML = `
-        ${result && result.metadata && result.metadata.error ? '<span class="tool-error-icon">✕</span>' :
-          result ? '<span style="color:var(--success)">✓</span>' : '<span class="tool-spinner"></span>'}
+  const header = document.createElement("div");
+  header.className = "tool-block-header";
+  header.innerHTML = `
+        ${
+          result && result.metadata && result.metadata.error
+            ? '<span class="tool-error-icon">✕</span>'
+            : result
+              ? '<span style="color:var(--success)">✓</span>'
+              : '<span class="tool-spinner"></span>'
+        }
         <span>${escapeHtml(headerLabel)}</span>
         <span class="arrow">▾</span>
     `;
-    header.addEventListener("click", () => block.classList.toggle("collapsed"));
-    block.appendChild(header);
+  header.addEventListener("click", () => block.classList.toggle("collapsed"));
+  block.appendChild(header);
 
-    const body = document.createElement("div");
-    body.className = "tool-block-body";
-    let argsText = "";
-    if (call.arguments && call.arguments !== "{}") {
-        try { argsText = JSON.stringify(JSON.parse(call.arguments), null, 2); } catch { argsText = call.arguments; }
+  const body = document.createElement("div");
+  body.className = "tool-block-body";
+  let argsText = "";
+  if (call.arguments && call.arguments !== "{}") {
+    try {
+      argsText = JSON.stringify(JSON.parse(call.arguments), null, 2);
+    } catch {
+      argsText = call.arguments;
     }
-    if (argsText) {
-        const argsEl = document.createElement("pre");
-        const argsCode = document.createElement("code");
-        argsCode.textContent = argsText;
-        argsEl.appendChild(argsCode);
-        body.appendChild(argsEl);
-    }
-    if (result) {
-        const sep = document.createElement("div");
-        sep.className = "tool-args";
-        sep.textContent = "output:";
-        body.appendChild(sep);
-        const out = document.createElement("pre");
-        const text = result.content || "(empty)";
-        const truncated = text.length > 4000 ? text.slice(0, 4000) + `\n... (truncated, ${text.length} chars total)` : text;
-        const outCode = document.createElement("code");
-        outCode.textContent = truncated;
-        out.appendChild(outCode);
-        body.appendChild(out);
-    } else {
-        const sep = document.createElement("div");
-        sep.className = "tool-args";
-        sep.textContent = "running…";
-        body.appendChild(sep);
-    }
-    block.appendChild(body);
-    return block;
+  }
+  if (argsText) {
+    const argsEl = document.createElement("pre");
+    const argsCode = document.createElement("code");
+    argsCode.textContent = argsText;
+    argsEl.appendChild(argsCode);
+    body.appendChild(argsEl);
+  }
+  if (result) {
+    const sep = document.createElement("div");
+    sep.className = "tool-args";
+    sep.textContent = "output:";
+    body.appendChild(sep);
+    const out = document.createElement("pre");
+    const text = result.content || "(empty)";
+    const truncated =
+      text.length > 4000
+        ? text.slice(0, 4000) + `\n... (truncated, ${text.length} chars total)`
+        : text;
+    const outCode = document.createElement("code");
+    outCode.textContent = truncated;
+    out.appendChild(outCode);
+    body.appendChild(out);
+  } else {
+    const sep = document.createElement("div");
+    sep.className = "tool-args";
+    sep.textContent = "running…";
+    body.appendChild(sep);
+  }
+  block.appendChild(body);
+  return block;
 }
 
-function scrollToBottom() { els.messages.scrollTop = els.messages.scrollHeight; }
+function scrollToBottom() {
+  els.messages.scrollTop = els.messages.scrollHeight;
+}
 
 // ============================================================
 // STREAMING
 // ============================================================
 
 async function sendMessage() {
-    if (state.busy) return;
-    const text = els.input.value.trim();
-    const images = [...state.pendingImages];
-    if (!text && !images.length) return;
-    if (images.length && !currentModelSupportsVision()) {
-        alert("O modelo selecionado não aceita imagens.");
-        return;
-    }
-    if (!state.currentSessionId) await newSession();
-    const sid = state.currentSessionId;
-    els.input.value = "";
-    autoSize();
-    clearChatImages();
+  if (state.busy) return;
+  const text = els.input.value.trim();
+  const images = [...state.pendingImages];
+  if (!text && !images.length) return;
+  if (images.length && !currentModelSupportsVision()) {
+    alert("O modelo selecionado não aceita imagens.");
+    return;
+  }
+  if (!state.currentSessionId) await newSession();
+  const sid = state.currentSessionId;
+  els.input.value = "";
+  autoSize();
+  clearChatImages();
 
-    appendUserMessage(text, { editable: Boolean(text), images });
-    const assistantRow = appendAssistantPlaceholder();
-    const bubble = assistantRow.querySelector(".bubble");
-    const thinking = document.createElement("div");
-    thinking.className = "thinking-block hidden";
-    bubble.appendChild(thinking);
+  appendUserMessage(text, { editable: Boolean(text), images });
+  const assistantRow = appendAssistantPlaceholder();
+  const bubble = assistantRow.querySelector(".bubble");
+  const thinking = document.createElement("div");
+  thinking.className = "thinking-block hidden";
+  bubble.appendChild(thinking);
 
-    setBusy(true);
-    state.abortController = new AbortController();
+  setBusy(true);
+  state.abortController = new AbortController();
 
-    await runChat({
-        sid, text, bubble, thinking,
-        url: `/api/sessions/${sid}/chat`,
-        body: {
-            message: text,
-            provider: state.config.provider,
-            model: state.config.model,
-            images: images.map(image => ({
-                name: image.name,
-                data_url: image.dataUrl,
-            })),
-        },
-        assistantRow,
-    });
+  await runChat({
+    sid,
+    text,
+    bubble,
+    thinking,
+    url: `/api/sessions/${sid}/chat`,
+    body: {
+      message: text,
+      provider: state.config.provider,
+      model: state.config.model,
+      images: images.map((image) => ({
+        name: image.name,
+        data_url: image.dataUrl,
+      })),
+    },
+    assistantRow,
+  });
 }
 
-
-async function runChat({ sid, text, bubble, thinking, url, body, assistantRow }) {
-    try {
-        const resp = await fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-            signal: state.abortController.signal,
-        });
-        if (!resp.ok || !resp.body) {
-            const payload = await resp.json().catch(() => ({}));
-            throw new Error(payload.error || `HTTP ${resp.status}`);
-        }
-        await consumeStream(resp.body, { bubble, thinking, assistantRow });
-    } catch (err) {
-        if (err.name === "AbortError") {
-            // Tell the server to cancel the in-flight LLM stream too
-            try { await fetch(`/api/sessions/${sid}/stop`, { method: "POST" }); } catch {}
-            bubble.innerHTML = `<em style="color:var(--text-muted)">[interrompido]</em>`;
-            attachAssistantActions(assistantRow, sid);
-        } else {
-            bubble.innerHTML = `<em style="color:var(--danger)">Erro: ${escapeHtml(err.message)}</em>`;
-            attachAssistantActions(assistantRow, sid);
-        }
-    } finally {
-        setBusy(false);
-        state.abortController = null;
-        await loadSessions();
-        const s = state.sessions.find(x => x.id === sid);
-        if (s) els.sessionTitle.textContent = s.title;
-        renderSessions();
-        if (state.workspaces.active_id) {
-            setTimeout(() => loadTree(state.workspaces.active_id), 500);
-        }
+async function runChat({
+  sid,
+  text,
+  bubble,
+  thinking,
+  url,
+  body,
+  assistantRow,
+}) {
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: state.abortController.signal,
+    });
+    if (!resp.ok || !resp.body) {
+      const payload = await resp.json().catch(() => ({}));
+      throw new Error(payload.error || `HTTP ${resp.status}`);
     }
+    await consumeStream(resp.body, { bubble, thinking, assistantRow });
+  } catch (err) {
+    if (err.name === "AbortError") {
+      // Tell the server to cancel the in-flight LLM stream too
+      try {
+        await fetch(`/api/sessions/${sid}/stop`, { method: "POST" });
+      } catch {}
+      bubble.innerHTML = `<em style="color:var(--text-muted)">[interrompido]</em>`;
+      attachAssistantActions(assistantRow, sid);
+    } else {
+      bubble.innerHTML = `<em style="color:var(--danger)">Erro: ${escapeHtml(err.message)}</em>`;
+      attachAssistantActions(assistantRow, sid);
+    }
+  } finally {
+    setBusy(false);
+    state.abortController = null;
+    await loadSessions();
+    const s = state.sessions.find((x) => x.id === sid);
+    if (s) els.sessionTitle.textContent = s.title;
+    renderSessions();
+    if (state.workspaces.active_id) {
+      setTimeout(() => loadTree(state.workspaces.active_id), 500);
+    }
+  }
 }
 
 async function consumeStream(body, ctx) {
-    const reader = body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let pendingText = "";
-    let pendingThinking = "";
-    let lastRenderLen = 0;
-    const toolCallNodes = new Map();
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let pendingText = "";
+  let pendingThinking = "";
+  let lastRenderLen = 0;
+  const toolCallNodes = new Map();
 
-    // Reuse a single text node for streaming to avoid re-parsing
-    // the entire accumulated markdown on every chunk.
-    const streamNode = document.createElement("div");
-    streamNode.style.whiteSpace = "pre-wrap";
-    ctx.bubble.appendChild(streamNode);
+  // Reuse a single text node for streaming to avoid re-parsing
+  // the entire accumulated markdown on every chunk.
+  const streamNode = document.createElement("div");
+  streamNode.style.whiteSpace = "pre-wrap";
+  ctx.bubble.appendChild(streamNode);
 
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() || "";
-        for (const p of parts) {
-            if (!p.startsWith("data: ")) continue;
-            const payload = p.slice(6).trim();
-            if (payload === "[DONE]") continue;
-            let evt;
-            try { evt = JSON.parse(payload); } catch { continue; }
-            handleEvent(evt, {
-                bubble: ctx.bubble, thinking: ctx.thinking,
-                toolCallNodes, streamNode,
-                getText: () => pendingText, setText: (v) => pendingText = v,
-                getThinking: () => pendingThinking, setThinking: (v) => pendingThinking = v,
-            });
-        }
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split("\n\n");
+    buffer = parts.pop() || "";
+    for (const p of parts) {
+      if (!p.startsWith("data: ")) continue;
+      const payload = p.slice(6).trim();
+      if (payload === "[DONE]") continue;
+      let evt;
+      try {
+        evt = JSON.parse(payload);
+      } catch {
+        continue;
+      }
+      handleEvent(evt, {
+        bubble: ctx.bubble,
+        thinking: ctx.thinking,
+        toolCallNodes,
+        streamNode,
+        getText: () => pendingText,
+        setText: (v) => (pendingText = v),
+        getThinking: () => pendingThinking,
+        setThinking: (v) => (pendingThinking = v),
+      });
     }
+  }
 }
 
 function handleEvent(evt, ctx) {
-    switch (evt.type) {
-        case "thinking":
-            ctx.thinking.classList.remove("hidden");
-            ctx.thinking.textContent = evt.content;
-            ctx.setThinking(evt.content);
-            scrollToBottom();
-            break;
-        case "text": {
-            // Append the new chunk to the streaming node, no re-parse.
-            // We only parse to HTML when streaming ends (see `done`).
-            ctx.setText(evt.content);
-            if (ctx.streamNode) {
-                ctx.streamNode.textContent = evt.content;
-            } else {
-                ctx.bubble.textContent = evt.content;
-            }
-            scrollToBottom();
-            break;
-        }
-        case "tool_calls": {
-            // Hide the streaming text node while tools run; the final
-            // markdown parse will restore it.
-            if (ctx.streamNode) ctx.streamNode.style.display = "none";
-            const group = document.createElement("div");
-            for (const call of evt.calls) {
-                const node = buildToolCallBlock({ name: call.name, arguments: call.arguments }, null);
-                group.appendChild(node);
-                ctx.toolCallNodes.set(call.id, node);
-            }
-            ctx.bubble.appendChild(group);
-            scrollToBottom();
-            break;
-        }
-        case "tool_result": {
-            if (evt.content === "(running...)") return;
-            const node = ctx.toolCallNodes.get(evt.id);
-            if (!node) return;
-            node.classList.toggle("tool-error", !!evt.error);
-            node.classList.remove("tool-pending");
-            const body = node.querySelector(".tool-block-body");
-            if (body) {
-                body.textContent = "";
-                let argsText = "";
-                if (evt.arguments && evt.arguments !== "{}") {
-                    try { argsText = JSON.stringify(JSON.parse(evt.arguments), null, 2); } catch { argsText = evt.arguments; }
-                }
-                if (argsText) {
-                    const argsEl = document.createElement("pre");
-                    const argsCode = document.createElement("code");
-                    argsCode.textContent = argsText;
-                    argsEl.appendChild(argsCode);
-                    body.appendChild(argsEl);
-                }
-                const sep = document.createElement("div");
-                sep.className = "tool-args";
-                sep.textContent = "output:";
-                body.appendChild(sep);
-                const out = document.createElement("pre");
-                const text = evt.content || "(empty)";
-                const truncated = text.length > 4000 ? text.slice(0, 4000) + `\n... (truncated, ${text.length} chars total)` : text;
-                // Use textContent (not innerHTML) — defense in depth against
-                // XSS from tool output. The `out` <pre> renders preformatted text.
-                const outCode = document.createElement("code");
-                outCode.textContent = truncated;
-                out.appendChild(outCode);
-                body.appendChild(out);
-            }
-            const header = node.querySelector(".tool-block-header");
-            if (header && header.firstElementChild) {
-                header.firstElementChild.outerHTML = evt.error
-                    ? '<span class="tool-error-icon">✕</span>'
-                    : '<span style="color:var(--success)">✓</span>';
-            }
-            scrollToBottom();
-            break;
-        }
-        case "done": {
-            if (evt.usage) {
-                const u = evt.usage;
-                els.status.textContent = `tokens: in ${fmtTokens(u.prompt_tokens)} · out ${fmtTokens(u.completion_tokens)} · total ${fmtTokens(u.total_tokens)}`;
-                els.status.classList.remove("hidden");
-            }
-            // Now safely parse the full accumulated text as markdown.
-            const fullText = ctx.getText();
-            if (fullText && ctx.bubble) {
-                ctx.bubble.innerHTML = DOMPurify.sanitize(marked.parse(fullText));
-            }
-            // Re-highlight code blocks
-            ctx.bubble.querySelectorAll("pre code").forEach(block => {
-                try { hljs.highlightElement(block); } catch {}
-            });
-            // Attach action buttons (copy / regenerate)
-            if (ctx.assistantRow) {
-                attachAssistantActions(ctx.assistantRow);
-            }
-            scrollToBottom();
-            break;
-        }
-        case "error":
-            ctx.bubble.innerHTML = `<em style="color:var(--danger)">${escapeHtml(evt.content)}</em>`;
-            break;
-        case "session_meta":
-            if (evt.title) els.sessionTitle.textContent = evt.title;
-            break;
+  switch (evt.type) {
+    case "thinking":
+      ctx.thinking.classList.remove("hidden");
+      ctx.thinking.textContent = evt.content;
+      ctx.setThinking(evt.content);
+      scrollToBottom();
+      break;
+    case "text": {
+      // Append the new chunk to the streaming node, no re-parse.
+      // We only parse to HTML when streaming ends (see `done`).
+      ctx.setText(evt.content);
+      if (ctx.streamNode) {
+        ctx.streamNode.textContent = evt.content;
+      } else {
+        ctx.bubble.textContent = evt.content;
+      }
+      scrollToBottom();
+      break;
     }
+    case "tool_calls": {
+      // Hide the streaming text node while tools run; the final
+      // markdown parse will restore it.
+      if (ctx.streamNode) ctx.streamNode.style.display = "none";
+      const group = document.createElement("div");
+      for (const call of evt.calls) {
+        const node = buildToolCallBlock(
+          { name: call.name, arguments: call.arguments },
+          null,
+        );
+        group.appendChild(node);
+        ctx.toolCallNodes.set(call.id, node);
+      }
+      ctx.bubble.appendChild(group);
+      scrollToBottom();
+      break;
+    }
+    case "tool_result": {
+      if (evt.content === "(running...)") return;
+      const node = ctx.toolCallNodes.get(evt.id);
+      if (!node) return;
+      node.classList.toggle("tool-error", !!evt.error);
+      node.classList.remove("tool-pending");
+      const body = node.querySelector(".tool-block-body");
+      if (body) {
+        body.textContent = "";
+        let argsText = "";
+        if (evt.arguments && evt.arguments !== "{}") {
+          try {
+            argsText = JSON.stringify(JSON.parse(evt.arguments), null, 2);
+          } catch {
+            argsText = evt.arguments;
+          }
+        }
+        if (argsText) {
+          const argsEl = document.createElement("pre");
+          const argsCode = document.createElement("code");
+          argsCode.textContent = argsText;
+          argsEl.appendChild(argsCode);
+          body.appendChild(argsEl);
+        }
+        const sep = document.createElement("div");
+        sep.className = "tool-args";
+        sep.textContent = "output:";
+        body.appendChild(sep);
+        const out = document.createElement("pre");
+        const text = evt.content || "(empty)";
+        const truncated =
+          text.length > 4000
+            ? text.slice(0, 4000) +
+              `\n... (truncated, ${text.length} chars total)`
+            : text;
+        // Use textContent (not innerHTML) — defense in depth against
+        // XSS from tool output. The `out` <pre> renders preformatted text.
+        const outCode = document.createElement("code");
+        outCode.textContent = truncated;
+        out.appendChild(outCode);
+        body.appendChild(out);
+      }
+      const header = node.querySelector(".tool-block-header");
+      if (header && header.firstElementChild) {
+        header.firstElementChild.outerHTML = evt.error
+          ? '<span class="tool-error-icon">✕</span>'
+          : '<span style="color:var(--success)">✓</span>';
+      }
+      scrollToBottom();
+      break;
+    }
+    case "done": {
+      if (evt.usage) {
+        const u = evt.usage;
+        els.status.textContent = `tokens: in ${fmtTokens(u.prompt_tokens)} · out ${fmtTokens(u.completion_tokens)} · total ${fmtTokens(u.total_tokens)}`;
+        els.status.classList.remove("hidden");
+      }
+      // Now safely parse the full accumulated text as markdown.
+      const fullText = ctx.getText();
+      if (fullText && ctx.bubble) {
+        ctx.bubble.innerHTML = DOMPurify.sanitize(marked.parse(fullText));
+      }
+      // Re-highlight code blocks
+      ctx.bubble.querySelectorAll("pre code").forEach((block) => {
+        try {
+          hljs.highlightElement(block);
+        } catch {}
+      });
+      // Attach action buttons (copy / regenerate)
+      if (ctx.assistantRow) {
+        attachAssistantActions(ctx.assistantRow);
+      }
+      scrollToBottom();
+      break;
+    }
+    case "error":
+      ctx.bubble.innerHTML = `<em style="color:var(--danger)">${escapeHtml(evt.content)}</em>`;
+      break;
+    case "session_meta":
+      if (evt.title) els.sessionTitle.textContent = evt.title;
+      break;
+  }
 }
 
 function appendUserMessage(text, opts = {}) {
-    const inner = ensureInner();
-    const bubble = buildUserBubble(text, opts.images || []);
-    if (opts.editable) {
-        attachUserActions(bubble, text);
-    }
-    inner.appendChild(bubble);
-    scrollToBottom();
+  const inner = ensureInner();
+  const bubble = buildUserBubble(text, opts.images || []);
+  if (opts.editable) {
+    attachUserActions(bubble, text);
+  }
+  inner.appendChild(bubble);
+  scrollToBottom();
 }
 
 function appendAssistantPlaceholder() {
-    const inner = ensureInner();
-    const row = document.createElement("div");
-    row.className = "message assistant";
-    row.innerHTML = `${ASSISTANT_AVATAR_HTML}<div class="bubble"></div>`;
-    inner.appendChild(row);
-    scrollToBottom();
-    return row;
+  const inner = ensureInner();
+  const row = document.createElement("div");
+  row.className = "message assistant";
+  row.innerHTML = `${ASSISTANT_AVATAR_HTML}<div class="bubble"></div>`;
+  inner.appendChild(row);
+  scrollToBottom();
+  return row;
 }
 
 function attachAssistantActions(assistantRow, sid) {
-    if (assistantRow.querySelector(".msg-actions")) return;
-    const actions = document.createElement("div");
-    actions.className = "msg-actions";
-    actions.innerHTML = `
+  if (assistantRow.querySelector(".msg-actions")) return;
+  const actions = document.createElement("div");
+  actions.className = "msg-actions";
+  actions.innerHTML = `
         <button class="msg-action" data-action="copy" title="Copiar">⎘</button>
         <button class="msg-action" data-action="regenerate" title="Regenerar resposta">↻</button>
     `;
-    actions.addEventListener("click", (e) => {
-        const btn = e.target.closest(".msg-action");
-        if (!btn) return;
-        const a = btn.dataset.action;
-        if (a === "copy") {
-            const text = assistantRow.querySelector(".bubble").innerText;
-            navigator.clipboard.writeText(text).then(() => {
-                btn.textContent = "✓";
-                setTimeout(() => { btn.textContent = "⎘"; }, 1200);
-            });
-        } else if (a === "regenerate") {
-            regenerateLast();
-        }
-    });
-    assistantRow.appendChild(actions);
+  actions.addEventListener("click", (e) => {
+    const btn = e.target.closest(".msg-action");
+    if (!btn) return;
+    const a = btn.dataset.action;
+    if (a === "copy") {
+      const text = assistantRow.querySelector(".bubble").innerText;
+      navigator.clipboard.writeText(text).then(() => {
+        btn.textContent = "✓";
+        setTimeout(() => {
+          btn.textContent = "⎘";
+        }, 1200);
+      });
+    } else if (a === "regenerate") {
+      regenerateLast();
+    }
+  });
+  assistantRow.appendChild(actions);
 }
 
 function attachUserActions(bubble, originalText) {
-    if (bubble.querySelector(".msg-actions")) return;
-    const actions = document.createElement("div");
-    actions.className = "msg-actions user-actions";
-    actions.innerHTML = `
+  if (bubble.querySelector(".msg-actions")) return;
+  const actions = document.createElement("div");
+  actions.className = "msg-actions user-actions";
+  actions.innerHTML = `
         <button class="msg-action" data-action="edit" title="Editar">✎</button>
         <button class="msg-action" data-action="copy" title="Copiar">⎘</button>
     `;
-    actions.addEventListener("click", (e) => {
-        const btn = e.target.closest(".msg-action");
-        if (!btn) return;
-        const a = btn.dataset.action;
-        if (a === "edit") {
-            const newText = prompt("Editar mensagem:", originalText);
-            if (newText && newText !== originalText) {
-                bubble.querySelector(".body").textContent = newText;
-                originalText = newText;
-            }
-        } else if (a === "copy") {
-            navigator.clipboard.writeText(bubble.querySelector(".body").innerText).then(() => {
-                btn.textContent = "✓";
-                setTimeout(() => { btn.textContent = "⎘"; }, 1200);
-            });
-        }
-    });
-    bubble.appendChild(actions);
+  actions.addEventListener("click", (e) => {
+    const btn = e.target.closest(".msg-action");
+    if (!btn) return;
+    const a = btn.dataset.action;
+    if (a === "edit") {
+      const newText = prompt("Editar mensagem:", originalText);
+      if (newText && newText !== originalText) {
+        bubble.querySelector(".body").textContent = newText;
+        originalText = newText;
+      }
+    } else if (a === "copy") {
+      navigator.clipboard
+        .writeText(bubble.querySelector(".body").innerText)
+        .then(() => {
+          btn.textContent = "✓";
+          setTimeout(() => {
+            btn.textContent = "⎘";
+          }, 1200);
+        });
+    }
+  });
+  bubble.appendChild(actions);
 }
 
 async function regenerateLast() {
-    if (state.busy) return;
-    if (!state.currentSessionId) return;
-    const sid = state.currentSessionId;
-    const assistantRow = appendAssistantPlaceholder();
-    const bubble = assistantRow.querySelector(".bubble");
-    const thinking = document.createElement("div");
-    thinking.className = "thinking-block hidden";
-    bubble.appendChild(thinking);
+  if (state.busy) return;
+  if (!state.currentSessionId) return;
+  const sid = state.currentSessionId;
+  const assistantRow = appendAssistantPlaceholder();
+  const bubble = assistantRow.querySelector(".bubble");
+  const thinking = document.createElement("div");
+  thinking.className = "thinking-block hidden";
+  bubble.appendChild(thinking);
 
-    setBusy(true);
-    state.abortController = new AbortController();
+  setBusy(true);
+  state.abortController = new AbortController();
 
-    await runChat({
-        sid, text: "", bubble, thinking,
-        url: `/api/sessions/${sid}/regenerate`,
-        body: { provider: state.config.provider, model: state.config.model },
-        assistantRow,
-    });
+  await runChat({
+    sid,
+    text: "",
+    bubble,
+    thinking,
+    url: `/api/sessions/${sid}/regenerate`,
+    body: { provider: state.config.provider, model: state.config.model },
+    assistantRow,
+  });
 }
 
 function ensureInner() {
-    let inner = els.messages.querySelector(".messages-inner");
-    if (!inner) {
-        els.messages.innerHTML = "";
-        inner = document.createElement("div");
-        inner.className = "messages-inner";
-        els.messages.appendChild(inner);
-    }
-    return inner;
+  let inner = els.messages.querySelector(".messages-inner");
+  if (!inner) {
+    els.messages.innerHTML = "";
+    inner = document.createElement("div");
+    inner.className = "messages-inner";
+    els.messages.appendChild(inner);
+  }
+  return inner;
 }
 
 function setBusy(b) {
-    state.busy = b;
-    els.sendBtn.disabled = b;
-    els.input.disabled = b;
-    els.sendBtn.classList.toggle("hidden", b);
-    els.stopBtn.classList.toggle("hidden", !b);
-    if (!b) els.input.focus();
+  state.busy = b;
+  els.sendBtn.disabled = b;
+  els.input.disabled = b;
+  els.sendBtn.classList.toggle("hidden", b);
+  els.stopBtn.classList.toggle("hidden", !b);
+  if (!b) els.input.focus();
 }
 
 function autoSize() {
-    els.input.style.height = "auto";
-    els.input.style.height = Math.min(els.input.scrollHeight, 200) + "px";
+  els.input.style.height = "auto";
+  els.input.style.height = Math.min(els.input.scrollHeight, 200) + "px";
 }
 
 // ============================================================
@@ -944,129 +1183,147 @@ function autoSize() {
 // ============================================================
 
 async function loadWorkspaces() {
-    const r = await fetch("/api/workspaces");
-    state.workspaces = await r.json();
-    renderWorkspaces();
-    if (state.workspaces.active_id) loadTree(state.workspaces.active_id);
-    else { state.tree = []; renderTree(); }
+  const r = await fetch("/api/workspaces");
+  state.workspaces = await r.json();
+  renderWorkspaces();
+  if (state.workspaces.active_id) loadTree(state.workspaces.active_id);
+  else {
+    state.tree = [];
+    renderTree();
+  }
 }
 
 function renderWorkspaces() {
-    els.workspaceList.innerHTML = "";
-    for (const w of state.workspaces.workspaces) {
-        const li = document.createElement("div");
-        li.className = "workspace-item" + (w.id === state.workspaces.active_id ? " active" : "");
-        const src = document.createElement("span");
-        src.className = "ws-source";
-        src.textContent = w.source === "git" ? "⎘" : w.source === "upload" ? "↑" : "·";
-        src.title = w.source;
-        const name = document.createElement("span");
-        name.className = "ws-name";
-        name.textContent = w.name;
-        name.title = `${w.name} — ${w.file_count} arquivos (${fmtSize(w.size_bytes)})`;
-        const del = document.createElement("button");
-        del.className = "ws-del";
-        del.textContent = "×";
-        del.title = "Apagar workspace";
-        del.addEventListener("click", (e) => { e.stopPropagation(); removeWorkspace(w.id); });
-        li.appendChild(src);
-        li.appendChild(name);
-        li.appendChild(del);
-        li.addEventListener("click", () => activateWorkspace(w.id));
-        els.workspaceList.appendChild(li);
-    }
+  els.workspaceList.innerHTML = "";
+  for (const w of state.workspaces.workspaces) {
+    const li = document.createElement("div");
+    li.className =
+      "workspace-item" + (w.id === state.workspaces.active_id ? " active" : "");
+    const src = document.createElement("span");
+    src.className = "ws-source";
+    src.textContent =
+      w.source === "git" ? "⎘" : w.source === "upload" ? "↑" : "·";
+    src.title = w.source;
+    const name = document.createElement("span");
+    name.className = "ws-name";
+    name.textContent = w.name;
+    name.title = `${w.name} — ${w.file_count} arquivos (${fmtSize(w.size_bytes)})`;
+    const del = document.createElement("button");
+    del.className = "ws-del";
+    del.textContent = "×";
+    del.title = "Apagar workspace";
+    del.addEventListener("click", (e) => {
+      e.stopPropagation();
+      removeWorkspace(w.id);
+    });
+    li.appendChild(src);
+    li.appendChild(name);
+    li.appendChild(del);
+    li.addEventListener("click", () => activateWorkspace(w.id));
+    els.workspaceList.appendChild(li);
+  }
 }
 
 async function activateWorkspace(id) {
-    await fetch(`/api/workspaces/${id}/activate`, { method: "POST" });
-    state.workspaces.active_id = id;
-    renderWorkspaces();
-    loadTree(id);
-    renderWelcome();
+  await fetch(`/api/workspaces/${id}/activate`, { method: "POST" });
+  state.workspaces.active_id = id;
+  renderWorkspaces();
+  loadTree(id);
+  renderWelcome();
 }
 
 async function removeWorkspace(id) {
-    if (!confirm("Apagar este workspace? (os arquivos no disco são removidos)")) return;
-    await fetch(`/api/workspaces/${id}`, { method: "DELETE" });
-    await loadWorkspaces();
-    renderWelcome();
+  if (!confirm("Apagar este workspace? (os arquivos no disco são removidos)"))
+    return;
+  await fetch(`/api/workspaces/${id}`, { method: "DELETE" });
+  await loadWorkspaces();
+  renderWelcome();
 }
 
 async function createEmptyWorkspace() {
-    const name = prompt("Nome do workspace:", "novo-workspace");
-    if (!name) return;
-    const r = await fetch("/api/workspaces", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
-    });
-    if (!r.ok) {
-        const e = await r.json().catch(() => ({}));
-        alert(e.error || "erro");
-        return;
-    }
-    await loadWorkspaces();
-    renderWelcome();
+  const name = prompt("Nome do workspace:", "novo-workspace");
+  if (!name) return;
+  const r = await fetch("/api/workspaces", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  if (!r.ok) {
+    const e = await r.json().catch(() => ({}));
+    alert(e.error || "erro");
+    return;
+  }
+  await loadWorkspaces();
+  renderWelcome();
 }
 
 // ---------- File tree ----------
 
 async function loadTree(wsId) {
-    const r = await fetch(`/api/workspaces/${wsId}/tree`);
-    if (!r.ok) {
-        state.tree = [];
-        renderTree();
-        return;
-    }
-    const data = await r.json();
-    state.tree = data.tree || [];
+  const r = await fetch(`/api/workspaces/${wsId}/tree`);
+  if (!r.ok) {
+    state.tree = [];
     renderTree();
+    return;
+  }
+  const data = await r.json();
+  state.tree = data.tree || [];
+  renderTree();
 }
 
 function renderTree() {
-    els.treeContainer.innerHTML = "";
-    for (const node of state.tree) {
-        els.treeContainer.appendChild(buildTreeNode(node, 0));
-    }
+  els.treeContainer.innerHTML = "";
+  for (const node of state.tree) {
+    els.treeContainer.appendChild(buildTreeNode(node, 0));
+  }
 }
 
 function buildTreeNode(node, depth) {
-    if (node.type === "directory") {
-        const wrap = document.createElement("div");
-        const head = document.createElement("div");
-        head.className = "tree-node";
-        head.style.paddingLeft = `${depth * 4}px`;
-        head.innerHTML = `<span class="icon">▾</span><span>📁 ${escapeHtml(node.name)}</span>`;
-        const children = document.createElement("div");
-        children.className = "tree-children";
-        for (const child of (node.children || [])) {
-            children.appendChild(buildTreeNode(child, depth + 1));
-        }
-        head.addEventListener("click", () => {
-            head.querySelector(".icon").textContent = children.classList.toggle("collapsed") ? "▸" : "▾";
-        });
-        wrap.appendChild(head);
-        wrap.appendChild(children);
-        return wrap;
-    } else {
-        const leaf = document.createElement("div");
-        leaf.className = "tree-node";
-        leaf.style.paddingLeft = `${depth * 4 + 14}px`;
-        leaf.innerHTML = `<span class="icon">·</span><span>📄 ${escapeHtml(node.name)}</span>`;
-        leaf.title = `${node.path} (${fmtSize(node.size)})`;
-        leaf.addEventListener("click", () => openFile(node.path, node.name));
-        return leaf;
+  if (node.type === "directory") {
+    const wrap = document.createElement("div");
+    const head = document.createElement("div");
+    head.className = "tree-node";
+    head.style.paddingLeft = `${depth * 4}px`;
+    head.innerHTML = `<span class="icon">▾</span><span>📁 ${escapeHtml(node.name)}</span>`;
+    const children = document.createElement("div");
+    children.className = "tree-children";
+    for (const child of node.children || []) {
+      children.appendChild(buildTreeNode(child, depth + 1));
     }
+    head.addEventListener("click", () => {
+      head.querySelector(".icon").textContent = children.classList.toggle(
+        "collapsed",
+      )
+        ? "▸"
+        : "▾";
+    });
+    wrap.appendChild(head);
+    wrap.appendChild(children);
+    return wrap;
+  } else {
+    const leaf = document.createElement("div");
+    leaf.className = "tree-node";
+    leaf.style.paddingLeft = `${depth * 4 + 14}px`;
+    leaf.innerHTML = `<span class="icon">·</span><span>📄 ${escapeHtml(node.name)}</span>`;
+    leaf.title = `${node.path} (${fmtSize(node.size)})`;
+    leaf.addEventListener("click", () => openFile(node.path, node.name));
+    return leaf;
+  }
 }
 
 async function openFile(path, name) {
-    if (!state.workspaces.active_id) return;
-    const r = await fetch(`/api/workspaces/${state.workspaces.active_id}/file?path=${encodeURIComponent(path)}`);
-    if (!r.ok) { alert("Erro ao abrir arquivo"); return; }
-    const data = await r.json();
-    els.fileModalTitle.textContent = name;
-    els.fileModalContent.textContent = data.content;
-    els.fileModal.classList.remove("hidden");
+  if (!state.workspaces.active_id) return;
+  const r = await fetch(
+    `/api/workspaces/${state.workspaces.active_id}/file?path=${encodeURIComponent(path)}`,
+  );
+  if (!r.ok) {
+    alert("Erro ao abrir arquivo");
+    return;
+  }
+  const data = await r.json();
+  els.fileModalTitle.textContent = name;
+  els.fileModalContent.textContent = data.content;
+  els.fileModal.classList.remove("hidden");
 }
 
 // ============================================================
@@ -1076,87 +1333,93 @@ async function openFile(path, name) {
 els.uploadBtn.addEventListener("click", () => els.fileInput.click());
 els.newWsBtn.addEventListener("click", createEmptyWorkspace);
 els.refreshWs.addEventListener("click", () => {
-    if (state.workspaces.active_id) loadTree(state.workspaces.active_id);
-    loadWorkspaces();
+  if (state.workspaces.active_id) loadTree(state.workspaces.active_id);
+  loadWorkspaces();
 });
 
 els.fileInput.addEventListener("change", async () => {
-    if (!els.fileInput.files.length) return;
-    await uploadFiles(els.fileInput.files);
-    els.fileInput.value = "";
+  if (!els.fileInput.files.length) return;
+  await uploadFiles(els.fileInput.files);
+  els.fileInput.value = "";
 });
 
 async function uploadFiles(files) {
-    let wsId = state.workspaces.active_id;
-    if (!wsId) {
-        // Create a new workspace
-        const r = await fetch("/api/workspaces", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name: "uploaded" }),
-        });
-        const data = await r.json();
-        wsId = data.workspace.id;
-        await loadWorkspaces();
-    }
-
-    const fd = new FormData();
-    for (const f of files) {
-        // webkitRelativePath preserves folder structure when uploading folders
-        const relPath = f.webkitRelativePath || f.name;
-        fd.append("files", f, relPath);
-    }
-
-    const r = await fetch(`/api/workspaces/${wsId}/upload`, {
-        method: "POST",
-        body: fd,
+  let wsId = state.workspaces.active_id;
+  if (!wsId) {
+    // Create a new workspace
+    const r = await fetch("/api/workspaces", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "uploaded" }),
     });
-    if (!r.ok) {
-        const e = await r.json().catch(() => ({}));
-        alert(e.error || "upload falhou");
-        return;
-    }
+    const data = await r.json();
+    wsId = data.workspace.id;
     await loadWorkspaces();
-    renderWelcome();
+  }
+
+  const fd = new FormData();
+  for (const f of files) {
+    // webkitRelativePath preserves folder structure when uploading folders
+    const relPath = f.webkitRelativePath || f.name;
+    fd.append("files", f, relPath);
+  }
+
+  const r = await fetch(`/api/workspaces/${wsId}/upload`, {
+    method: "POST",
+    body: fd,
+  });
+  if (!r.ok) {
+    const e = await r.json().catch(() => ({}));
+    alert(e.error || "upload falhou");
+    return;
+  }
+  await loadWorkspaces();
+  renderWelcome();
 }
 
 // Drag & drop on whole document
 window.addEventListener("dragenter", (e) => {
-    e.preventDefault();
-    state.dropCounter++;
-    const items = Array.from(e.dataTransfer?.items || []).filter(item => item.kind === "file");
-    const imageDrop = items.length > 0 && items.every(item => item.type.startsWith("image/"));
-    const dropText = els.dropOverlay.querySelector(".drop-text");
-    if (dropText) {
-        dropText.textContent = imageDrop && currentModelSupportsVision()
-            ? "Solte para anexar ao chat"
-            : "Solte arquivos ou pastas aqui";
-    }
-    els.dropOverlay.classList.remove("hidden");
+  e.preventDefault();
+  state.dropCounter++;
+  const items = Array.from(e.dataTransfer?.items || []).filter(
+    (item) => item.kind === "file",
+  );
+  const imageDrop =
+    items.length > 0 && items.every((item) => item.type.startsWith("image/"));
+  const dropText = els.dropOverlay.querySelector(".drop-text");
+  if (dropText) {
+    dropText.textContent =
+      imageDrop && currentModelSupportsVision()
+        ? "Solte para anexar ao chat"
+        : "Solte arquivos ou pastas aqui";
+  }
+  els.dropOverlay.classList.remove("hidden");
 });
 window.addEventListener("dragleave", (e) => {
-    e.preventDefault();
-    state.dropCounter--;
-    if (state.dropCounter <= 0) {
-        state.dropCounter = 0;
-        els.dropOverlay.classList.add("hidden");
-    }
+  e.preventDefault();
+  state.dropCounter--;
+  if (state.dropCounter <= 0) {
+    state.dropCounter = 0;
+    els.dropOverlay.classList.add("hidden");
+  }
 });
 window.addEventListener("dragover", (e) => e.preventDefault());
 window.addEventListener("drop", async (e) => {
-    e.preventDefault();
-    state.dropCounter = 0;
-    els.dropOverlay.classList.add("hidden");
-    const items = e.dataTransfer.items;
-    const files = e.dataTransfer.files;
-    if (files && files.length) {
-        const imageFiles = Array.from(files).filter(file => file.type.startsWith("image/"));
-        if (imageFiles.length === files.length && currentModelSupportsVision()) {
-            await addChatImages(imageFiles);
-        } else {
-            await uploadFiles(files);
-        }
+  e.preventDefault();
+  state.dropCounter = 0;
+  els.dropOverlay.classList.add("hidden");
+  const items = e.dataTransfer.items;
+  const files = e.dataTransfer.files;
+  if (files && files.length) {
+    const imageFiles = Array.from(files).filter((file) =>
+      file.type.startsWith("image/"),
+    );
+    if (imageFiles.length === files.length && currentModelSupportsVision()) {
+      await addChatImages(imageFiles);
+    } else {
+      await uploadFiles(files);
     }
+  }
 });
 
 // ============================================================
@@ -1164,61 +1427,65 @@ window.addEventListener("drop", async (e) => {
 // ============================================================
 
 els.cloneBtn.addEventListener("click", () => {
-    els.cloneUrl.value = "";
-    els.cloneBranch.value = "";
-    els.cloneName.value = "";
-    els.cloneStatus.textContent = "";
-    els.cloneStatus.className = "field-hint";
-    els.cloneModal.classList.remove("hidden");
+  els.cloneUrl.value = "";
+  els.cloneBranch.value = "";
+  els.cloneName.value = "";
+  els.cloneStatus.textContent = "";
+  els.cloneStatus.className = "field-hint";
+  els.cloneModal.classList.remove("hidden");
 });
-els.closeClone.addEventListener("click", () => els.cloneModal.classList.add("hidden"));
-els.cancelClone.addEventListener("click", () => els.cloneModal.classList.add("hidden"));
+els.closeClone.addEventListener("click", () =>
+  els.cloneModal.classList.add("hidden"),
+);
+els.cancelClone.addEventListener("click", () =>
+  els.cloneModal.classList.add("hidden"),
+);
 els.confirmClone.addEventListener("click", async () => {
-    const url = els.cloneUrl.value.trim();
-    if (!url) {
-        setCloneStatus("URL obrigatória", true);
-        return;
+  const url = els.cloneUrl.value.trim();
+  if (!url) {
+    setCloneStatus("URL obrigatória", true);
+    return;
+  }
+  els.confirmClone.disabled = true;
+  setCloneStatus("Clonando... pode demorar alguns segundos", false);
+  try {
+    const r = await fetch("/api/workspaces", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: els.cloneName.value.trim() || "repo" }),
+    });
+    if (!r.ok) {
+      setCloneStatus("Erro ao criar workspace", true);
+      return;
     }
-    els.confirmClone.disabled = true;
-    setCloneStatus("Clonando... pode demorar alguns segundos", false);
-    try {
-        const r = await fetch("/api/workspaces", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name: els.cloneName.value.trim() || "repo" }),
-        });
-        if (!r.ok) {
-            setCloneStatus("Erro ao criar workspace", true);
-            return;
-        }
-        const data = await r.json();
-        const wsId = data.workspace.id;
-        const r2 = await fetch(`/api/workspaces/${wsId}/clone`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                url,
-                branch: els.cloneBranch.value.trim() || null,
-            }),
-        });
-        if (!r2.ok) {
-            const err = await r2.json().catch(() => ({}));
-            setCloneStatus(err.error || "clone falhou", true);
-            await fetch(`/api/workspaces/${wsId}`, { method: "DELETE" });
-            return;
-        }
-        setCloneStatus("Clonado!", false);
-        await loadWorkspaces();
-        setTimeout(() => els.cloneModal.classList.add("hidden"), 800);
-        renderWelcome();
-    } finally {
-        els.confirmClone.disabled = false;
+    const data = await r.json();
+    const wsId = data.workspace.id;
+    const r2 = await fetch(`/api/workspaces/${wsId}/clone`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url,
+        branch: els.cloneBranch.value.trim() || null,
+      }),
+    });
+    if (!r2.ok) {
+      const err = await r2.json().catch(() => ({}));
+      setCloneStatus(err.error || "clone falhou", true);
+      await fetch(`/api/workspaces/${wsId}`, { method: "DELETE" });
+      return;
     }
+    setCloneStatus("Clonado!", false);
+    await loadWorkspaces();
+    setTimeout(() => els.cloneModal.classList.add("hidden"), 800);
+    renderWelcome();
+  } finally {
+    els.confirmClone.disabled = false;
+  }
 });
 
 function setCloneStatus(text, isError) {
-    els.cloneStatus.textContent = text;
-    els.cloneStatus.className = "field-hint" + (isError ? " err" : " ok");
+  els.cloneStatus.textContent = text;
+  els.cloneStatus.className = "field-hint" + (isError ? " err" : " ok");
 }
 
 // ============================================================
@@ -1226,92 +1493,101 @@ function setCloneStatus(text, isError) {
 // ============================================================
 
 async function openSettings() {
-    await loadConfig();
-    els.providerSelect.value = state.config.provider;
-    els.modelInput.value = state.config.custom_model || "";
-    els.apiKeyInput.value = "";
-    updateApiKeyVisibility();
-    els.settingsModal.classList.remove("hidden");
+  await loadConfig();
+  els.providerSelect.value = state.config.provider;
+  els.modelInput.value = state.config.custom_model || "";
+  els.apiKeyInput.value = "";
+  updateApiKeyVisibility();
+  els.settingsModal.classList.remove("hidden");
 }
-function closeSettings() { els.settingsModal.classList.add("hidden"); }
+function closeSettings() {
+  els.settingsModal.classList.add("hidden");
+}
 
 function updateApiKeyVisibility() {
-    const p = state.providers.find(x => x.id === els.providerSelect.value);
-    if (p && p.needs_api_key) {
-        els.apiKeyField.classList.remove("hidden");
-        els.apiKeyInput.disabled = false;
-        els.apiKeyInput.placeholder = p.id.includes("anthropic") ? "sk-ant-..." : "sk-...";
-        els.apiKeyHint.textContent = p.api_key_env ? `(env: ${p.api_key_env})` : "";
-        if (state.config.has_api_key && state.config.provider === p.id) {
-            els.apiKeyStatus.textContent = "chave configurada";
-            els.apiKeyStatus.className = "field-hint ok";
-        } else {
-            els.apiKeyStatus.textContent = "chave não definida";
-            els.apiKeyStatus.className = "field-hint";
-        }
+  const p = state.providers.find((x) => x.id === els.providerSelect.value);
+  if (p && p.needs_api_key) {
+    els.apiKeyField.classList.remove("hidden");
+    els.apiKeyInput.disabled = false;
+    els.apiKeyInput.placeholder = p.id.includes("anthropic")
+      ? "sk-ant-..."
+      : "sk-...";
+    els.apiKeyHint.textContent = p.api_key_env ? `(env: ${p.api_key_env})` : "";
+    if (state.config.has_api_key && state.config.provider === p.id) {
+      els.apiKeyStatus.textContent = "chave configurada";
+      els.apiKeyStatus.className = "field-hint ok";
     } else {
-        els.apiKeyField.classList.add("hidden");
-        els.apiKeyInput.disabled = true;
+      els.apiKeyStatus.textContent = "chave não definida";
+      els.apiKeyStatus.className = "field-hint";
     }
+  } else {
+    els.apiKeyField.classList.add("hidden");
+    els.apiKeyInput.disabled = true;
+  }
 }
 
 async function saveSettings() {
-    els.saveSettings.disabled = true;
-    const body = {
-        provider: els.providerSelect.value,
-        custom_model: els.modelInput.value.trim(),
-    };
-    if (els.apiKeyInput.value.trim()) body.api_key = els.apiKeyInput.value.trim();
-    try {
-        const r = await fetch("/api/config", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-        });
-        if (!r.ok) {
-            const e = await r.json().catch(() => ({}));
-            alert(e.error || `HTTP ${r.status}`);
-            return;
-        }
-        await loadConfig();
-        updateBadges();
-        closeSettings();
-    } finally { els.saveSettings.disabled = false; }
+  els.saveSettings.disabled = true;
+  const body = {
+    provider: els.providerSelect.value,
+    custom_model: els.modelInput.value.trim(),
+  };
+  if (els.apiKeyInput.value.trim()) body.api_key = els.apiKeyInput.value.trim();
+  try {
+    const r = await fetch("/api/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      alert(e.error || `HTTP ${r.status}`);
+      return;
+    }
+    await loadConfig();
+    updateBadges();
+    closeSettings();
+  } finally {
+    els.saveSettings.disabled = false;
+  }
 }
 
 async function loadConfig() {
-    const [provR, cfgR] = await Promise.all([fetch("/api/providers"), fetch("/api/config")]);
-    state.providers = await provR.json();
-    state.config = await cfgR.json();
-    els.providerSelect.innerHTML = "";
-    for (const p of state.providers) {
-        const opt = document.createElement("option");
-        opt.value = p.id;
-        opt.textContent = p.name;
-        opt.title = p.description || "";
-        els.providerSelect.appendChild(opt);
-    }
+  const [provR, cfgR] = await Promise.all([
+    fetch("/api/providers"),
+    fetch("/api/config"),
+  ]);
+  state.providers = await provR.json();
+  state.config = await cfgR.json();
+  els.providerSelect.innerHTML = "";
+  for (const p of state.providers) {
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = p.name;
+    opt.title = p.description || "";
+    els.providerSelect.appendChild(opt);
+  }
 }
 
 function updateBadges() {
-    if (els.providerBadge) els.providerBadge.textContent = state.config.provider;
-    if (els.modelBadge) els.modelBadge.textContent = state.config.model;
-    // v3: reflect the active model on the model chip switcher
-    if (els.modelSwitcher) {
-        const model = state.config.model || "deepseek-v4-flash";
-        els.modelSwitcher.querySelectorAll(".model-chip").forEach(c => {
-            c.classList.toggle("model-chip-active", c.dataset.model === model);
-        });
-    }
-    const hasVision = currentModelSupportsVision();
-    els.visionIndicator?.classList.toggle("hidden", !hasVision);
-    if (els.composerAttach) {
-        els.composerAttach.disabled = !hasVision;
-        els.composerAttach.title = hasVision
-            ? "Anexar imagem ao chat"
-            : "O modelo atual não aceita imagens";
-    }
-    if (!hasVision && state.pendingImages.length) clearChatImages();
+  if (els.providerBadge) els.providerBadge.textContent = state.config.provider;
+  if (els.modelBadge) els.modelBadge.textContent = state.config.model;
+  // v3: reflect the active model on the model chip switcher
+  if (els.modelSwitcher) {
+    const model = state.config.model || "deepseek-v4-flash";
+    els.modelSwitcher.querySelectorAll(".model-chip").forEach((c) => {
+      c.classList.toggle("model-chip-active", c.dataset.model === model);
+    });
+  }
+  const hasVision = currentModelSupportsVision();
+  els.visionIndicator?.classList.toggle("hidden", !hasVision);
+  if (els.composerAttach) {
+    els.composerAttach.disabled = !hasVision;
+    els.composerAttach.title = hasVision
+      ? "Anexar imagem ao chat"
+      : "O modelo atual não aceita imagens";
+  }
+  if (!hasVision && state.pendingImages.length) clearChatImages();
 }
 
 // ============================================================
@@ -1320,58 +1596,104 @@ function updateBadges() {
 
 els.newChatBtn.addEventListener("click", newSession);
 els.railWorkspace.addEventListener("click", () => {
-    els.workspacePanel.classList.toggle("mobile-open");
+  els.workspacePanel.classList.toggle("mobile-open");
 });
 els.openSettings.addEventListener("click", openSettings);
 $("logout-btn").addEventListener("click", async () => {
-    if (!confirm("Sair da conta?")) return;
-    await logout();
+  if (!confirm("Sair da conta?")) return;
+  await logout();
 });
 els.closeSettings.addEventListener("click", closeSettings);
 els.cancelSettings.addEventListener("click", closeSettings);
 els.saveSettings.addEventListener("click", saveSettings);
 els.providerSelect.addEventListener("change", updateApiKeyVisibility);
 els.toggleKeyBtn.addEventListener("click", () => {
-    if (els.apiKeyInput.type === "password") {
-        els.apiKeyInput.type = "text";
-        els.toggleKeyBtn.textContent = "ocultar";
-    } else {
-        els.apiKeyInput.type = "password";
-        els.toggleKeyBtn.textContent = "mostrar";
-    }
+  if (els.apiKeyInput.type === "password") {
+    els.apiKeyInput.type = "text";
+    els.toggleKeyBtn.textContent = "ocultar";
+  } else {
+    els.apiKeyInput.type = "password";
+    els.toggleKeyBtn.textContent = "mostrar";
+  }
 });
 
-els.closeFile.addEventListener("click", () => els.fileModal.classList.add("hidden"));
-els.fileModal.addEventListener("click", (e) => { if (e.target === els.fileModal) els.fileModal.classList.add("hidden"); });
-els.cloneModal.addEventListener("click", (e) => { if (e.target === els.cloneModal) els.cloneModal.classList.add("hidden"); });
-els.settingsModal.addEventListener("click", (e) => { if (e.target === els.settingsModal) closeSettings(); });
+els.closeFile.addEventListener("click", () =>
+  els.fileModal.classList.add("hidden"),
+);
+els.fileModal.addEventListener("click", (e) => {
+  if (e.target === els.fileModal) els.fileModal.classList.add("hidden");
+});
+els.cloneModal.addEventListener("click", (e) => {
+  if (e.target === els.cloneModal) els.cloneModal.classList.add("hidden");
+});
+els.settingsModal.addEventListener("click", (e) => {
+  if (e.target === els.settingsModal) closeSettings();
+});
 
 document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-        if (!els.settingsModal.classList.contains("hidden")) closeSettings();
-        else if (!els.cloneModal.classList.contains("hidden")) els.cloneModal.classList.add("hidden");
-        else if (!els.fileModal.classList.contains("hidden")) els.fileModal.classList.add("hidden");
-    }
+  if (e.key === "Escape") {
+    if (!els.settingsModal.classList.contains("hidden")) closeSettings();
+    else if (!els.cloneModal.classList.contains("hidden"))
+      els.cloneModal.classList.add("hidden");
+    else if (!els.fileModal.classList.contains("hidden"))
+      els.fileModal.classList.add("hidden");
+    else if (!els.confirmModal.classList.contains("hidden")) hideConfirm();
+  }
 });
 
-els.form.addEventListener("submit", (e) => { e.preventDefault(); sendMessage(); });
-els.stopBtn.addEventListener("click", () => { if (state.abortController) state.abortController.abort(); });
+els.form.addEventListener("submit", (e) => {
+  e.preventDefault();
+  sendMessage();
+});
+els.stopBtn.addEventListener("click", () => {
+  if (state.abortController) state.abortController.abort();
+});
+
+// Confirm modal event listeners
+if (els.closeConfirm) {
+  els.closeConfirm.addEventListener("click", hideConfirm);
+}
+if (els.cancelConfirm) {
+  els.cancelConfirm.addEventListener("click", hideConfirm);
+}
+if (els.confirmDelete) {
+  els.confirmDelete.addEventListener("click", () => {
+    if (state.confirmCallback) {
+      state.confirmCallback();
+    }
+    hideConfirm();
+  });
+}
+if (els.confirmModal) {
+  els.confirmModal.addEventListener("click", (e) => {
+    if (e.target === els.confirmModal) hideConfirm();
+  });
+}
+
+// Trash button
+if (els.railTrash) {
+  els.railTrash.addEventListener("click", () => {
+    state.trashMode = !state.trashMode;
+    els.railTrash.classList.toggle("active", state.trashMode);
+    renderSessions();
+  });
+}
 els.input.addEventListener("input", autoSize);
 els.input.addEventListener("paste", async (e) => {
-    const imageFiles = Array.from(e.clipboardData?.items || [])
-        .filter(item => item.kind === "file" && item.type.startsWith("image/"))
-        .map(item => item.getAsFile())
-        .filter(Boolean);
-    if (imageFiles.length) {
-        e.preventDefault();
-        await addChatImages(imageFiles);
-    }
+  const imageFiles = Array.from(e.clipboardData?.items || [])
+    .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+    .map((item) => item.getAsFile())
+    .filter(Boolean);
+  if (imageFiles.length) {
+    e.preventDefault();
+    await addChatImages(imageFiles);
+  }
 });
 els.input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        sendMessage();
-    }
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
 });
 
 // ============================================================
@@ -1379,25 +1701,30 @@ els.input.addEventListener("keydown", (e) => {
 // ============================================================
 
 function setTheme(theme) {
-    if (theme === "light") {
-        document.documentElement.setAttribute("data-theme", "light");
-    } else {
-        document.documentElement.removeAttribute("data-theme");
-    }
-    try { localStorage.setItem("stupidex-theme", theme); } catch (e) {}
+  if (theme === "light") {
+    document.documentElement.setAttribute("data-theme", "light");
+  } else {
+    document.documentElement.removeAttribute("data-theme");
+  }
+  try {
+    localStorage.setItem("stupidex-theme", theme);
+  } catch (e) {}
 }
 
 els.themeToggle.addEventListener("click", () => {
-    const current = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
-    setTheme(current === "light" ? "dark" : "light");
+  const current =
+    document.documentElement.getAttribute("data-theme") === "light"
+      ? "light"
+      : "dark";
+  setTheme(current === "light" ? "dark" : "light");
 });
 
 // Apply saved theme on boot
-(function() {
-    try {
-        const saved = localStorage.getItem("stupidex-theme");
-        if (saved) setTheme(saved);
-    } catch (e) {}
+(function () {
+  try {
+    const saved = localStorage.getItem("stupidex-theme");
+    if (saved) setTheme(saved);
+  } catch (e) {}
 })();
 
 // ============================================================
@@ -1405,113 +1732,124 @@ els.themeToggle.addEventListener("click", () => {
 // ============================================================
 
 function setResearchVisible(visible) {
-    if (!els.researchPanel) return;
-    if (visible) {
-        els.researchPanel.classList.remove("research-hidden");
-        els.researchToggle && els.researchToggle.classList.add("is-active");
-    } else {
-        els.researchPanel.classList.add("research-hidden");
-        els.researchToggle && els.researchToggle.classList.remove("is-active");
-    }
-    try { localStorage.setItem("stupidex-research-open", visible ? "1" : "0"); } catch (e) {}
+  if (!els.researchPanel) return;
+  if (visible) {
+    els.researchPanel.classList.remove("research-hidden");
+    els.researchToggle && els.researchToggle.classList.add("is-active");
+  } else {
+    els.researchPanel.classList.add("research-hidden");
+    els.researchToggle && els.researchToggle.classList.remove("is-active");
+  }
+  try {
+    localStorage.setItem("stupidex-research-open", visible ? "1" : "0");
+  } catch (e) {}
 }
 
 if (els.researchToggle) {
-    els.researchToggle.addEventListener("click", () => {
-        const isHidden = els.researchPanel.classList.contains("research-hidden");
-        setResearchVisible(isHidden);
-    });
+  els.researchToggle.addEventListener("click", () => {
+    const isHidden = els.researchPanel.classList.contains("research-hidden");
+    setResearchVisible(isHidden);
+  });
 }
 if (els.closeResearch) {
-    els.closeResearch.addEventListener("click", () => setResearchVisible(false));
+  els.closeResearch.addEventListener("click", () => setResearchVisible(false));
 }
 
 // Research tabs
-els.researchTabs.forEach(tab => {
-    tab.addEventListener("click", () => {
-        els.researchTabs.forEach(t => t.classList.remove("research-tab-active"));
-        tab.classList.add("research-tab-active");
-        const target = tab.dataset.tab;
-        Object.entries(els.researchTabPanes).forEach(([k, pane]) => {
-            if (!pane) return;
-            pane.classList.toggle("hidden", k !== target);
-        });
+els.researchTabs.forEach((tab) => {
+  tab.addEventListener("click", () => {
+    els.researchTabs.forEach((t) => t.classList.remove("research-tab-active"));
+    tab.classList.add("research-tab-active");
+    const target = tab.dataset.tab;
+    Object.entries(els.researchTabPanes).forEach(([k, pane]) => {
+      if (!pane) return;
+      pane.classList.toggle("hidden", k !== target);
     });
+  });
 });
 
 // Ephemeral image attachments for the current chat message.
 if (els.composerAttach) {
-    els.composerAttach.addEventListener("click", () => els.composerImageInput?.click());
+  els.composerAttach.addEventListener("click", () =>
+    els.composerImageInput?.click(),
+  );
 }
 els.composerImageInput?.addEventListener("change", async () => {
-    await addChatImages(els.composerImageInput.files);
-    els.composerImageInput.value = "";
+  await addChatImages(els.composerImageInput.files);
+  els.composerImageInput.value = "";
 });
 for (const eventName of ["dragenter", "dragover"]) {
-    els.composerInputWrap?.addEventListener(eventName, (e) => {
-        const hasImages = Array.from(e.dataTransfer?.items || []).some(
-            item => item.kind === "file" && item.type.startsWith("image/"),
-        );
-        if (!hasImages) return;
-        e.preventDefault();
-        e.stopPropagation();
-        els.composerInputWrap.classList.add("image-drag-active");
-    });
-}
-els.composerInputWrap?.addEventListener("dragleave", (e) => {
-    if (!els.composerInputWrap.contains(e.relatedTarget)) {
-        els.composerInputWrap.classList.remove("image-drag-active");
-    }
-});
-els.composerInputWrap?.addEventListener("drop", async (e) => {
-    const images = Array.from(e.dataTransfer?.files || []).filter(file => file.type.startsWith("image/"));
-    if (!images.length) return;
+  els.composerInputWrap?.addEventListener(eventName, (e) => {
+    const hasImages = Array.from(e.dataTransfer?.items || []).some(
+      (item) => item.kind === "file" && item.type.startsWith("image/"),
+    );
+    if (!hasImages) return;
     e.preventDefault();
     e.stopPropagation();
-    state.dropCounter = 0;
-    els.dropOverlay.classList.add("hidden");
+    els.composerInputWrap.classList.add("image-drag-active");
+  });
+}
+els.composerInputWrap?.addEventListener("dragleave", (e) => {
+  if (!els.composerInputWrap.contains(e.relatedTarget)) {
     els.composerInputWrap.classList.remove("image-drag-active");
-    await addChatImages(images);
+  }
+});
+els.composerInputWrap?.addEventListener("drop", async (e) => {
+  const images = Array.from(e.dataTransfer?.files || []).filter((file) =>
+    file.type.startsWith("image/"),
+  );
+  if (!images.length) return;
+  e.preventDefault();
+  e.stopPropagation();
+  state.dropCounter = 0;
+  els.dropOverlay.classList.add("hidden");
+  els.composerInputWrap.classList.remove("image-drag-active");
+  await addChatImages(images);
 });
 if (els.composerViewProject) {
-    els.composerViewProject.addEventListener("click", () => {
-        // Visual placeholder — just open settings for now
-        openSettings();
-    });
+  els.composerViewProject.addEventListener("click", () => {
+    // Visual placeholder — just open settings for now
+    openSettings();
+  });
 }
 
 // Model chip switcher
 if (els.modelSwitcher) {
-    els.modelSwitcher.addEventListener("click", async (e) => {
-        const chip = e.target.closest(".model-chip");
-        if (!chip) return;
-        const model = chip.dataset.model;
-        const previous = state.config;
-        state.config = { ...state.config, provider: model, model, custom_model: "" };
-        updateBadges();
-        try {
-            const response = await fetch("/api/config", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ provider: model, custom_model: "" }),
-            });
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            state.config = await response.json();
-            updateBadges();
-        } catch {
-            state.config = previous;
-            updateBadges();
-        }
-    });
+  els.modelSwitcher.addEventListener("click", async (e) => {
+    const chip = e.target.closest(".model-chip");
+    if (!chip) return;
+    const model = chip.dataset.model;
+    const previous = state.config;
+    state.config = {
+      ...state.config,
+      provider: model,
+      model,
+      custom_model: "",
+    };
+    updateBadges();
+    try {
+      const response = await fetch("/api/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: model, custom_model: "" }),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      state.config = await response.json();
+      updateBadges();
+    } catch {
+      state.config = previous;
+      updateBadges();
+    }
+  });
 }
 
 // Restore research panel state
-(function() {
-    try {
-        if (localStorage.getItem("stupidex-research-open") === "1") {
-            setResearchVisible(true);
-        }
-    } catch (e) {}
+(function () {
+  try {
+    if (localStorage.getItem("stupidex-research-open") === "1") {
+      setResearchVisible(true);
+    }
+  } catch (e) {}
 })();
 
 // ============================================================
@@ -1520,34 +1858,35 @@ if (els.modelSwitcher) {
 
 let searchDebounce = null;
 function bindSearchInput(input) {
-    if (!input) return;
-    input.addEventListener("input", (e) => {
-        clearTimeout(searchDebounce);
-        const q = e.target.value.trim();
-        searchDebounce = setTimeout(async () => {
-            if (!q) {
-                await loadSessions();
-                return;
-            }
-            const r = await fetch(`/api/sessions/search?q=${encodeURIComponent(q)}`);
-            if (r.ok) {
-                state.sessions = await r.json();
-                renderSessions();
-            }
-        }, 200);
-    });
+  if (!input) return;
+  input.addEventListener("input", (e) => {
+    clearTimeout(searchDebounce);
+    const q = e.target.value.trim();
+    searchDebounce = setTimeout(async () => {
+      if (!q) {
+        await loadSessions();
+        return;
+      }
+      const r = await fetch(`/api/sessions/search?q=${encodeURIComponent(q)}`);
+      if (r.ok) {
+        state.sessions = await r.json();
+        renderSessions();
+      }
+    }, 200);
+  });
 }
 // Existing legacy input (kept in DOM for backwards-compat)
 bindSearchInput($("search-input"));
 // New: rail button focuses an inline search field in the workspace panel
 const railSearch = $("rail-search");
 if (railSearch) {
-    railSearch.addEventListener("click", () => {
-        // The workspace panel already lists all sessions; we just focus the
-        // session list as a soft "search" affordance. Future: show an input.
-        const firstSession = document.querySelector(".session-item");
-        if (firstSession) firstSession.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    });
+  railSearch.addEventListener("click", () => {
+    // The workspace panel already lists all sessions; we just focus the
+    // session list as a soft "search" affordance. Future: show an input.
+    const firstSession = document.querySelector(".session-item");
+    if (firstSession)
+      firstSession.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  });
 }
 
 // ============================================================
@@ -1555,21 +1894,28 @@ if (railSearch) {
 // ============================================================
 
 document.addEventListener("keydown", (e) => {
-    // Ctrl/Cmd+K → focus composer input
-    if ((e.ctrlKey || e.metaKey) && e.key === "k") {
-        e.preventDefault();
-        if (els.input) { els.input.focus(); els.input.select(); }
+  // Ctrl/Cmd+K → focus composer input
+  if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+    e.preventDefault();
+    if (els.input) {
+      els.input.focus();
+      els.input.select();
     }
-    // Ctrl/Cmd+Shift+N → new chat
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "N" || e.key === "n")) {
-        e.preventDefault();
-        newSession();
-    }
-    // Esc on the search box clears it
-    if (e.key === "Escape" && document.activeElement === $("search-input")) {
-        $("search-input").value = "";
-        loadSessions();
-    }
+  }
+  // Ctrl/Cmd+Shift+N → new chat
+  if (
+    (e.ctrlKey || e.metaKey) &&
+    e.shiftKey &&
+    (e.key === "N" || e.key === "n")
+  ) {
+    e.preventDefault();
+    newSession();
+  }
+  // Esc on the search box clears it
+  if (e.key === "Escape" && document.activeElement === $("search-input")) {
+    $("search-input").value = "";
+    loadSessions();
+  }
 });
 
 // ============================================================
@@ -1578,144 +1924,175 @@ document.addEventListener("keydown", (e) => {
 
 const AUTH_KEY = "stupidex-token";
 const elsAuth = {
-    loginScreen: $("login-screen"),
-    mainApp: $("main-app"),
-    loginForm: $("login-form"),
-    loginEmail: $("login-email"),
-    loginPassword: $("login-password"),
-    loginError: $("login-error"),
+  loginScreen: $("login-screen"),
+  mainApp: $("main-app"),
+  loginForm: $("login-form"),
+  loginEmail: $("login-email"),
+  loginPassword: $("login-password"),
+  loginError: $("login-error"),
 };
 
-function getToken() { try { return localStorage.getItem(AUTH_KEY) || ""; } catch { return ""; } }
-function setToken(t)   { try { localStorage.setItem(AUTH_KEY, t); } catch {} }
-function clearToken()  { try { localStorage.removeItem(AUTH_KEY); } catch {} }
+function getToken() {
+  try {
+    return localStorage.getItem(AUTH_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+function setToken(t) {
+  try {
+    localStorage.setItem(AUTH_KEY, t);
+  } catch {}
+}
+function clearToken() {
+  try {
+    localStorage.removeItem(AUTH_KEY);
+  } catch {}
+}
 
 // Monkey-patch fetch to inject auth header on all API calls
 const _origFetch = window.fetch;
-window.fetch = function(url, opts = {}) {
-    const token = getToken();
-    const isApi = typeof url === "string" && (
-        url.startsWith("/api/") || url.includes("/api/")
-    );
-    if (token && isApi) {
-        opts.headers = opts.headers || {};
-        if (opts.headers instanceof Headers) {
-            opts.headers.set("Authorization", "Bearer " + token);
-        } else {
-            opts.headers["Authorization"] = "Bearer " + token;
-        }
+window.fetch = function (url, opts = {}) {
+  const token = getToken();
+  const isApi =
+    typeof url === "string" &&
+    (url.startsWith("/api/") || url.includes("/api/"));
+  if (token && isApi) {
+    opts.headers = opts.headers || {};
+    if (opts.headers instanceof Headers) {
+      opts.headers.set("Authorization", "Bearer " + token);
+    } else {
+      opts.headers["Authorization"] = "Bearer " + token;
     }
-    return _origFetch(url, opts);
+  }
+  return _origFetch(url, opts);
 };
 
 async function checkAuth() {
-    try {
-        const token = getToken();
-        const r = await _origFetch("/api/auth/me", {
-            headers: token ? { Authorization: "Bearer " + token } : {},
-        });
-        if (r.ok && token) clearToken();
-        return r.ok;
-    } catch {
-        return false;
-    }
+  try {
+    const token = getToken();
+    const r = await _origFetch("/api/auth/me", {
+      headers: token ? { Authorization: "Bearer " + token } : {},
+    });
+    if (r.ok && token) clearToken();
+    return r.ok;
+  } catch {
+    return false;
+  }
 }
 
 function showLogin() {
-    elsAuth.loginScreen.classList.remove("hidden");
-    elsAuth.mainApp.classList.add("hidden");
+  elsAuth.loginScreen.classList.remove("hidden");
+  elsAuth.mainApp.classList.add("hidden");
 }
 
 function showApp() {
-    elsAuth.loginScreen.classList.add("hidden");
-    elsAuth.mainApp.classList.remove("hidden");
+  elsAuth.loginScreen.classList.add("hidden");
+  elsAuth.mainApp.classList.remove("hidden");
 }
 
 async function logout() {
-    const token = getToken();
+  const token = getToken();
+  try {
+    await _origFetch("/api/auth/logout", {
+      method: "POST",
+      headers: token ? { Authorization: "Bearer " + token } : {},
+    });
+  } catch {}
+  clearToken();
+  if (state.abortController)
     try {
-        await _origFetch("/api/auth/logout", {
-            method: "POST",
-            headers: token ? { Authorization: "Bearer " + token } : {},
-        });
+      state.abortController.abort();
     } catch {}
-    clearToken();
-    if (state.abortController) try { state.abortController.abort(); } catch {}
-    state = {
-        providers: [],
-        config: { provider: "deepseek-v4-flash", model: "deepseek-v4-flash", has_api_key: false },
-        workspaces: { workspaces: [], active_id: null },
-        sessions: [],
-        currentSessionId: null,
-        busy: false,
-        abortController: null,
-        tree: [],
-        dropCounter: 0,
-        pendingImages: [],
-    };
-    els.messages.innerHTML = "";
-    els.sessionList.innerHTML = "";
-    els.workspaceList.innerHTML = "";
-    els.treeContainer.innerHTML = "";
-    els.sessionTitle.textContent = "Stupidex";
-    renderChatImagePreviews();
-    showLogin();
-    elsAuth.loginEmail.value = "";
-    elsAuth.loginPassword.value = "";
-    elsAuth.loginError.classList.add("hidden");
+  state = {
+    providers: [],
+    config: {
+      provider: "deepseek-v4-flash",
+      model: "deepseek-v4-flash",
+      has_api_key: false,
+    },
+    workspaces: { workspaces: [], active_id: null },
+    sessions: [],
+    currentSessionId: null,
+    busy: false,
+    abortController: null,
+    tree: [],
+    dropCounter: 0,
+    pendingImages: [],
+  };
+  els.messages.innerHTML = "";
+  els.sessionList.innerHTML = "";
+  els.workspaceList.innerHTML = "";
+  els.treeContainer.innerHTML = "";
+  els.sessionTitle.textContent = "Stupidex";
+  renderChatImagePreviews();
+  showLogin();
+  elsAuth.loginEmail.value = "";
+  elsAuth.loginPassword.value = "";
+  elsAuth.loginError.classList.add("hidden");
 }
 
 function setLoginError(msg) {
-    elsAuth.loginError.textContent = msg;
-    elsAuth.loginError.classList.remove("hidden");
+  elsAuth.loginError.textContent = msg;
+  elsAuth.loginError.classList.remove("hidden");
 }
 
 // Email/password login
 elsAuth.loginForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const email = elsAuth.loginEmail.value.trim();
-    const password = elsAuth.loginPassword.value.trim();
-    if (!email || !password) { setLoginError("Preencha email e senha"); return; }
-    try {
-        const r = await _origFetch("/api/auth/register", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ username: email, password }),
-        });
-        return handleLoginResponse(r, email);
-    } catch (err) { setLoginError("Erro de rede"); }
+  e.preventDefault();
+  const email = elsAuth.loginEmail.value.trim();
+  const password = elsAuth.loginPassword.value.trim();
+  if (!email || !password) {
+    setLoginError("Preencha email e senha");
+    return;
+  }
+  try {
+    const r = await _origFetch("/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: email, password }),
+    });
+    return handleLoginResponse(r, email);
+  } catch (err) {
+    setLoginError("Erro de rede");
+  }
 });
 
 async function handleLoginResponse(r, email) {
-    const data = await r.json().catch(() => ({}));
-    if (r.ok) {
-        clearToken();
-        showApp();
-        await bootApp();
-        return;
-    }
-    if (r.status === 409 || (data.error && data.error.includes("already taken"))) {
-        return tryLogin(email, elsAuth.loginPassword.value);
-    }
-    setLoginError(data.error || "Erro ao autenticar");
+  const data = await r.json().catch(() => ({}));
+  if (r.ok) {
+    clearToken();
+    showApp();
+    await bootApp();
+    return;
+  }
+  if (
+    r.status === 409 ||
+    (data.error && data.error.includes("already taken"))
+  ) {
+    return tryLogin(email, elsAuth.loginPassword.value);
+  }
+  setLoginError(data.error || "Erro ao autenticar");
 }
 
 async function tryLogin(email, password) {
-    try {
-        const r = await _origFetch("/api/auth/login", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ username: email, password }),
-        });
-        const data = await r.json().catch(() => ({}));
-        if (r.ok) {
-            clearToken();
-            showApp();
-            await bootApp();
-        } else {
-            setLoginError(data.error || "Credenciais inválidas");
-        }
-    } catch { setLoginError("Erro de rede"); }
+  try {
+    const r = await _origFetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: email, password }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (r.ok) {
+      clearToken();
+      showApp();
+      await bootApp();
+    } else {
+      setLoginError(data.error || "Credenciais inválidas");
+    }
+  } catch {
+    setLoginError("Erro de rede");
+  }
 }
 
 // ============================================================
@@ -1723,27 +2100,27 @@ async function tryLogin(email, password) {
 // ============================================================
 
 async function bootApp() {
-    await loadConfig();
-    updateBadges();
-    await loadWorkspaces();
-    await loadSessions();
-    if (state.sessions.length) {
-        openSession(state.sessions[0].id);
-    } else {
-        renderWelcome();
-    }
-    els.input.focus();
+  await loadConfig();
+  updateBadges();
+  await loadWorkspaces();
+  await loadSessions();
+  if (state.sessions.length) {
+    openSession(state.sessions[0].id);
+  } else {
+    renderWelcome();
+  }
+  els.input.focus();
 }
 
 (async function init() {
-    if (await checkAuth()) {
-        showApp();
-        try {
-            await bootApp();
-        } catch (e) {
-            renderWelcome();
-        }
-    } else {
-        showLogin();
+  if (await checkAuth()) {
+    showApp();
+    try {
+      await bootApp();
+    } catch (e) {
+      renderWelcome();
     }
+  } else {
+    showLogin();
+  }
 })();

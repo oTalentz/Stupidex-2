@@ -1335,8 +1335,9 @@ body,
 .message-image-gallery img {
     display: block;
     width: 100%;
-    max-height: 280px;
-    object-fit: cover;
+    height: 200px;
+    object-fit: contain;
+    background: var(--bg-card);
     border-radius: 10px;
     border: 1px solid var(--border);
 }
@@ -2004,4 +2005,123 @@ body,
     :root[data-theme="light"] #theme-toggle .ph-moon {
         display: inline;
     }
+}
+
+/* ============================================================
+   Trash & Confirm Modal Styles
+   ============================================================ */
+
+/* Trash button in nav rail */
+.rail-trash {
+    position: relative;
+}
+.rail-trash.active {
+    background: var(--accent-soft);
+}
+.rail-trash.active .ph-trash {
+    color: var(--accent);
+}
+
+/* Session in trash */
+.session-item.trashed {
+    opacity: 0.6;
+}
+
+.session-item.trashed .title {
+    text-decoration: line-through;
+}
+
+/* Improved session menu */
+.context-menu {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 6px;
+    z-index: 1000;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    min-width: 180px;
+}
+
+.context-menu .menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--text-main);
+    transition: all 0.15s ease;
+}
+
+.context-menu .menu-item:hover {
+    background: var(--bg-card-hover);
+}
+
+.context-menu .menu-icon {
+    font-size: 14px;
+    width: 18px;
+    text-align: center;
+}
+
+.context-menu .menu-danger {
+    color: var(--danger);
+}
+
+.context-menu .menu-danger:hover {
+    background: rgba(255, 0, 0, 0.1);
+}
+
+/* Confirm modal */
+#confirm-modal .modal-content {
+    max-width: 400px;
+}
+
+#confirm-modal .modal-body {
+    text-align: center;
+}
+
+#confirm-message {
+    color: var(--text-muted);
+    margin: 0;
+}
+
+/* Danger button style */
+.danger-btn {
+    background: var(--danger);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-weight: 500;
+    transition: background-color 0.15s ease;
+}
+
+.danger-btn:hover {
+    background: #ff4444;
+    color: white;
+}
+
+/* Empty sessions message */
+.sessions-empty {
+    padding: 20px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+/* Session more button */
+.session-more-btn {
+    opacity: 0.5;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: all 0.15s ease;
+}
+
+.session-more-btn:hover {
+    opacity: 1;
+    background: var(--bg-card-hover);
+}
+
+.session-more-btn .ph-dots-three {
+    font-size: 16px;
 }

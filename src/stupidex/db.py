@@ -10,8 +10,9 @@ Migrations:
   v4 – sessions.user_id FK
   v5 – Google OAuth (email, avatar_url, oauth_provider)
 """
-import json
+
 import hashlib
+import json
 import secrets
 import sqlite3
 import threading
@@ -30,6 +31,7 @@ except ImportError:
     import hashlib
     import hmac
     import os as _os
+
     _PBKDF2_ITERS = 200_000
     _PBKDF2_ALGO = "sha256"
 
@@ -51,6 +53,7 @@ except ImportError:
             return hmac.compare_digest(expected, candidate)
         except Exception:
             return False
+
 
 from .config import DATA_DIR
 
@@ -106,6 +109,7 @@ def _decrypt_secret(value: str | None) -> str:
     except (InvalidToken, ValueError):
         return ""
 
+
 # Per-user login throttling: at most N failures in M seconds before a temporary lock.
 _LOGIN_FAIL_LIMIT = 8
 _LOGIN_FAIL_WINDOW = 600.0  # 10 min
@@ -154,6 +158,7 @@ class Session:
     model: str
     pinned: bool = False
     archived: bool = False
+    trashed: bool = False
     message_count: int = 0
 
     def to_dict(self) -> dict[str, Any]:
@@ -167,6 +172,7 @@ class Session:
             "model": self.model,
             "pinned": self.pinned,
             "archived": self.archived,
+            "trashed": self.trashed,
             "message_count": self.message_count,
         }
 
@@ -185,15 +191,20 @@ class DBMessage:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "id": self.id, "role": self.role, "type": self.type,
-            "content": self.content, "tool_calls": self.tool_calls,
-            "tool_call_id": self.tool_call_id, "metadata": self.metadata,
+            "id": self.id,
+            "role": self.role,
+            "type": self.type,
+            "content": self.content,
+            "tool_calls": self.tool_calls,
+            "tool_call_id": self.tool_call_id,
+            "metadata": self.metadata,
         }
 
 
 # ============================================================
 # Connection & migrations
 # ============================================================
+
 
 def _connect() -> sqlite3.Connection:
     DB_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -279,6 +290,11 @@ _MIGRATIONS: list[str] = [
     ALTER TABLE users ADD COLUMN model TEXT NOT NULL DEFAULT '';
     ALTER TABLE users ADD COLUMN custom_model TEXT NOT NULL DEFAULT '';
     """,
+    # v8 — trash support for sessions
+    """
+    ALTER TABLE sessions ADD COLUMN trashed INTEGER NOT NULL DEFAULT 0;
+    CREATE INDEX IF NOT EXISTS idx_sessions_trashed ON sessions(trashed, updated_at DESC);
+    """,
 ]
 
 
@@ -301,7 +317,10 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             # single statements, or split multi-statement scripts manually.
             for stmt in _split_statements(sql):
                 conn.execute(stmt)
-            conn.execute("INSERT INTO schema_version(version, applied_at) VALUES (?, ?)", (v, time.time()))
+            conn.execute(
+                "INSERT INTO schema_version(version, applied_at) VALUES (?, ?)",
+                (v, time.time()),
+            )
         conn.commit()
         _SCHEMA_INITIALIZED = True
 
@@ -340,6 +359,7 @@ def init_db() -> None:
 # Users & Auth
 # ============================================================
 
+
 def _check_login_lockout(key: str) -> None:
     """Raise ValueError if this key is currently locked out."""
     with _LOGIN_BLOCKED_LOCK:
@@ -356,7 +376,11 @@ def _record_login_failure(key: str) -> None:
     with _LOGIN_FAIL_LOCK:
         if len(_LOGIN_FAIL) > 10_000:
             cutoff = now - _LOGIN_FAIL_WINDOW
-            for stale_key in [k for k, values in _LOGIN_FAIL.items() if not values or values[-1] < cutoff]:
+            for stale_key in [
+                k
+                for k, values in _LOGIN_FAIL.items()
+                if not values or values[-1] < cutoff
+            ]:
                 _LOGIN_FAIL.pop(stale_key, None)
         if key not in _LOGIN_FAIL and len(_LOGIN_FAIL) >= 20_000:
             return
@@ -399,7 +423,9 @@ def create_user(username: str, password: str) -> tuple[User, str]:
     pwhash = generate_password_hash(password)
 
     with db_cursor() as cur:
-        existing = cur.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+        existing = cur.execute(
+            "SELECT id FROM users WHERE username = ?", (username,)
+        ).fetchone()
         if existing:
             raise ValueError("username already taken")
         cur.execute(
@@ -412,7 +438,9 @@ def create_user(username: str, password: str) -> tuple[User, str]:
     return User(id=uid, username=username, created_at=now, last_login=now), token
 
 
-def find_or_create_oauth_user(email: str, name: str, avatar_url: str, provider: str) -> tuple[User, str]:
+def find_or_create_oauth_user(
+    email: str, name: str, avatar_url: str, provider: str
+) -> tuple[User, str]:
     """Find existing OAuth user by email, or create a new one. Returns (User, token)."""
     email = email.strip().lower()
     name = name.strip() or email.split("@")[0]
@@ -436,11 +464,15 @@ def find_or_create_oauth_user(email: str, name: str, avatar_url: str, provider: 
             uid = uuid.uuid4().hex[:12]
             base = name.strip().lower().replace(" ", "")[:20] or "user"
             username = base
-            if cur.execute("SELECT 1 FROM users WHERE username = ?", (base,)).fetchone():
+            if cur.execute(
+                "SELECT 1 FROM users WHERE username = ?", (base,)
+            ).fetchone():
                 suffix = 2
                 while True:
                     username = f"{base}{suffix}"
-                    if not cur.execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone():
+                    if not cur.execute(
+                        "SELECT 1 FROM users WHERE username = ?", (username,)
+                    ).fetchone():
                         break
                     suffix += 1
             cur.execute(
@@ -466,9 +498,6 @@ def find_or_create_oauth_user(email: str, name: str, avatar_url: str, provider: 
     return user, token
 
 
-
-
-
 def authenticate_user(username: str, password: str) -> tuple[User, str]:
     username = username.strip().lower()
     key = f"login:{username}"
@@ -481,7 +510,9 @@ def authenticate_user(username: str, password: str) -> tuple[User, str]:
             "FROM users WHERE username = ?",
             (username,),
         ).fetchone()
-    valid = check_password_hash(row["password_hash"] if row else _DUMMY_PASSWORD_HASH, password)
+    valid = check_password_hash(
+        row["password_hash"] if row else _DUMMY_PASSWORD_HASH, password
+    )
     if not row or not valid:
         _record_login_failure(key)
         raise ValueError("invalid username or password")
@@ -489,10 +520,19 @@ def authenticate_user(username: str, password: str) -> tuple[User, str]:
     _record_login_success(key)
     token = _create_token(row["id"])
     with db_cursor() as cur:
-        cur.execute("UPDATE users SET last_login = ? WHERE id = ?", (time.time(), row["id"]))
-    user = User(id=row["id"], username=row["username"], created_at=row["created_at"],
-                last_login=time.time(), api_key=_decrypt_secret(row["api_key"]), provider=row["provider"],
-                model=row["model"], custom_model=row["custom_model"])
+        cur.execute(
+            "UPDATE users SET last_login = ? WHERE id = ?", (time.time(), row["id"])
+        )
+    user = User(
+        id=row["id"],
+        username=row["username"],
+        created_at=row["created_at"],
+        last_login=time.time(),
+        api_key=_decrypt_secret(row["api_key"]),
+        provider=row["provider"],
+        model=row["model"],
+        custom_model=row["custom_model"],
+    )
     return user, token
 
 
@@ -522,23 +562,41 @@ def validate_token(token: str) -> User | None:
             (stored_token, token, time.time()),
         ).fetchone()
         if row and row["stored_token"] == token:
-            cur.execute("UPDATE auth_tokens SET token = ? WHERE token = ?", (stored_token, token))
+            cur.execute(
+                "UPDATE auth_tokens SET token = ? WHERE token = ?",
+                (stored_token, token),
+            )
     if not row:
         return None
-    return User(id=row["id"], username=row["username"], created_at=row["created_at"],
-                last_login=row["last_login"], api_key=_decrypt_secret(row["api_key"]),
-                email=row["email"], avatar_url=row["avatar_url"], oauth_provider=row["oauth_provider"],
-                provider=row["provider"], model=row["model"], custom_model=row["custom_model"])
+    return User(
+        id=row["id"],
+        username=row["username"],
+        created_at=row["created_at"],
+        last_login=row["last_login"],
+        api_key=_decrypt_secret(row["api_key"]),
+        email=row["email"],
+        avatar_url=row["avatar_url"],
+        oauth_provider=row["oauth_provider"],
+        provider=row["provider"],
+        model=row["model"],
+        custom_model=row["custom_model"],
+    )
 
 
 def logout_token(token: str) -> None:
     with db_cursor() as cur:
-        cur.execute("DELETE FROM auth_tokens WHERE token IN (?, ?)", (_token_digest(token), token))
+        cur.execute(
+            "DELETE FROM auth_tokens WHERE token IN (?, ?)",
+            (_token_digest(token), token),
+        )
 
 
 def update_user_api_key(user_id: str, api_key: str | None) -> None:
     with db_cursor() as cur:
-        cur.execute("UPDATE users SET api_key = ? WHERE id = ?", (_encrypt_secret(api_key), user_id))
+        cur.execute(
+            "UPDATE users SET api_key = ? WHERE id = ?",
+            (_encrypt_secret(api_key), user_id),
+        )
 
 
 def update_user_config(
@@ -559,7 +617,10 @@ def update_user_config(
             (provider, model, custom_model, user_id),
         )
         if api_key is not None:
-            cur.execute("UPDATE users SET api_key = ? WHERE id = ?", (_encrypt_secret(api_key.strip()), user_id))
+            cur.execute(
+                "UPDATE users SET api_key = ? WHERE id = ?",
+                (_encrypt_secret(api_key.strip()), user_id),
+            )
         elif clear_api_key:
             cur.execute("UPDATE users SET api_key = '' WHERE id = ?", (user_id,))
 
@@ -572,7 +633,10 @@ def _token_digest(token: str) -> str:
 # Sessions
 # ============================================================
 
-def create_session(user_id: str, provider: str, model: str, title: str = "Nova conversa") -> Session:
+
+def create_session(
+    user_id: str, provider: str, model: str, title: str = "Nova conversa"
+) -> Session:
     sid = uuid.uuid4().hex[:12]
     now = time.time()
     with db_cursor() as cur:
@@ -581,23 +645,28 @@ def create_session(user_id: str, provider: str, model: str, title: str = "Nova c
             "VALUES (?, ?, ?, ?, ?, ?, ?)",
             (sid, user_id, title, now, now, provider, model),
         )
-    return Session(sid, user_id, title, now, now, provider, model, False, False, 0)
+    return Session(
+        sid, user_id, title, now, now, provider, model, False, False, False, 0
+    )
 
 
-def list_sessions(user_id: str, include_archived: bool = False) -> list[Session]:
+def list_sessions(
+    user_id: str, include_archived: bool = False, include_trashed: bool = False
+) -> list[Session]:
     with db_cursor() as cur:
         if include_archived:
             rows = cur.execute(
                 "SELECT s.id, s.user_id, s.title, s.created_at, s.updated_at, s.provider, s.model, "
-                "s.pinned, s.archived, (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) AS mc "
+                "s.pinned, s.archived, s.trashed, (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) AS mc "
                 "FROM sessions s WHERE s.user_id = ? ORDER BY s.pinned DESC, s.updated_at DESC",
                 (user_id,),
             ).fetchall()
         else:
+            trashed_condition = "" if include_trashed else " AND s.trashed = 0"
             rows = cur.execute(
                 "SELECT s.id, s.user_id, s.title, s.created_at, s.updated_at, s.provider, s.model, "
-                "s.pinned, s.archived, (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) AS mc "
-                "FROM sessions s WHERE s.user_id = ? AND s.archived = 0 ORDER BY s.pinned DESC, s.updated_at DESC",
+                "s.pinned, s.archived, s.trashed, (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) AS mc "
+                f"FROM sessions s WHERE s.user_id = ? AND s.archived = 0{trashed_condition} ORDER BY s.pinned DESC, s.updated_at DESC",
                 (user_id,),
             ).fetchall()
     return [_row_to_session(r) for r in rows]
@@ -608,7 +677,8 @@ def get_session(sid: str) -> Session | None:
         row = cur.execute(
             "SELECT s.id, s.user_id, s.title, s.created_at, s.updated_at, s.provider, s.model, "
             "s.pinned, s.archived, (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) AS mc "
-            "FROM sessions s WHERE s.id = ?", (sid,)
+            "FROM sessions s WHERE s.id = ?",
+            (sid,),
         ).fetchone()
     return _row_to_session(row) if row else None
 
@@ -620,8 +690,10 @@ def get_session_for_user(sid: str, user_id: str) -> Session | None:
 
 def rename_session(sid: str, title: str) -> bool:
     with db_cursor() as cur:
-        cur.execute("UPDATE sessions SET title = ?, updated_at = ? WHERE id = ?",
-                    (title.strip() or "Sem título", time.time(), sid))
+        cur.execute(
+            "UPDATE sessions SET title = ?, updated_at = ? WHERE id = ?",
+            (title.strip() or "Sem título", time.time(), sid),
+        )
         return cur.rowcount > 0
 
 
@@ -634,21 +706,36 @@ def delete_session(sid: str) -> bool:
 
 def set_pinned(sid: str, pinned: bool) -> bool:
     with db_cursor() as cur:
-        cur.execute("UPDATE sessions SET pinned = ?, updated_at = ? WHERE id = ?",
-                    (1 if pinned else 0, time.time(), sid))
+        cur.execute(
+            "UPDATE sessions SET pinned = ?, updated_at = ? WHERE id = ?",
+            (1 if pinned else 0, time.time(), sid),
+        )
         return cur.rowcount > 0
 
 
 def set_archived(sid: str, archived: bool) -> bool:
     with db_cursor() as cur:
-        cur.execute("UPDATE sessions SET archived = ?, updated_at = ? WHERE id = ?",
-                    (1 if archived else 0, time.time(), sid))
+        cur.execute(
+            "UPDATE sessions SET archived = ?, updated_at = ? WHERE id = ?",
+            (1 if archived else 0, time.time(), sid),
+        )
+        return cur.rowcount > 0
+
+
+def set_trashed(sid: str, trashed: bool) -> bool:
+    with db_cursor() as cur:
+        cur.execute(
+            "UPDATE sessions SET trashed = ?, updated_at = ? WHERE id = ?",
+            (1 if trashed else 0, time.time(), sid),
+        )
         return cur.rowcount > 0
 
 
 def touch_session(sid: str) -> None:
     with db_cursor() as cur:
-        cur.execute("UPDATE sessions SET updated_at = ? WHERE id = ?", (time.time(), sid))
+        cur.execute(
+            "UPDATE sessions SET updated_at = ? WHERE id = ?", (time.time(), sid)
+        )
 
 
 def auto_title(session_id: str, user_text: str, max_len: int = 60) -> None:
@@ -682,17 +769,35 @@ def search_sessions(user_id: str, query: str) -> list[Session]:
 
 def _row_to_session(r) -> Session:
     d = dict(r)
-    return Session(d["id"], d.get("user_id", ""), d["title"], d["created_at"], d["updated_at"],
-                   d["provider"], d["model"], bool(d.get("pinned", 0)), bool(d.get("archived", 0)), d.get("mc", 0))
+    return Session(
+        d["id"],
+        d.get("user_id", ""),
+        d["title"],
+        d["created_at"],
+        d["updated_at"],
+        d["provider"],
+        d["model"],
+        bool(d.get("pinned", 0)),
+        bool(d.get("archived", 0)),
+        bool(d.get("trashed", 0)),
+        d.get("mc", 0),
+    )
 
 
 # ============================================================
 # Messages
 # ============================================================
 
-def append_message(session_id: str, role: str, content: str = "", type_: str = "text",
-                   tool_calls: list[dict] | None = None, tool_call_id: str | None = None,
-                   metadata: dict | None = None) -> DBMessage:
+
+def append_message(
+    session_id: str,
+    role: str,
+    content: str = "",
+    type_: str = "text",
+    tool_calls: list[dict] | None = None,
+    tool_call_id: str | None = None,
+    metadata: dict | None = None,
+) -> DBMessage:
     now = time.time()
     tc_json = json.dumps(tool_calls or [], ensure_ascii=False)
     md_json = json.dumps(metadata or {}, ensure_ascii=False)
@@ -704,9 +809,20 @@ def append_message(session_id: str, role: str, content: str = "", type_: str = "
             (session_id, role, type_, content, tc_json, tool_call_id, md_json, now),
         )
         mid = cur.lastrowid
-        cur.execute("UPDATE sessions SET updated_at = ? WHERE id = ?", (now, session_id))
-    return DBMessage(mid, session_id, role, type_, content, tool_calls or [],
-                     tool_call_id, metadata or {}, now)
+        cur.execute(
+            "UPDATE sessions SET updated_at = ? WHERE id = ?", (now, session_id)
+        )
+    return DBMessage(
+        mid,
+        session_id,
+        role,
+        type_,
+        content,
+        tool_calls or [],
+        tool_call_id,
+        metadata or {},
+        now,
+    )
 
 
 def get_messages(session_id: str) -> list[DBMessage]:
@@ -714,7 +830,8 @@ def get_messages(session_id: str) -> list[DBMessage]:
         rows = cur.execute(
             "SELECT id, session_id, role, type, content, tool_calls_json, "
             "tool_call_id, metadata_json, created_at "
-            "FROM messages WHERE session_id = ? ORDER BY id ASC", (session_id,),
+            "FROM messages WHERE session_id = ? ORDER BY id ASC",
+            (session_id,),
         ).fetchall()
     return [_row_to_msg(r) for r in rows]
 
@@ -733,13 +850,20 @@ def get_last_user_message(session_id: str) -> DBMessage | None:
 def clear_messages(session_id: str) -> None:
     with db_cursor() as cur:
         cur.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
-        cur.execute("UPDATE sessions SET updated_at = ? WHERE id = ?", (time.time(), session_id))
+        cur.execute(
+            "UPDATE sessions SET updated_at = ? WHERE id = ?", (time.time(), session_id)
+        )
 
 
 def delete_messages_from(session_id: str, from_id: int) -> None:
     with db_cursor() as cur:
-        cur.execute("DELETE FROM messages WHERE session_id = ? AND id >= ?", (session_id, from_id))
-        cur.execute("UPDATE sessions SET updated_at = ? WHERE id = ?", (time.time(), session_id))
+        cur.execute(
+            "DELETE FROM messages WHERE session_id = ? AND id >= ?",
+            (session_id, from_id),
+        )
+        cur.execute(
+            "UPDATE sessions SET updated_at = ? WHERE id = ?", (time.time(), session_id)
+        )
 
 
 def _row_to_msg(r) -> DBMessage:
@@ -753,5 +877,14 @@ def _row_to_msg(r) -> DBMessage:
         md = json.loads(d["metadata_json"])
     except (ValueError, TypeError):
         md = {}
-    return DBMessage(d["id"], d["session_id"], d["role"], d["type"], d["content"],
-                     tc, d["tool_call_id"], md, d["created_at"])
+    return DBMessage(
+        d["id"],
+        d["session_id"],
+        d["role"],
+        d["type"],
+        d["content"],
+        tc,
+        d["tool_call_id"],
+        md,
+        d["created_at"],
+    )

@@ -2,9 +2,10 @@
 
 Each provider knows its model and how to talk to the LLM via litellm.
 """
+
 from dataclasses import dataclass
 
-from ..config import AppConfig, DEFAULT_BASE_URL
+from ..config import DEFAULT_BASE_URL, AppConfig
 
 
 @dataclass
@@ -84,6 +85,15 @@ PROVIDERS: dict[str, ProviderConfig] = {
         needs_api_key=False,
         description="Modelos rodando localmente no Ollama",
     ),
+    "puter-mistral": ProviderConfig(
+        id="puter-mistral",
+        name="Puter Mistral (Grátis)",
+        base_url="https://api.puter.com/v2",
+        default_model="mistralai/mistral-large-2512",
+        needs_api_key=False,
+        supports_vision=True,
+        description="Mistral via Puter.com — API gratuita e ilimitada",
+    ),
 }
 
 
@@ -111,7 +121,9 @@ def list_providers() -> list[dict]:
     ]
 
 
-def resolve_request_model(provider_id: str, custom_model: str, cfg: AppConfig) -> tuple[ProviderConfig, str]:
+def resolve_request_model(
+    provider_id: str, custom_model: str, cfg: AppConfig
+) -> tuple[ProviderConfig, str]:
     """Pick the effective provider + model for a request."""
     p = get_provider(provider_id)
     if custom_model.strip():

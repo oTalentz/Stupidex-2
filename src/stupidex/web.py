@@ -113,14 +113,19 @@ def _validate_chat_images(raw_images) -> tuple[list[dict], str | None]:
         signatures = signature if isinstance(signature, tuple) else (signature,)
         valid_signature = any(content.startswith(item) for item in signatures)
         if mime == "image/webp":
-            valid_signature = valid_signature and len(content) >= 12 and content[8:12] == b"WEBP"
+            valid_signature = (
+                valid_signature and len(content) >= 12 and content[8:12] == b"WEBP"
+            )
         if not valid_signature:
             return [], f"image {index + 1} content does not match {mime}"
-        name = re.sub(r"[^A-Za-z0-9._ -]+", "_", str(raw.get("name") or f"image-{index + 1}"))[:120]
+        name = re.sub(
+            r"[^A-Za-z0-9._ -]+", "_", str(raw.get("name") or f"image-{index + 1}")
+        )[:120]
         normalized.append(
             {"data_url": data_url, "mime": mime, "name": name, "size": len(content)}
         )
     return normalized, None
+
 
 # CORS: when STUPIDEX_CORS is unset, allow only same-origin (no header).
 # Set to a comma-separated list of origins or "*" to allow any.
@@ -139,10 +144,13 @@ def _enforce_browser_origin():
         return None
     parsed = urllib.parse.urlparse(origin)
     same_origin = parsed.netloc.lower() == request.host.lower()
-    explicitly_allowed = origin in {item.rstrip("/") for item in CORS_ORIGINS if item != "*"}
+    explicitly_allowed = origin in {
+        item.rstrip("/") for item in CORS_ORIGINS if item != "*"
+    }
     if not same_origin and not explicitly_allowed:
         return jsonify({"error": "origin not allowed"}), 403
     return None
+
 
 # Google OAuth
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
@@ -204,7 +212,11 @@ def _rate_limit_check(bucket: str, identity: str) -> bool:
     with _RL_LOCK:
         if len(_RL_BUCKETS) > 10_000:
             cutoff = now - max(rule[2] for rule in _RL_RULES)
-            stale = [k for k, values in _RL_BUCKETS.items() if not values or values[-1] < cutoff]
+            stale = [
+                k
+                for k, values in _RL_BUCKETS.items()
+                if not values or values[-1] < cutoff
+            ]
             for stale_key in stale:
                 _RL_BUCKETS.pop(stale_key, None)
         if key not in _RL_BUCKETS and len(_RL_BUCKETS) >= 20_000:
@@ -508,7 +520,10 @@ def auth_google_callback():
     frontend = os.environ.get("FRONTEND_URL", "/").strip() or "/"
     if frontend != "/":
         parsed_frontend = urllib.parse.urlparse(frontend)
-        if parsed_frontend.scheme not in ("http", "https") or not parsed_frontend.netloc:
+        if (
+            parsed_frontend.scheme not in ("http", "https")
+            or not parsed_frontend.netloc
+        ):
             frontend = "/"
     resp = redirect(frontend)
     _set_auth_cookie(resp, token)
@@ -619,7 +634,11 @@ def set_config():
         clear_api_key=bool(data.get("clear_api_key")),
     )
     server_key = load_config().api_key
-    has_key = bool(api_key or (request.user.api_key and not data.get("clear_api_key")) or server_key)
+    has_key = bool(
+        api_key
+        or (request.user.api_key and not data.get("clear_api_key"))
+        or server_key
+    )
     return jsonify(
         {
             "ok": True,
@@ -705,6 +724,9 @@ def sessions_update(sid):
             return jsonify({"error": "not found"}), 404
     if "archived" in data:
         if not db.set_archived(sid, bool(data["archived"])):
+            return jsonify({"error": "not found"}), 404
+    if "trashed" in data:
+        if not db.set_trashed(sid, bool(data["trashed"])):
             return jsonify({"error": "not found"}), 404
     return jsonify({"ok": True})
 
@@ -880,7 +902,11 @@ def session_regenerate(sid):
 
     provider_id = data.get("provider") or s.provider
     user_api_key = request.user.api_key or data.get("api_key")
-    if PROVIDERS.get(provider_id, PROVIDERS[DEFAULT_FALLBACK_ID]).needs_api_key and not user_api_key and not has_api_key():
+    if (
+        PROVIDERS.get(provider_id, PROVIDERS[DEFAULT_FALLBACK_ID]).needs_api_key
+        and not user_api_key
+        and not has_api_key()
+    ):
         return jsonify({"error": "no LLM API key configured"}), 503
     ctx = build_context(
         provider_id=provider_id,
@@ -929,7 +955,9 @@ def _session_chat_impl(sid: str) -> Response:
     provider_id = data.get("provider") or session.provider
     provider = PROVIDERS.get(provider_id, PROVIDERS[DEFAULT_FALLBACK_ID])
     if images and not provider.supports_vision:
-        return jsonify({"error": "the selected model does not support image input"}), 400
+        return jsonify(
+            {"error": "the selected model does not support image input"}
+        ), 400
     user_api_key = request.user.api_key or data.get("api_key")
     if provider.needs_api_key and not user_api_key and not has_api_key():
         return jsonify(
@@ -983,7 +1011,13 @@ def _stream_response(
             error_id = secrets.token_hex(6)
             err_holder["err"] = "internal server error"
             err_holder["error_id"] = error_id
-            app.logger.error("stream fatal id=%s sid=%s: %s\n%s", error_id, sid, exc, _tb.format_exc(limit=5))
+            app.logger.error(
+                "stream fatal id=%s sid=%s: %s\n%s",
+                error_id,
+                sid,
+                exc,
+                _tb.format_exc(limit=5),
+            )
         finally:
             _pop_stream(sid, ctx.cancel_event)
             producer_done.set()
@@ -1174,7 +1208,10 @@ def workspaces_upload(ws_id):
                     written += len(chunk)
                     if written > workspaces_module.MAX_FILE_BYTES:
                         raise ValueError("file too large")
-                    if total_bytes - old_size + written > workspaces_module.MAX_WORKSPACE_BYTES:
+                    if (
+                        total_bytes - old_size + written
+                        > workspaces_module.MAX_WORKSPACE_BYTES
+                    ):
                         raise ValueError("workspace storage limit exceeded")
                     out.write(chunk)
             temp_upload.replace(dest)
