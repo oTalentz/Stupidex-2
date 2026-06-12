@@ -605,6 +605,9 @@ body,
     border-left: 1px dashed var(--border);
     padding-left: 4px;
 }
+.tree-children.collapsed {
+    display: none;
+}
 
 .session-list {
     display: flex;

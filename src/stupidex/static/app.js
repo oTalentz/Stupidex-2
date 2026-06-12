@@ -1494,9 +1494,9 @@ function buildTreeNode(node, depth) {
     const head = document.createElement("div");
     head.className = "tree-node";
     head.style.paddingLeft = `${depth * 4}px`;
-    head.innerHTML = `<span class="icon">▾</span><span>📁 ${escapeHtml(node.name)}</span>`;
+    head.innerHTML = `<span class="icon">▸</span><span>📁 ${escapeHtml(node.name)}</span>`;
     const children = document.createElement("div");
-    children.className = "tree-children";
+    children.className = "tree-children collapsed";
     for (const child of node.children || []) {
       children.appendChild(buildTreeNode(child, depth + 1));
     }
