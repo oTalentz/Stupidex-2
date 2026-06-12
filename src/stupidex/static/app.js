@@ -76,7 +76,6 @@ const els = {
   // Profile modal
   userProfileBanner: $("user-profile-banner"),
   userProfileAvatar: $("user-profile-avatar"),
-  userProfileName: $("user-profile-name"),
   profileModal: $("profile-modal"),
   closeProfile: $("close-profile"),
   closeProfileBtn: $("close-profile-btn"),
@@ -2547,22 +2546,15 @@ async function loadUserProfile() {
 function updateUserProfileBanner() {
   if (!els.userProfileBanner) return;
 
-  const { username, email, avatar_url, oauth_provider, created_at } = state.user;
-  const displayName = username || email || "Usuário";
+  const { avatar_url } = state.user;
 
   if (avatar_url) {
     els.userProfileAvatar.src = avatar_url;
     els.userProfileAvatar.style.display = "block";
+    els.userProfileBanner.classList.remove("hidden");
   } else {
     els.userProfileAvatar.src = "";
     els.userProfileAvatar.style.display = "none";
-  }
-
-  els.userProfileName.textContent = displayName;
-
-  if (displayName || avatar_url) {
-    els.userProfileBanner.classList.remove("hidden");
-  } else {
     els.userProfileBanner.classList.add("hidden");
   }
 }
