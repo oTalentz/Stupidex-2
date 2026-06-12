@@ -126,6 +126,10 @@ def _try_flask(app, host: str, port: int) -> None:
 def main() -> int:
     _setup_logging()
 
+    # Default: enable shell tool unless explicitly disabled
+    if os.environ.get("STUPIDEX_ENABLE_SHELL", "").lower() not in ("0", "false", "no"):
+        os.environ.setdefault("STUPIDEX_ENABLE_SHELL", "1")
+
     # Auto-detect server mode. Cloud hosts (Square Cloud, Render, Fly, etc.)
     # often don't set PORT — but they run on Linux in a non-TTY container.
     # The desktop .exe is a separate build (PyInstaller) and doesn't use this.

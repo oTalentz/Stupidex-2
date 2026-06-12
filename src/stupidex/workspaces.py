@@ -11,6 +11,7 @@ Workspaces can be populated by:
 import json
 import re
 import shutil
+import subprocess
 import tempfile
 import time
 import urllib.error
@@ -255,7 +256,9 @@ def init_from_git(
     ws_path = workspace_path(user_id, ws_id)
     if ws_path is None:
         raise ValueError("workspace not found")
-    return _download_archive(user_id, ws_id, url, branch, github_token)
+    ws_obj, msg = _download_archive(user_id, ws_id, url, branch, github_token)
+    _ensure_git_repo(ws_path)
+    return ws_obj, msg
 
 
 def _download_archive(
@@ -306,6 +309,25 @@ def _download_archive(
             meta_backup.rename(meta_file) if not meta_file.exists() else meta_backup.unlink()
 
 
+def _ensure_git_repo(ws_path: Path) -> None:
+    """Initialize a git repository in the workspace if git CLI is available."""
+    git = shutil.which("git")
+    if not git:
+        return
+    git_dir = ws_path / ".git"
+    if git_dir.is_dir():
+        subprocess.run([git, "add", "-A"], cwd=str(ws_path), capture_output=True, timeout=30)
+        return
+    try:
+        subprocess.run([git, "init"], cwd=str(ws_path), capture_output=True, timeout=15)
+        subprocess.run([git, "config", "user.email", "agent@stupidex.local"], cwd=str(ws_path), capture_output=True, timeout=15)
+        subprocess.run([git, "config", "user.name", "Stupidex Agent"], cwd=str(ws_path), capture_output=True, timeout=15)
+        subprocess.run([git, "add", "-A"], cwd=str(ws_path), capture_output=True, timeout=30)
+        subprocess.run([git, "commit", "-m", "Initial commit"], cwd=str(ws_path), capture_output=True, timeout=30)
+    except Exception:
+        pass
+
+
 def _github_repo_slug(url: str) -> str | None:
     from urllib.parse import urlparse
 
@@ -351,8 +373,17 @@ def git_pull(user_id: str, ws_id: str, github_token: str = "") -> tuple[bool, st
     ws = get_workspace(user_id, ws_id)
     if not ws or ws.source != "git" or not ws.git_url:
         return False, "workspace is not a git repository"
+    ws_path = _user_dir(user_id) / ws_id
+    # Preserve .git directory if it exists
+    git_dir = ws_path / ".git"
+    git_tmp = None
+    if git_dir.is_dir():
+        git_tmp = ws_path.parent / f".git.tmp.{ws_id}"
+        try:
+            shutil.copytree(git_dir, git_tmp, dirs_exist_ok=True)
+        except Exception:
+            git_tmp = None
     try:
-        ws_path = _user_dir(user_id) / ws_id
         archive_url = _archive_url_for(
             ws.git_url, ws.git_branch or None, github_token
         )
@@ -372,9 +403,18 @@ def git_pull(user_id: str, ws_id: str, github_token: str = "") -> tuple[bool, st
             tmp_path.unlink(missing_ok=True)
             shutil.rmtree(stage, ignore_errors=True)
         touch(user_id, ws_id)
+        _ensure_git_repo(ws_path)
         return True, f"re-downloaded {archive_url}"
     except Exception as exc:
         return False, f"pull failed: {exc}"
+    finally:
+        if git_tmp:
+            try:
+                if not git_dir.is_dir() and git_tmp.is_dir():
+                    shutil.copytree(git_tmp, git_dir, dirs_exist_ok=True)
+                shutil.rmtree(git_tmp, ignore_errors=True)
+            except Exception:
+                pass
 
 
 def _download_archive_file(url: str, github_token: str = "") -> Path:

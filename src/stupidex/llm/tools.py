@@ -309,7 +309,10 @@ def git(args: str, cwd: str | None = None) -> str:
     if not _is_path_within(work, workspace_root):
         return "SECURITY: git cwd is outside the workspace"
     # Only allow safe git subcommands
-    safe = {"status", "log", "diff", "show", "ls-files", "ls-tree", "rev-parse"}
+    safe = {"status", "log", "diff", "show", "ls-files", "ls-tree", "rev-parse",
+             "init", "add", "commit", "push", "pull", "fetch", "remote",
+             "branch", "checkout", "merge", "reset", "restore", "stash",
+             "tag", "config", "mv", "rm", "clean"}
     if any(token in args for token in ("|", "&", ";", "<", ">", "`", "$(", "\n", "\r")):
         return "SECURITY: git shell operators are not allowed"
     try:
