@@ -96,6 +96,28 @@ FRONTEND_URL=https://seu-dominio.com
 ✅ **Repositórios públicos do GitHub e GitLab funcionam sem conexão**
 ✅ **Clonagem de repositórios privados do GitHub funciona com OAuth conectado**
 
+#### Acesso Automático a Repositórios do Provedor (Opcional)
+
+Se o provedor (administrador do Stupidex) quiser que **todos os usuários** tenham acesso automático aos **repositórios do provedor** sem precisar conectar individualmente:
+
+1. Crie um **Personal Access Token (PAT)** no GitHub:
+   - Acesse: https://github.com/settings/tokens
+   - New Personal Access Token (Classic)
+   - Selecione o escopo `repo`
+   - Gere o token
+
+2. **Configure no servidor**:
+   ```bash
+   GITHUB_PAT=ghp_seu_token_pessoal
+   ```
+
+3. **Funcionamento**:
+   - Cada usuário primeiro tentará usar seu próprio token OAuth (se conectado)
+   - Se não tiver, usará automaticamente o `GITHUB_PAT` do servidor
+   - O PAT permite acessar **todos os repositórios que o provedor tem acesso**
+
+   > **⚠️ Segurança**: O PAT do servidor tem acesso a todos os repositórios do provedor. Mantenha-o seguro e não compartilhe.
+
 ### Google OAuth (Login)
 
 Para habilitar login com Google:

@@ -7,8 +7,14 @@ Workspaces can be populated by:
   - Uploading files (POST /api/workspaces/<id>/upload)
   - Cloning a git repository (POST /api/workspaces/<id>/clone)
   - Direct write/edit via the agent's tools (sandboxed to the workspace)
+
+GitHub token priority:
+  1. User's personal OAuth token (per-user)
+  2. Server's GITHUB_PAT (Personal Access Token) for system-wide access
 """
+
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -80,10 +86,15 @@ class Workspace:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "id": self.id, "name": self.name, "source": self.source,
-            "git_url": self.git_url, "git_branch": self.git_branch,
-            "created_at": self.created_at, "last_activity": self.last_activity,
-            "size_bytes": self.size_bytes, "file_count": self.file_count,
+            "id": self.id,
+            "name": self.name,
+            "source": self.source,
+            "git_url": self.git_url,
+            "git_branch": self.git_branch,
+            "created_at": self.created_at,
+            "last_activity": self.last_activity,
+            "size_bytes": self.size_bytes,
+            "file_count": self.file_count,
         }
 
 
@@ -105,7 +116,8 @@ def _read_meta(user_id: str, ws_id: str) -> dict | None:
 
 def _write_meta(user_id: str, ws: Workspace) -> None:
     _meta_path(user_id, ws.id).write_text(
-        json.dumps(ws.to_dict(), indent=2), encoding="utf-8")
+        json.dumps(ws.to_dict(), indent=2), encoding="utf-8"
+    )
 
 
 def _dir_stats(root: Path) -> tuple[int, int]:
@@ -125,9 +137,15 @@ def _dir_stats(root: Path) -> tuple[int, int]:
 def _default_meta(ws_id: str) -> dict:
     now = time.time()
     return {
-        "id": ws_id, "name": "Workspace", "source": "empty",
-        "git_url": None, "git_branch": None, "created_at": now,
-        "last_activity": now, "size_bytes": 0, "file_count": 0,
+        "id": ws_id,
+        "name": "Workspace",
+        "source": "empty",
+        "git_url": None,
+        "git_branch": None,
+        "created_at": now,
+        "last_activity": now,
+        "size_bytes": 0,
+        "file_count": 0,
     }
 
 
@@ -135,13 +153,22 @@ def _default_meta(ws_id: str) -> dict:
 # CRUD
 # ============================================================
 
+
 def create_empty(user_id: str, name: str) -> Workspace:
     ws_id = uuid.uuid4().hex[:12]
     ws_dir = _user_dir(user_id) / ws_id
     ws_dir.mkdir(parents=True, exist_ok=True)
-    ws = Workspace(id=ws_id, name=name or "Workspace", source="empty",
-                   git_url=None, git_branch=None, created_at=time.time(),
-                   last_activity=time.time(), size_bytes=0, file_count=0)
+    ws = Workspace(
+        id=ws_id,
+        name=name or "Workspace",
+        source="empty",
+        git_url=None,
+        git_branch=None,
+        created_at=time.time(),
+        last_activity=time.time(),
+        size_bytes=0,
+        file_count=0,
+    )
     _write_meta(user_id, ws)
     return ws
 
@@ -237,6 +264,7 @@ def workspace_path(user_id: str, ws_id: str) -> Path | None:
 # Sources
 # ============================================================
 
+
 def init_from_upload(user_id: str, ws_id: str) -> Workspace:
     meta = _read_meta(user_id, ws_id)
     if not meta:
@@ -256,7 +284,11 @@ def init_from_git(
     ws_path = workspace_path(user_id, ws_id)
     if ws_path is None:
         raise ValueError("workspace not found")
-    ws_obj, msg = _download_archive(user_id, ws_id, url, branch, github_token)
+
+    # Token priority: user token first, then server PAT
+    effective_token = github_token or os.environ.get("GITHUB_PAT", "")
+
+    ws_obj, msg = _download_archive(user_id, ws_id, url, branch, effective_token)
     _ensure_git_repo(ws_path)
     return ws_obj, msg
 
@@ -279,7 +311,9 @@ def _download_archive(
     archive_url = _archive_url_for(url, branch, github_token)
     if not archive_url:
         if meta_backup is not None and meta_backup.exists():
-            meta_backup.rename(meta_file) if not meta_file.exists() else meta_backup.unlink()
+            meta_backup.rename(
+                meta_file
+            ) if not meta_file.exists() else meta_backup.unlink()
         raise RuntimeError(
             f"git CLI not available and URL {url!r} not recognized as GitHub/GitLab. "
             "Pre-install git on the host or use a GitHub/GitLab URL."
@@ -306,7 +340,9 @@ def _download_archive(
         return ws_obj, f"downloaded {archive_url}"
     finally:
         if meta_backup is not None and meta_backup.exists():
-            meta_backup.rename(meta_file) if not meta_file.exists() else meta_backup.unlink()
+            meta_backup.rename(
+                meta_file
+            ) if not meta_file.exists() else meta_backup.unlink()
 
 
 def _ensure_git_repo(ws_path: Path) -> None:
@@ -316,14 +352,33 @@ def _ensure_git_repo(ws_path: Path) -> None:
         return
     git_dir = ws_path / ".git"
     if git_dir.is_dir():
-        subprocess.run([git, "add", "-A"], cwd=str(ws_path), capture_output=True, timeout=30)
+        subprocess.run(
+            [git, "add", "-A"], cwd=str(ws_path), capture_output=True, timeout=30
+        )
         return
     try:
         subprocess.run([git, "init"], cwd=str(ws_path), capture_output=True, timeout=15)
-        subprocess.run([git, "config", "user.email", "agent@stupidex.local"], cwd=str(ws_path), capture_output=True, timeout=15)
-        subprocess.run([git, "config", "user.name", "Stupidex Agent"], cwd=str(ws_path), capture_output=True, timeout=15)
-        subprocess.run([git, "add", "-A"], cwd=str(ws_path), capture_output=True, timeout=30)
-        subprocess.run([git, "commit", "-m", "Initial commit"], cwd=str(ws_path), capture_output=True, timeout=30)
+        subprocess.run(
+            [git, "config", "user.email", "agent@stupidex.local"],
+            cwd=str(ws_path),
+            capture_output=True,
+            timeout=15,
+        )
+        subprocess.run(
+            [git, "config", "user.name", "Stupidex Agent"],
+            cwd=str(ws_path),
+            capture_output=True,
+            timeout=15,
+        )
+        subprocess.run(
+            [git, "add", "-A"], cwd=str(ws_path), capture_output=True, timeout=30
+        )
+        subprocess.run(
+            [git, "commit", "-m", "Initial commit"],
+            cwd=str(ws_path),
+            capture_output=True,
+            timeout=30,
+        )
     except Exception:
         pass
 
@@ -374,6 +429,10 @@ def git_pull(user_id: str, ws_id: str, github_token: str = "") -> tuple[bool, st
     if not ws or ws.source != "git" or not ws.git_url:
         return False, "workspace is not a git repository"
     ws_path = _user_dir(user_id) / ws_id
+
+    # Token priority: user token first, then server PAT
+    effective_token = github_token or os.environ.get("GITHUB_PAT", "")
+
     # Preserve .git directory if it exists
     git_dir = ws_path / ".git"
     git_tmp = None
@@ -385,7 +444,7 @@ def git_pull(user_id: str, ws_id: str, github_token: str = "") -> tuple[bool, st
             git_tmp = None
     try:
         archive_url = _archive_url_for(
-            ws.git_url, ws.git_branch or None, github_token
+            ws.git_url, ws.git_branch or None, effective_token
         )
         if not archive_url:
             return False, "cannot determine archive URL"
@@ -396,7 +455,9 @@ def git_pull(user_id: str, ws_id: str, github_token: str = "") -> tuple[bool, st
             for child in ws_path.iterdir():
                 if child.name == ".stupidex.json":
                     continue
-                shutil.rmtree(child, ignore_errors=True) if child.is_dir() else child.unlink(missing_ok=True)
+                shutil.rmtree(
+                    child, ignore_errors=True
+                ) if child.is_dir() else child.unlink(missing_ok=True)
             for child in stage.iterdir():
                 shutil.move(str(child), str(ws_path / child.name))
         finally:
@@ -431,7 +492,10 @@ def _download_archive_file(url: str, github_token: str = "") -> Path:
     try:
         with opener.open(request, timeout=30) as response:
             final = urllib.parse.urlparse(response.geturl())
-            if final.scheme != "https" or (final.hostname or "").lower() not in _ARCHIVE_HOSTS:
+            if (
+                final.scheme != "https"
+                or (final.hostname or "").lower() not in _ARCHIVE_HOSTS
+            ):
                 raise RuntimeError("archive redirect left the allowed hosts")
             declared = int(response.headers.get("Content-Length") or 0)
             if declared > MAX_ARCHIVE_BYTES:
@@ -496,7 +560,7 @@ def _extract_archive(archive: Path, destination: Path) -> None:
             member = info.filename.replace("\\", "/")
             if "\x00" in member or ".." in Path(member).parts:
                 raise RuntimeError("archive contains an invalid path")
-            rel = member[len(top) + 1:] if member.startswith(top + "/") else member
+            rel = member[len(top) + 1 :] if member.startswith(top + "/") else member
             if not rel:
                 continue
             if Path(rel).as_posix() == ".stupidex.json":
@@ -523,16 +587,20 @@ def _extract_archive(archive: Path, destination: Path) -> None:
 # File tree
 # ============================================================
 
+
 def file_tree(user_id: str, ws_id: str, max_depth: int = 6) -> list[dict]:
     root = _user_dir(user_id) / ws_id
     if not root.exists():
         return []
+
     def _collect_children(p: Path, rel: str, depth: int) -> list[dict]:
         if depth > max_depth:
             return []
         result: list[dict] = []
         try:
-            entries = sorted(p.iterdir(), key=lambda e: (not e.is_dir(), e.name.lower()))
+            entries = sorted(
+                p.iterdir(), key=lambda e: (not e.is_dir(), e.name.lower())
+            )
         except (PermissionError, OSError):
             return result
         for entry in entries:
@@ -542,18 +610,27 @@ def file_tree(user_id: str, ws_id: str, max_depth: int = 6) -> list[dict]:
                 continue
             entry_rel = f"{rel}/{entry.name}" if rel else entry.name
             if entry.is_dir():
-                result.append({
-                    "path": entry_rel, "name": entry.name, "type": "directory",
-                    "children": _collect_children(entry, entry_rel, depth + 1),
-                })
+                result.append(
+                    {
+                        "path": entry_rel,
+                        "name": entry.name,
+                        "type": "directory",
+                        "children": _collect_children(entry, entry_rel, depth + 1),
+                    }
+                )
             else:
                 try:
                     size = entry.stat().st_size
                 except OSError:
                     size = 0
-                result.append({
-                    "path": entry_rel, "name": entry.name, "type": "file", "size": size,
-                })
+                result.append(
+                    {
+                        "path": entry_rel,
+                        "name": entry.name,
+                        "type": "file",
+                        "size": size,
+                    }
+                )
         return result
 
     return _collect_children(root, "", 0)
