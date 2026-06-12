@@ -29,7 +29,7 @@ _SHELL_BLOCKED_PATTERNS = [
     r"\bdd\s+if=",
     r"\bmkfs\b",
     r"\bformat\s+",
-    r":\(\)\s*\{",       # fork bomb
+    r":\(\)\s*\{",  # fork bomb
     r"&&\s*rm\b",
     r"\|\s*sh\b",
     r"\|\s*bash\b",
@@ -142,7 +142,11 @@ def edit_file(
         return "ERROR: old_text not found"
     if count > 1 and not replace_all:
         return f"ERROR: old_text matches {count} locations; pass replace_all=true or use a more specific snippet"
-    updated = original.replace(old_text, new_text) if replace_all else original.replace(old_text, new_text, 1)
+    updated = (
+        original.replace(old_text, new_text)
+        if replace_all
+        else original.replace(old_text, new_text, 1)
+    )
     p.write_text(updated, encoding="utf-8")
     return f"OK: edited (replaced {count if replace_all else 1} occurrence(s))"
 
@@ -158,7 +162,10 @@ def list_dir(path: str = ".", working_dir: str = ".") -> str:
         return "ERROR: not a directory"
     entries = []
     for entry in sorted(p.iterdir(), key=lambda e: (not e.is_dir(), e.name.lower())):
-        if any(part.startswith(".git") for part in entry.parts) and entry.name == ".git":
+        if (
+            any(part.startswith(".git") for part in entry.parts)
+            and entry.name == ".git"
+        ):
             continue
         suffix = "/" if entry.is_dir() else ""
         try:
@@ -169,7 +176,9 @@ def list_dir(path: str = ".", working_dir: str = ".") -> str:
     return "\n".join(entries) or "(empty)"
 
 
-def search_files(path: str, pattern: str, recursive: bool = True, working_dir: str = ".") -> str:
+def search_files(
+    path: str, pattern: str, recursive: bool = True, working_dir: str = "."
+) -> str:
     base = _wd(working_dir)
     p = _resolve(path, base)
     if err := _sandbox_guard(p, base):
@@ -189,7 +198,10 @@ def search_files(path: str, pattern: str, recursive: bool = True, working_dir: s
         return "\n".join(matches) or "(no matches)"
     candidates = [p] if not recursive else [e for e in p.rglob("*") if e.is_file()]
     for f in candidates:
-        if any(part.startswith(".git") or part == "__pycache__" or part == "node_modules" for part in f.parts):
+        if any(
+            part.startswith(".git") or part == "__pycache__" or part == "node_modules"
+            for part in f.parts
+        ):
             continue
         try:
             content = f.read_text(encoding="utf-8")
@@ -226,7 +238,9 @@ def delete(path: str, working_dir: str = ".") -> str:
     return "OK: removed file"
 
 
-def run_shell(command: str, cwd: str | None = None, timeout: int = DEFAULT_SHELL_TIMEOUT) -> str:
+def run_shell(
+    command: str, cwd: str | None = None, timeout: int = DEFAULT_SHELL_TIMEOUT
+) -> str:
     """Run a shell command inside the workspace.
 
     Defense-in-depth: enforce that the working directory is the workspace, and
@@ -247,21 +261,28 @@ def run_shell(command: str, cwd: str | None = None, timeout: int = DEFAULT_SHELL
     for rx in _SHELL_BLOCKED_RX:
         if rx.search(cmd_lc):
             return "SECURITY: command blocked by sandbox policy"
-    if any(token in command for token in ("|", "&", ";", "<", ">", "`", "$(", "\n", "\r")):
+    if any(
+        token in command for token in ("|", "&", ";", "<", ">", "`", "$(", "\n", "\r")
+    ):
         return "SECURITY: shell operators are not allowed"
     try:
         argv = shlex.split(command, posix=os.name != "nt")
     except ValueError:
         return "ERROR: invalid command quoting"
     if os.name == "nt":
-        argv = [arg[1:-1] if len(arg) >= 2 and arg[0] == arg[-1] and arg[0] in {'"', "'"} else arg for arg in argv]
+        argv = [
+            arg[1:-1]
+            if len(arg) >= 2 and arg[0] == arg[-1] and arg[0] in {'"', "'"}
+            else arg
+            for arg in argv
+        ]
     if not argv:
         return "ERROR: empty command"
     allowed = {
         item.strip().lower()
         for item in os.environ.get(
             "STUPIDEX_SHELL_COMMANDS",
-            "python,python3,pytest,node,npm,npx,pnpm,yarn,cargo,go,dotnet,make,cmake",
+            "python,python3,pytest,node,npm,npx,pnpm,yarn,cargo,go,dotnet,make,cmake,git",
         ).split(",")
         if item.strip()
     }
@@ -309,10 +330,33 @@ def git(args: str, cwd: str | None = None) -> str:
     if not _is_path_within(work, workspace_root):
         return "SECURITY: git cwd is outside the workspace"
     # Only allow safe git subcommands
-    safe = {"status", "log", "diff", "show", "ls-files", "ls-tree", "rev-parse",
-             "init", "add", "commit", "push", "pull", "fetch", "remote",
-             "branch", "checkout", "merge", "reset", "restore", "stash",
-             "tag", "config", "mv", "rm", "clean"}
+    safe = {
+        "status",
+        "log",
+        "diff",
+        "show",
+        "ls-files",
+        "ls-tree",
+        "rev-parse",
+        "init",
+        "add",
+        "commit",
+        "push",
+        "pull",
+        "fetch",
+        "remote",
+        "branch",
+        "checkout",
+        "merge",
+        "reset",
+        "restore",
+        "stash",
+        "tag",
+        "config",
+        "mv",
+        "rm",
+        "clean",
+    }
     if any(token in args for token in ("|", "&", ";", "<", ">", "`", "$(", "\n", "\r")):
         return "SECURITY: git shell operators are not allowed"
     try:
@@ -322,8 +366,15 @@ def git(args: str, cwd: str | None = None) -> str:
     if not parsed or parsed[0] not in safe:
         return "SECURITY: git subcommand not allowed"
     cmd = [
-        "git", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false",
-        "-c", "diff.external=", "--no-pager", *parsed,
+        "git",
+        "-c",
+        "core.hooksPath=/dev/null",
+        "-c",
+        "core.fsmonitor=false",
+        "-c",
+        "diff.external=",
+        "--no-pager",
+        *parsed,
     ]
     env = {
         "PATH": os.environ.get("PATH", os.defpath),
@@ -335,14 +386,23 @@ def git(args: str, cwd: str | None = None) -> str:
     }
     try:
         result = subprocess.run(
-            cmd, cwd=str(work), capture_output=True, text=True, timeout=120,
-            env=env, shell=False,
+            cmd,
+            cwd=str(work),
+            capture_output=True,
+            text=True,
+            timeout=120,
+            env=env,
+            shell=False,
         )
     except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
         return f"ERROR: git failed: {exc}"
     stdout = (result.stdout or "")[:MAX_SHELL_OUTPUT_BYTES]
     stderr = (result.stderr or "")[:MAX_SHELL_OUTPUT_BYTES]
-    return "\n".join(part for part in (stdout.rstrip(), stderr.rstrip(), f"[exit {result.returncode}]") if part)
+    return "\n".join(
+        part
+        for part in (stdout.rstrip(), stderr.rstrip(), f"[exit {result.returncode}]")
+        if part
+    )
 
 
 def _wd_arg(working_dir: str | None) -> str:
@@ -359,7 +419,10 @@ TOOL_DEFINITIONS: list[dict] = [
                 "type": "object",
                 "properties": {
                     "path": {"type": "string"},
-                    "working_dir": {"type": "string", "description": "Base directory (default: current)."},
+                    "working_dir": {
+                        "type": "string",
+                        "description": "Base directory (default: current).",
+                    },
                 },
                 "required": ["path"],
             },
@@ -543,12 +606,18 @@ def _dispatch(name: str, args: dict) -> str:
         return write_file(args["path"], args["content"], wd or ".")
     if name == "edit_file":
         return edit_file(
-            args["path"], args["old_text"], args["new_text"], args.get("replace_all", False), wd or "."
+            args["path"],
+            args["old_text"],
+            args["new_text"],
+            args.get("replace_all", False),
+            wd or ".",
         )
     if name == "list_dir":
         return list_dir(args.get("path", "."), wd or ".")
     if name == "search_files":
-        return search_files(args["path"], args["pattern"], args.get("recursive", True), wd or ".")
+        return search_files(
+            args["path"], args["pattern"], args.get("recursive", True), wd or "."
+        )
     if name == "mkdir":
         return mkdir(args["path"], wd or ".")
     if name == "delete":
