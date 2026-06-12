@@ -73,6 +73,27 @@ const els = {
 
   themeToggle: $("theme-toggle"),
 
+  // Profile modal
+  userProfileBanner: $("user-profile-banner"),
+  userProfileAvatar: $("user-profile-avatar"),
+  userProfileName: $("user-profile-name"),
+  profileModal: $("profile-modal"),
+  closeProfile: $("close-profile"),
+  closeProfileBtn: $("close-profile-btn"),
+  profileModalAvatar: $("profile-modal-avatar"),
+  profileUsername: $("profile-username"),
+  profileEmail: $("profile-email"),
+  profileProvider: $("profile-provider"),
+  profileOauthBadge: $("profile-oauth-badge"),
+  profileMemberSince: $("profile-member-since"),
+  profileWsCount: $("profile-ws-count"),
+
+  // Shell widget
+  shellOutput: $("shell-output"),
+  shellInput: $("shell-input"),
+  shellRun: $("shell-run"),
+  shellClear: $("shell-clear"),
+
   cloneModal: $("clone-modal"),
   closeClone: $("close-clone"),
   cancelClone: $("cancel-clone"),
@@ -131,11 +152,6 @@ const els = {
   confirmMessage: $("confirm-message"),
   confirmDetail: $("confirm-detail"),
   confirmIcon: $("confirm-icon"),
-
-  // User profile banner elements
-  userProfileBanner: $("user-profile-banner"),
-  userProfileAvatar: $("user-profile-avatar"),
-  userProfileName: $("user-profile-name"),
 };
 
 let state = {
@@ -1368,7 +1384,7 @@ function renderWorkspaces() {
     li.className =
       "workspace-item" + (w.id === state.workspaces.active_id ? " active" : "");
     const src = document.createElement("span");
-    src.className = "ws-source";
+    src.className = "ws-source-icon";
     src.textContent =
       w.source === "git" ? "⎘" : w.source === "upload" ? "↑" : "·";
     src.title = w.source;
@@ -1376,6 +1392,32 @@ function renderWorkspaces() {
     name.className = "ws-name";
     name.textContent = w.name;
     name.title = `${w.name} — ${w.file_count} arquivos (${fmtSize(w.size_bytes)})`;
+    const actions = document.createElement("span");
+    actions.className = "ws-actions";
+    if (w.source === "git") {
+      const sync = document.createElement("button");
+      sync.className = "ws-sync-btn";
+      sync.innerHTML = '<i class="ph ph-arrows-clockwise"></i>';
+      sync.title = "Sincronizar repositório (git pull)";
+      sync.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        sync.classList.add("syncing");
+        try {
+          const r = await fetch(`/api/workspaces/${w.id}/pull`, { method: "POST" });
+          const data = await r.json();
+          if (data.ok) {
+            await loadWorkspaces();
+          } else {
+            alert(data.output || "Falha ao sincronizar");
+          }
+        } catch (err) {
+          alert("Erro de rede ao sincronizar");
+        } finally {
+          sync.classList.remove("syncing");
+        }
+      });
+      actions.appendChild(sync);
+    }
     const del = document.createElement("button");
     del.className = "ws-del";
     del.textContent = "×";
@@ -1386,6 +1428,7 @@ function renderWorkspaces() {
     });
     li.appendChild(src);
     li.appendChild(name);
+    li.appendChild(actions);
     li.appendChild(del);
     li.addEventListener("click", () => activateWorkspace(w.id));
     els.workspaceList.appendChild(li);
@@ -1880,6 +1923,12 @@ els.railWorkspace.addEventListener("click", () => {
   els.workspacePanel.classList.toggle("mobile-open");
 });
 els.openSettings.addEventListener("click", openSettings);
+els.userProfileBanner.addEventListener("click", openProfile);
+els.closeProfile.addEventListener("click", closeProfile);
+els.closeProfileBtn.addEventListener("click", closeProfile);
+els.profileModal.addEventListener("click", (e) => {
+  if (e.target === els.profileModal) closeProfile();
+});
 $("logout-btn").addEventListener("click", async () => {
   if (!confirm("Sair da conta?")) return;
   await logout();
@@ -2148,6 +2197,22 @@ if (els.modelSwitcher) {
     }
   });
 }
+
+// Shell widget wire-up
+els.shellRun.addEventListener("click", () => runShellCommand(els.shellInput.value));
+els.shellInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    runShellCommand(els.shellInput.value);
+  }
+});
+els.shellClear.addEventListener("click", clearShell);
+
+// Periodic file tree refresh (every 45s)
+setInterval(() => {
+  const id = state.workspaces?.active_id;
+  if (id) loadTree(id);
+}, 45000);
 
 // Restore research panel state
 (function () {
@@ -2419,8 +2484,52 @@ async function tryLogin(email, password) {
 }
 
 // ============================================================
-// BOOT
+// SHELL
 // ============================================================
+
+async function runShellCommand(cmd) {
+  if (!cmd.trim()) return;
+  const wsId = state.workspaces.active_id;
+  if (!wsId) {
+    appendShellLine("error", "Nenhum workspace ativo.");
+    return;
+  }
+  appendShellLine("prompt", `$ ${cmd}`);
+  try {
+    const r = await fetch(`/api/workspaces/${wsId}/shell`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ command: cmd }),
+    });
+    const data = await r.json();
+    if (data.output) {
+      const lines = data.output.split("\n");
+      for (const line of lines) {
+        if (line.startsWith("stdout:") || line.startsWith("stderr:")) continue;
+        if (line.startsWith("[exit")) { appendShellLine("exit", line); continue; }
+        if (line.includes("SECURITY") || line.includes("ERROR:")) { appendShellLine("error", line); continue; }
+        if (line.trim()) appendShellLine("stdout", line);
+      }
+    }
+    if (data.error) appendShellLine("error", data.error);
+    if (data.tree_changed) loadTree(wsId);
+  } catch (e) {
+    appendShellLine("error", `Erro: ${e.message}`);
+  }
+  els.shellInput.value = "";
+  els.shellOutput.scrollTop = els.shellOutput.scrollHeight;
+}
+
+function appendShellLine(type, text) {
+  const line = document.createElement("span");
+  line.className = `shell-line ${type}`;
+  line.textContent = text;
+  els.shellOutput.appendChild(line);
+}
+
+function clearShell() {
+  els.shellOutput.innerHTML = "";
+}
 
 async function loadUserProfile() {
   try {
@@ -2438,7 +2547,7 @@ async function loadUserProfile() {
 function updateUserProfileBanner() {
   if (!els.userProfileBanner) return;
 
-  const { username, email, avatar_url, oauth_provider } = state.user;
+  const { username, email, avatar_url, oauth_provider, created_at } = state.user;
   const displayName = username || email || "Usuário";
 
   if (avatar_url) {
@@ -2456,6 +2565,25 @@ function updateUserProfileBanner() {
   } else {
     els.userProfileBanner.classList.add("hidden");
   }
+}
+
+function openProfile() {
+  const u = state.user || {};
+  els.profileModalAvatar.src = u.avatar_url || "";
+  els.profileUsername.textContent = u.username || u.email || "—";
+  els.profileEmail.textContent = u.email || "—";
+  const provider = u.oauth_provider || "email";
+  els.profileProvider.textContent = provider === "google" ? "Google" : provider === "github" ? "GitHub" : "Email e senha";
+  els.profileOauthBadge.textContent = provider === "google" ? "⋮ Gmail" : provider === "github" ? "⊞ GitHub" : "⊡ Local";
+  const created = u.created_at ? new Date(u.created_at) : null;
+  els.profileMemberSince.textContent = created ? created.toLocaleDateString("pt-BR", { year: "numeric", month: "long", day: "numeric" }) : "—";
+  const count = (state.workspaces?.workspaces || []).length;
+  els.profileWsCount.textContent = count;
+  els.profileModal.classList.remove("hidden");
+}
+
+function closeProfile() {
+  els.profileModal.classList.add("hidden");
 }
 
 async function bootApp() {

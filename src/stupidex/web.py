@@ -1528,6 +1528,29 @@ def workspaces_pull(ws_id):
     return jsonify({"ok": ok, "output": output}), 200 if ok else 400
 
 
+@app.route("/api/workspaces/<ws_id>/shell", methods=["POST"])
+@login_required
+@rate_limited("default")
+def workspaces_shell(ws_id):
+    data = request.get_json(force=True) or {}
+    cmd = (data.get("command") or "").strip()
+    if not cmd:
+        return jsonify({"error": "empty command"}), 400
+    ws_path = workspaces_module.workspace_path(request.user.id, ws_id)
+    if ws_path is None:
+        return jsonify({"error": "workspace not found"}), 404
+    from stupidex.llm.tools import run_shell as run_shell_tool
+    output = run_shell_tool(cmd, cwd=str(ws_path))
+    tree_changed = False
+    if "stdout:" in output or "stderr:" in output:
+        tree_changed = True
+    return jsonify({
+        "output": output,
+        "code": 0,
+        "tree_changed": tree_changed,
+    })
+
+
 @app.route("/api/workspaces/<ws_id>/tree", methods=["GET"])
 @login_required
 @rate_limited("default")

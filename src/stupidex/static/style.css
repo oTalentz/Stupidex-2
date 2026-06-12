@@ -552,11 +552,18 @@ body,
     color: var(--danger);
     background: rgba(248, 113, 113, 0.1);
 }
-.workspace-item .ws-source {
+.workspace-item .ws-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0;
+    margin-right: 2px;
+}
+.workspace-item .ws-source-icon {
     font-size: 11px;
     color: var(--text-muted);
     width: 16px;
     text-align: center;
+    flex: 0 0 16px;
 }
 .workspace-item .ws-status {
     width: 6px;
@@ -2066,6 +2073,182 @@ body,
     color: var(--text-muted);
     line-height: 1.5;
 }
+
+/* ============================================================
+   Profile Modal
+   ============================================================ */
+.profile-modal-content {
+    width: min(420px, calc(100vw - 32px));
+}
+.profile-header {
+    background: linear-gradient(135deg, rgba(59,130,246,0.08), rgba(139,92,246,0.08));
+    border-bottom: 1px solid var(--border);
+    padding: 20px 20px 18px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+.profile-modal-avatar {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--border-strong);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+}
+.profile-header-info {
+    flex: 1;
+    min-width: 0;
+}
+.profile-header-info h2 {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text-main);
+    margin: 0;
+}
+.profile-oauth-badge {
+    font-size: 11px;
+    color: var(--text-muted);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 20px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    margin-top: 3px;
+}
+.profile-header > .icon-btn {
+    flex: 0 0 36px;
+}
+.profile-details {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+.profile-field {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+}
+.profile-field:last-child {
+    border-bottom: none;
+}
+.profile-field-label {
+    font-size: 13px;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+.profile-field-value {
+    font-size: 13px;
+    color: var(--text-main);
+    text-align: right;
+    max-width: 60%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ============================================================
+   Shell / Terminal widget
+   ============================================================ */
+.shell-wrap {
+    background: #0a0a0b;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.55;
+}
+.shell-output {
+    min-height: 80px;
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 10px 12px;
+    color: #ababaf;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+.shell-output:empty::before {
+    content: "Clique em "Executar" ou digite um comando.";
+    color: #555;
+    font-style: italic;
+}
+.shell-output .shell-line {
+    display: block;
+    padding: 1px 0;
+}
+.shell-output .shell-line.stdout { color: #c0c0c8; }
+.shell-output .shell-line.stderr { color: #f87171; }
+.shell-output .shell-line.error  { color: #fbbf24; }
+.shell-output .shell-line.exit   { color: #6b7280; font-size: 11px; }
+.shell-output .shell-line.prompt {
+    color: #22c55e;
+    font-weight: 500;
+}
+.shell-input-row {
+    display: flex;
+    align-items: center;
+    border-top: 1px solid var(--border);
+    background: #0d0d0e;
+}
+.shell-prompt {
+    padding: 0 0 0 12px;
+    color: #22c55e;
+    font-weight: 600;
+    font-size: 13px;
+    user-select: none;
+}
+.shell-input {
+    flex: 1;
+    background: transparent;
+    border: 0;
+    padding: 10px 10px 10px 8px;
+    color: #ededef;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    outline: 0;
+}
+.shell-input::placeholder { color: #555; }
+#shell-run {
+    padding: 8px 12px;
+    color: #22c55e;
+    font-size: 15px;
+    opacity: 0.7;
+    transition: opacity 0.15s;
+}
+#shell-run:hover { opacity: 1; }
+.ws-section-btn {
+    width: 24px;
+    height: 24px;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+.ws-section-btn:hover { color: var(--text-main); }
+
+/* ============================================================
+   Workspace item enhancements
+   ============================================================ */
+.ws-sync-btn {
+    flex: 0 0 22px;
+    width: 22px;
+    height: 22px;
+    display: grid;
+    place-items: center;
+    border-radius: 6px;
+    color: var(--text-muted);
+    font-size: 12px;
+    opacity: 0;
+    transition: opacity 0.15s, color 0.15s;
+    margin-right: 2px;
+}
+.workspace-item:hover .ws-sync-btn { opacity: 0.7; }
+.ws-sync-btn:hover { opacity: 1 !important; color: var(--accent); background: rgba(99,102,241,0.1); }
+.ws-sync-btn.syncing { animation: spin 0.8s linear infinite; color: var(--accent); opacity: 1; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 .field {
     display: flex;
