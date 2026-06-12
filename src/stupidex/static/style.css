@@ -251,6 +251,48 @@ body,
 }
 .nav-rail-bottom {
     margin-top: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+/* User profile banner above settings gear */
+.user-profile-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: var(--shadow-inset);
+    width: 100%;
+    justify-content: center;
+    cursor: default;
+}
+
+.user-profile-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    display: none;
+}
+
+.user-profile-avatar[src]:not([src=""]) {
+    display: block;
+}
+
+.user-profile-name {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-main);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
 }
 
 .nav-rail-btn {

@@ -131,6 +131,11 @@ const els = {
   confirmMessage: $("confirm-message"),
   confirmDetail: $("confirm-detail"),
   confirmIcon: $("confirm-icon"),
+
+  // User profile banner elements
+  userProfileBanner: $("user-profile-banner"),
+  userProfileAvatar: $("user-profile-avatar"),
+  userProfileName: $("user-profile-name"),
 };
 
 let state = {
@@ -156,6 +161,12 @@ let state = {
     connected: false,
     login: "",
     avatar_url: "",
+  },
+  user: {
+    username: "",
+    email: "",
+    avatar_url: "",
+    oauth_provider: "",
   },
 };
 
@@ -347,10 +358,17 @@ async function loadSessions() {
 
 function renderSessions() {
   els.sessionList.innerHTML = "";
-  const trashedCount = state.sessions.filter((session) => session.trashed).length;
-  els.sessionsSectionTitle.textContent = state.trashMode ? "Lixeira" : "Recent Chats";
+  const trashedCount = state.sessions.filter(
+    (session) => session.trashed,
+  ).length;
+  els.sessionsSectionTitle.textContent = state.trashMode
+    ? "Lixeira"
+    : "Recent Chats";
   els.trashCount.textContent = trashedCount;
-  els.trashCount.classList.toggle("hidden", !state.trashMode || trashedCount === 0);
+  els.trashCount.classList.toggle(
+    "hidden",
+    !state.trashMode || trashedCount === 0,
+  );
   const sessionsToShow = state.trashMode
     ? state.sessions.filter((s) => s.trashed)
     : state.sessions.filter((s) => !s.trashed);
@@ -412,7 +430,8 @@ function renderSessions() {
           `A conversa “${s.title || "Sem título"}” será removida.`,
           () => deleteSession(s.id),
           {
-            detail: "Todas as mensagens serão apagadas e esta ação não poderá ser desfeita.",
+            detail:
+              "Todas as mensagens serão apagadas e esta ação não poderá ser desfeita.",
             confirmLabel: "Excluir conversa",
             icon: "ph-trash",
           },
@@ -501,7 +520,8 @@ function showSessionMenu(session, anchorEl) {
           await loadSessions();
         },
         {
-          detail: "A conversa será mantida, mas as mensagens não poderão ser recuperadas.",
+          detail:
+            "A conversa será mantida, mas as mensagens não poderão ser recuperadas.",
           confirmLabel: "Limpar mensagens",
           icon: "ph-eraser",
         },
@@ -527,7 +547,8 @@ function showSessionMenu(session, anchorEl) {
           await moveSessionToTrash(session.id);
         },
         {
-          detail: "Você poderá restaurar ou excluir definitivamente pela lixeira lateral.",
+          detail:
+            "Você poderá restaurar ou excluir definitivamente pela lixeira lateral.",
           confirmLabel: "Mover para lixeira",
           icon: "ph-trash",
         },
@@ -882,7 +903,7 @@ function renderWebSources(content) {
   for (const match of content.matchAll(pattern)) {
     try {
       const url = new URL(match[1]);
-      if (!['http:', 'https:'].includes(url.protocol)) continue;
+      if (!["http:", "https:"].includes(url.protocol)) continue;
       const previousLines = content
         .slice(0, match.index)
         .trim()
@@ -920,7 +941,9 @@ function renderWebSources(content) {
     empty.textContent = "A pesquisa não retornou fontes identificáveis.";
     pane.appendChild(empty);
   }
-  const count = document.querySelector('[data-tab="sources"] .research-tab-count');
+  const count = document.querySelector(
+    '[data-tab="sources"] .research-tab-count',
+  );
   if (count) count.textContent = String(sources.length);
   if (sources.length) setResearchVisible(true);
 }
@@ -1665,11 +1688,13 @@ function handleGithubAction() {
       const response = await fetch("/api/integrations/github", {
         method: "DELETE",
       });
-      if (!response.ok) throw new Error("Não foi possível desconectar o GitHub.");
+      if (!response.ok)
+        throw new Error("Não foi possível desconectar o GitHub.");
       await loadGithubIntegration();
     },
     {
-      detail: "Workspaces já clonados permanecem disponíveis, mas novos pulls privados exigirão uma nova conexão.",
+      detail:
+        "Workspaces já clonados permanecem disponíveis, mas novos pulls privados exigirão uma nova conexão.",
       confirmLabel: "Desconectar",
       danger: false,
       icon: "ph-link-break",
@@ -1921,7 +1946,8 @@ if (els.confirmDelete) {
       await callback();
       hideConfirm();
     } catch (error) {
-      els.confirmDetail.textContent = error.message || "Não foi possível concluir a ação.";
+      els.confirmDetail.textContent =
+        error.message || "Não foi possível concluir a ação.";
       els.confirmDetail.classList.remove("hidden");
     } finally {
       els.confirmDelete.disabled = false;
@@ -2051,10 +2077,7 @@ if (els.composerSearch) {
     els.composerSearch.title = state.webSearchEnabled
       ? "Pesquisa web ativa"
       : "Ativar pesquisa web";
-    els.webSearchIndicator?.classList.toggle(
-      "hidden",
-      !state.webSearchEnabled,
-    );
+    els.webSearchIndicator?.classList.toggle("hidden", !state.webSearchEnabled);
   });
 }
 els.composerImageInput?.addEventListener("change", async () => {
@@ -2311,6 +2334,12 @@ async function logout() {
       login: "",
       avatar_url: "",
     },
+    user: {
+      username: "",
+      email: "",
+      avatar_url: "",
+      oauth_provider: "",
+    },
   };
   els.messages.innerHTML = "";
   els.sessionList.innerHTML = "";
@@ -2393,8 +2422,44 @@ async function tryLogin(email, password) {
 // BOOT
 // ============================================================
 
+async function loadUserProfile() {
+  try {
+    const response = await fetch("/api/auth/me");
+    if (response.ok) {
+      const data = await response.json();
+      state.user = data.user || state.user;
+      updateUserProfileBanner();
+    }
+  } catch (e) {
+    console.error("Failed to load user profile:", e);
+  }
+}
+
+function updateUserProfileBanner() {
+  if (!els.userProfileBanner) return;
+
+  const { username, email, avatar_url, oauth_provider } = state.user;
+  const displayName = username || email || "Usuário";
+
+  if (avatar_url) {
+    els.userProfileAvatar.src = avatar_url;
+    els.userProfileAvatar.style.display = "block";
+  } else {
+    els.userProfileAvatar.src = "";
+    els.userProfileAvatar.style.display = "none";
+  }
+
+  els.userProfileName.textContent = displayName;
+
+  if (displayName || avatar_url) {
+    els.userProfileBanner.classList.remove("hidden");
+  } else {
+    els.userProfileBanner.classList.add("hidden");
+  }
+}
+
 async function bootApp() {
-  await Promise.all([loadConfig(), loadGithubIntegration()]);
+  await Promise.all([loadConfig(), loadGithubIntegration(), loadUserProfile()]);
   updateBadges();
   await loadWorkspaces();
   await loadSessions();
