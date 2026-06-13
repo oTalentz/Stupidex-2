@@ -2958,6 +2958,7 @@ async function logout() {
     },
     workspaces: { workspaces: [], active_id: null },
     sessions: [],
+    pagination: { total: 0, page: 1, has_next: false },
     currentSessionId: null,
     busy: false,
     abortController: null,
@@ -2966,6 +2967,8 @@ async function logout() {
     pendingImages: [],
     confirmCallback: null,
     trashMode: false,
+    multiSelectMode: false,
+    selectedSessions: new Set(),
     webSearchEnabled: false,
     github: {
       configured: false,
