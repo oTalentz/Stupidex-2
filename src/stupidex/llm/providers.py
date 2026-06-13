@@ -17,6 +17,7 @@ class ProviderConfig:
     api_key_env: str | None = None
     needs_api_key: bool = False
     supports_vision: bool = False
+    supports_tools: bool = True  # Whether the model supports function/tool calling
     runtime: str = "server"
     description: str = ""
 
@@ -29,7 +30,8 @@ PROVIDERS: dict[str, ProviderConfig] = {
         default_model="deepseek-v4-flash",
         api_key_env="DEEPSEEK_API_KEY",
         needs_api_key=True,
-        description="DeepSeek V4 Flash — rápido, texto e ferramentas, recomendado",
+        supports_tools=False,  # V4 Flash has limited/no tool calling support
+        description="DeepSeek V4 Flash — rápido, mas SEM suporte a ferramentas",
     ),
     "deepseek-v4-pro": ProviderConfig(
         id="deepseek-v4-pro",
@@ -38,7 +40,8 @@ PROVIDERS: dict[str, ProviderConfig] = {
         default_model="deepseek-v4-pro",
         api_key_env="DEEPSEEK_API_KEY",
         needs_api_key=True,
-        description="DeepSeek V4 Pro — mais capaz, mais lento",
+        supports_tools=False,  # V4 Pro also has limited tool support
+        description="DeepSeek V4 Pro — mais capaz, mas SEM suporte a ferramentas",
     ),
     "deepseek-chat": ProviderConfig(
         id="deepseek-chat",
@@ -47,7 +50,8 @@ PROVIDERS: dict[str, ProviderConfig] = {
         default_model="deepseek-chat",
         api_key_env="DEEPSEEK_API_KEY",
         needs_api_key=True,
-        description="DeepSeek V3 — chat geral",
+        supports_tools=True,  # V3 fully supports tool calling
+        description="DeepSeek V3 — suporta ferramentas, recomendado para coding",
     ),
     "deepseek-reasoner": ProviderConfig(
         id="deepseek-reasoner",
@@ -56,7 +60,8 @@ PROVIDERS: dict[str, ProviderConfig] = {
         default_model="deepseek-reasoner",
         api_key_env="DEEPSEEK_API_KEY",
         needs_api_key=True,
-        description="DeepSeek R1 — raciocínio estendido",
+        supports_tools=True,  # R1 supports tool calling
+        description="DeepSeek R1 — raciocínio estendido com ferramentas",
     ),
     "openai": ProviderConfig(
         id="openai",
@@ -66,6 +71,7 @@ PROVIDERS: dict[str, ProviderConfig] = {
         api_key_env="OPENAI_API_KEY",
         needs_api_key=True,
         supports_vision=True,
+        supports_tools=True,
     ),
     "anthropic": ProviderConfig(
         id="anthropic",
@@ -75,6 +81,7 @@ PROVIDERS: dict[str, ProviderConfig] = {
         api_key_env="ANTHROPIC_API_KEY",
         needs_api_key=True,
         supports_vision=True,
+        supports_tools=True,
     ),
     "ollama": ProviderConfig(
         id="ollama",
@@ -82,6 +89,7 @@ PROVIDERS: dict[str, ProviderConfig] = {
         base_url="http://localhost:11434/v1",
         default_model="ollama_chat/llama3.1",
         needs_api_key=False,
+        supports_tools=True,
         description="Modelos rodando localmente no Ollama",
     ),
     "puter-mistral": ProviderConfig(
@@ -91,6 +99,7 @@ PROVIDERS: dict[str, ProviderConfig] = {
         default_model="mistralai/mistral-large-2512",
         needs_api_key=False,
         supports_vision=True,
+        supports_tools=True,
         runtime="puter",
         description="Mistral via Puter.com — API gratuita e ilimitada",
     ),
@@ -101,6 +110,7 @@ PROVIDERS: dict[str, ProviderConfig] = {
         default_model="gpt-5.4-nano",
         needs_api_key=False,
         supports_vision=True,
+        supports_tools=True,
         runtime="puter",
         description="GPT-5.4 Nano com visão via Puter.js no navegador",
     ),
@@ -113,7 +123,8 @@ def get_provider(provider_id: str) -> ProviderConfig:
     return PROVIDERS[DEFAULT_FALLBACK_ID]
 
 
-DEFAULT_FALLBACK_ID = "deepseek-v4-flash"
+# Changed from deepseek-v4-flash to deepseek-chat (V3) which supports tools
+DEFAULT_FALLBACK_ID = "deepseek-chat"
 
 
 def list_providers() -> list[dict]:
@@ -124,6 +135,7 @@ def list_providers() -> list[dict]:
             "model": p.default_model,
             "needs_api_key": p.needs_api_key,
             "supports_vision": p.supports_vision,
+            "supports_tools": p.supports_tools,
             "runtime": p.runtime,
             "api_key_env": p.api_key_env,
             "description": p.description,

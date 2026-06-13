@@ -18,8 +18,8 @@ from pathlib import Path
 # --- Defaults baked into the binary so the app is usable out of the box. ----
 # Override any of these by editing ~/.stupidex/config.json, .env, or env vars.
 
-DEFAULT_PROVIDER = "deepseek-v4-flash"
-DEFAULT_MODEL = "deepseek-v4-flash"
+DEFAULT_PROVIDER = "deepseek-chat"
+DEFAULT_MODEL = "deepseek-chat"
 # API key is intentionally EMPTY in the binary. Users must set it via env
 # (DEEPSEEK_API_KEY / STUPIDEX_API_KEY) or the .env / config.json. This
 # prevents the key from being shipped in compiled binaries and shared with

@@ -178,8 +178,8 @@ const els = {
 let state = {
   providers: [],
   config: {
-    provider: "deepseek-v4-flash",
-    model: "deepseek-v4-flash",
+    provider: "deepseek-chat",
+    model: "deepseek-chat",
     has_api_key: false,
   },
   workspaces: { workspaces: [], active_id: null },
@@ -261,6 +261,10 @@ function currentProvider() {
 
 function currentModelSupportsVision() {
   return Boolean(currentProvider()?.supports_vision);
+}
+
+function currentModelSupportsTools() {
+  return currentProvider()?.supports_tools !== false;
 }
 
 function fileToDataUrl(file) {
@@ -2344,6 +2348,7 @@ function providerDetail(provider) {
   return [
     provider.model,
     provider.supports_vision ? "visão" : "texto",
+    provider.supports_tools !== false ? "ferramentas ✓" : "SEM ferramentas ✗",
     provider.needs_api_key ? "requer chave" : "sem chave",
   ].join(" · ");
 }
@@ -2456,7 +2461,11 @@ function updateBadges() {
     els.modelSelectLabel.textContent = provider?.name || state.config.model;
   }
   if (els.modelSelectDetail) {
-    els.modelSelectDetail.textContent = providerDetail(provider);
+    const detail = providerDetail(provider);
+    const supportsTools = currentModelSupportsTools();
+    els.modelSelectDetail.textContent = supportsTools
+      ? detail
+      : `⚠️ ${detail} (SEM suporte a ferramentas)`;
   }
   renderModelMenu();
   const hasVision = currentModelSupportsVision();
@@ -2468,6 +2477,13 @@ function updateBadges() {
       : "O modelo atual não aceita imagens";
   }
   if (!hasVision && state.pendingImages.length) clearChatImages();
+
+  // Show warning if model doesn't support tools
+  const supportsTools = currentModelSupportsTools();
+  if (!supportsTools && els.status) {
+    els.status.textContent = "⚠️ Este modelo NÃO suporta ferramentas. O agente não poderá ler/editar arquivos. Troque para DeepSeek Chat (V3) ou outro modelo com suporte.";
+    els.status.classList.remove("hidden");
+  }
 }
 
 // ============================================================
