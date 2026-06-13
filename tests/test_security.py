@@ -421,6 +421,21 @@ def test_xss_in_tool_output_is_escaped_frontend():
         "tool_result must use textContent (not innerHTML) for output"
 
 
+def test_unavailable_workspace_controls_are_not_rendered():
+    static_dir = Path(__file__).resolve().parents[1] / "src" / "stupidex" / "static"
+    html = (static_dir / "index.html").read_text(encoding="utf-8")
+    js = (static_dir / "app.js").read_text(encoding="utf-8")
+    css = (static_dir / "style.css").read_text(encoding="utf-8")
+
+    for unavailable_id in ("rail-search", "ws-menu", "open-terminal"):
+        assert f'id="{unavailable_id}"' not in html
+        assert unavailable_id not in js
+    assert 'id="ws-git-pull"' in html
+    assert 'id="ws-git-pull"\n                            class="icon-btn hidden"' in html
+    assert 'els.gitPullBtn?.classList.toggle("hidden", !hasRepository)' in js
+    assert "#rail-workspace" in css
+
+
 def test_token_validation_rejects_expired():
     import time
     user, _ = db.create_user("frank", "validpass123")

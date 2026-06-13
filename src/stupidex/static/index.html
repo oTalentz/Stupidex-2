@@ -172,13 +172,6 @@
                         <i class="ph ph-plus"></i>
                     </button>
                     <button
-                        id="rail-search"
-                        class="nav-rail-btn"
-                        title="Buscar (Ctrl+K)"
-                    >
-                        <i class="ph ph-magnifying-glass"></i>
-                    </button>
-                    <button
                         id="rail-workspace"
                         class="nav-rail-btn"
                         title="Workspace"
@@ -240,7 +233,7 @@
                     <div class="workspace-header-actions">
                         <button
                             id="ws-git-pull"
-                            class="icon-btn"
+                            class="icon-btn hidden"
                             title="Git Pull - Sincronizar com repositório"
                         >
                             <i class="ph ph-git-pull-request"></i>
@@ -251,9 +244,6 @@
                             title="Atualizar"
                         >
                             <i class="ph ph-arrows-clockwise"></i>
-                        </button>
-                        <button id="ws-menu" class="icon-btn" title="Mais">
-                            <i class="ph ph-dots-three"></i>
                         </button>
                     </div>
                 </div>
@@ -276,38 +266,6 @@
                             <i class="ph ph-plus"></i>
                             Novo workspace
                         </button>
-                    </div>
-
-                    <div id="terminal-widget" class="terminal-widget hidden">
-                        <div class="terminal-header">
-                            <span class="terminal-title">
-                                <i class="ph ph-terminal"></i>
-                                Terminal
-                            </span>
-                            <button
-                                id="close-terminal"
-                                class="icon-btn terminal-close"
-                                title="Fechar"
-                            >
-                                <i class="ph ph-x"></i>
-                            </button>
-                        </div>
-                        <div class="terminal-body">
-                            <div
-                                id="terminal-output"
-                                class="terminal-output"
-                            ></div>
-                            <div class="terminal-input-row">
-                                <span class="terminal-prompt">$</span>
-                                <input
-                                    id="terminal-input"
-                                    type="text"
-                                    class="terminal-input"
-                                    placeholder="Digite um comando..."
-                                    autocomplete="off"
-                                />
-                            </div>
-                        </div>
                     </div>
 
                     <div class="workspace-section">

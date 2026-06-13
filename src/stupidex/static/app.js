@@ -48,13 +48,6 @@ const els = {
   wsFilesCount: $("ws-files-count"),
   wsActiveBadge: $("ws-active-badge"),
 
-  // Terminal widget elements
-  terminalWidget: $("terminal-widget"),
-  terminalOutput: $("terminal-output"),
-  terminalInput: $("terminal-input"),
-  closeTerminal: $("close-terminal"),
-  openTerminalBtn: null, // Will be created dynamically
-
   sessionTitle: $("session-title"),
   sessionTime: $("session-time"),
   messages: $("messages"),
@@ -1429,6 +1422,7 @@ function updateWorkspaceIndicators() {
   if (els.researchActiveCount) {
     els.researchActiveCount.textContent = String(fileCount);
   }
+  els.gitPullBtn?.classList.toggle("hidden", !hasRepository);
 }
 
 function renderWorkspaces() {
@@ -1629,121 +1623,6 @@ els.fileInput.addEventListener("change", async () => {
   await uploadFiles(els.fileInput.files);
   els.fileInput.value = "";
 });
-
-// ============================================================
-// TERMINAL WIDGET
-// ============================================================
-
-function initTerminalWidget() {
-  if (!els.terminalWidget) return;
-
-  // Create open terminal button in workspace header
-  const openTerminal = document.createElement("button");
-  openTerminal.id = "open-terminal";
-  openTerminal.className = "icon-btn";
-  openTerminal.title = "Abrir Terminal";
-  openTerminal.innerHTML = '<i class="ph ph-terminal"></i>';
-
-  // Insert before ws-menu button
-  const wsMenu = document.getElementById("ws-menu");
-  if (wsMenu) {
-    wsMenu.before(openTerminal);
-    els.openTerminalBtn = openTerminal;
-  }
-
-  openTerminal.addEventListener("click", () => {
-    els.terminalWidget.classList.remove("hidden");
-    els.terminalInput.focus();
-    printToTerminal("Terminal pronto. Digite um comando...", "system");
-  });
-
-  els.closeTerminal?.addEventListener("click", () => {
-    els.terminalWidget.classList.add("hidden");
-  });
-
-  let commandHistory = [];
-  let historyIndex = -1;
-
-  els.terminalInput?.addEventListener("keydown", async (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      const cmd = els.terminalInput.value.trim();
-      if (!cmd) return;
-
-      // Add to history
-      commandHistory.push(cmd);
-      historyIndex = commandHistory.length;
-
-      printToTerminal(`$ ${cmd}`, "input");
-      els.terminalInput.value = "";
-
-      await executeShellCommand(cmd);
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      if (commandHistory.length > 0) {
-        if (historyIndex <= 0) historyIndex = 0;
-        else if (historyIndex > commandHistory.length)
-          historyIndex = commandHistory.length;
-
-        if (historyIndex > 0) {
-          historyIndex--;
-          els.terminalInput.value = commandHistory[historyIndex];
-        }
-      }
-    } else if (e.key === "ArrowDown") {
-      e.preventDefault();
-      if (commandHistory.length > 0) {
-        historyIndex++;
-        if (historyIndex < commandHistory.length) {
-          els.terminalInput.value = commandHistory[historyIndex];
-        } else {
-          historyIndex = commandHistory.length;
-          els.terminalInput.value = "";
-        }
-      }
-    }
-  });
-}
-
-function printToTerminal(text, type = "output") {
-  if (!els.terminalOutput) return;
-  const line = document.createElement("div");
-  line.className = `terminal-line terminal-${type}`;
-  line.textContent = text;
-  els.terminalOutput.appendChild(line);
-  els.terminalOutput.scrollTop = els.terminalOutput.scrollHeight;
-}
-
-async function executeShellCommand(cmd) {
-  const wsId = state.workspaces.active_id;
-  if (!wsId) {
-    printToTerminal("Erro: Nenhum workspace ativo", "error");
-    return;
-  }
-
-  printToTerminal("Executando...", "system");
-
-  try {
-    const response = await fetch(`/api/workspaces/${wsId}/shell`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ command: cmd }),
-    });
-
-    const data = await response.json();
-
-    if (data.error) {
-      printToTerminal(data.error, "error");
-    } else {
-      printToTerminal(data.output || "Comando executado", "output");
-    }
-  } catch (err) {
-    printToTerminal(`Erro: ${err.message}`, "error");
-  }
-}
-
-// Initialize terminal on boot
-initTerminalWidget();
 
 async function uploadFiles(files) {
   let wsId = state.workspaces.active_id;
@@ -2570,18 +2449,6 @@ function bindSearchInput(input) {
 }
 // Existing legacy input (kept in DOM for backwards-compat)
 bindSearchInput($("search-input"));
-// New: rail button focuses an inline search field in the workspace panel
-const railSearch = $("rail-search");
-if (railSearch) {
-  railSearch.addEventListener("click", () => {
-    // The workspace panel already lists all sessions; we just focus the
-    // session list as a soft "search" affordance. Future: show an input.
-    const firstSession = document.querySelector(".session-item");
-    if (firstSession)
-      firstSession.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  });
-}
-
 // ============================================================
 // KEYBOARD SHORTCUTS
 // ============================================================

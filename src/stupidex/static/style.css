@@ -425,6 +425,10 @@ body,
     font-size: 18px;
 }
 
+#rail-workspace {
+    display: none;
+}
+
 .nav-rail-active {
     background: var(--accent-soft);
     color: var(--accent);
@@ -2484,6 +2488,10 @@ body,
     }
 }
 @media (max-width: 860px) {
+    #rail-workspace {
+        display: flex;
+    }
+
     .app-shell {
         grid-template-columns: var(--nav-width) 1fr;
     }
