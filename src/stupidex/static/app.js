@@ -1018,6 +1018,11 @@ async function sendMessage() {
   setBusy(true);
   state.abortController = new AbortController();
 
+  if (currentProvider()?.runtime === "puter") {
+    await runPuterChat({ sid, text, images, bubble, assistantRow });
+    return;
+  }
+
   await runChat({
     sid,
     text,
@@ -1036,6 +1041,187 @@ async function sendMessage() {
     },
     assistantRow,
   });
+}
+
+function puterResponseText(response) {
+  const content = response?.message?.content ?? response?.content ?? response;
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((item) => (typeof item === "string" ? item : item?.text || ""))
+      .join("");
+  }
+  return "";
+}
+
+function puterConversation(messages, regenerate = false) {
+  let usable = messages.filter(
+    (message) =>
+      (message.role === "user" || message.role === "assistant") &&
+      message.type === "text" &&
+      typeof message.content === "string" &&
+      message.content.trim(),
+  );
+  if (regenerate) {
+    let lastUser = -1;
+    for (let index = usable.length - 1; index >= 0; index -= 1) {
+      if (usable[index].role === "user") {
+        lastUser = index;
+        break;
+      }
+    }
+    usable = lastUser >= 0 ? usable.slice(0, lastUser + 1) : [];
+  }
+  return usable.slice(-30).map((message) => ({
+    role: message.role,
+    content: message.content.slice(0, 40_000),
+  }));
+}
+
+function puterImagePrompt(history, text) {
+  const transcript = history
+    .slice(-12)
+    .map(
+      (message) =>
+        `${message.role === "user" ? "Usuário" : "Assistente"}: ${message.content}`,
+    )
+    .join("\n\n")
+    .slice(-60_000);
+  const current = text || "Analise cuidadosamente as imagens anexadas.";
+  return transcript
+    ? `Contexto recente da conversa:\n${transcript}\n\nSolicitação atual:\n${current}`
+    : current;
+}
+
+async function persistPuterTurn({ sid, text, response, images, regenerate }) {
+  const payload = {
+    provider: state.config.provider,
+    model: state.config.model,
+    message: text,
+    response,
+    regenerate,
+    web_search: state.webSearchEnabled,
+    images: images.map((image) => ({
+      name: image.name,
+      mime: image.type,
+      size: image.size,
+    })),
+  };
+  const save = () =>
+    fetch(`/api/sessions/${sid}/browser-turn`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  let result = await save();
+  if (!result.ok && result.status >= 500) result = await save();
+  if (!result.ok) {
+    const error = await result.json().catch(() => ({}));
+    throw new Error(error.error || `HTTP ${result.status}`);
+  }
+  return result.json();
+}
+
+async function runPuterChat({
+  sid,
+  text,
+  images = [],
+  bubble,
+  assistantRow,
+  regenerate = false,
+}) {
+  let answer = "";
+  try {
+    if (!window.puter?.ai?.chat) {
+      throw new Error(
+        "Puter.js não carregou. Verifique a conexão e recarregue a página.",
+      );
+    }
+    const response = await fetch(`/api/sessions/${sid}/messages`);
+    if (!response.ok) {
+      throw new Error(`Falha ao carregar o histórico (HTTP ${response.status})`);
+    }
+    const history = puterConversation(await response.json(), regenerate);
+    if (!regenerate) {
+      history.push({ role: "user", content: text || "Analise as imagens." });
+    }
+
+    const options = {
+      model: state.config.model || currentProvider()?.model || "gpt-5.4-nano",
+      stream: true,
+    };
+    if (state.webSearchEnabled) options.tools = [{ type: "web_search" }];
+
+    const completion = images.length
+      ? await window.puter.ai.chat(
+          puterImagePrompt(history.slice(0, -1), text),
+          images.length === 1
+            ? images[0].dataUrl
+            : images.map((image) => image.dataUrl),
+          options,
+        )
+      : await window.puter.ai.chat(
+          [
+            {
+              role: "system",
+              content:
+                "Você é o Stupidex, um assistente técnico direto e preciso. Responda em português quando o usuário escrever em português.",
+            },
+            ...history,
+          ],
+          options,
+        );
+
+    bubble.textContent = "";
+    if (completion?.[Symbol.asyncIterator]) {
+      for await (const part of completion) {
+        if (state.abortController?.signal.aborted) {
+          throw new DOMException("Aborted", "AbortError");
+        }
+        answer += part?.text || "";
+        bubble.textContent = answer;
+        scrollToBottom();
+      }
+    } else {
+      answer = puterResponseText(completion);
+    }
+    if (!answer.trim()) throw new Error("O modelo não retornou texto.");
+
+    bubble.innerHTML = DOMPurify.sanitize(marked.parse(answer));
+    bubble.querySelectorAll("pre code").forEach((block) => {
+      try {
+        hljs.highlightElement(block);
+      } catch {}
+    });
+    attachAssistantActions(assistantRow, sid);
+    try {
+      const saved = await persistPuterTurn({
+        sid,
+        text,
+        response: answer,
+        images,
+        regenerate,
+      });
+      if (saved.title) updateConversationHeader({ title: saved.title });
+    } catch (saveError) {
+      els.status.textContent = `Resposta recebida, mas não foi salva: ${saveError.message}`;
+      els.status.classList.remove("hidden");
+    }
+  } catch (error) {
+    if (error.name === "AbortError") {
+      bubble.innerHTML = '<em style="color:var(--text-muted)">[interrompido]</em>';
+    } else {
+      bubble.innerHTML = `<em style="color:var(--danger)">Erro: ${escapeHtml(error.message)}</em>`;
+    }
+    attachAssistantActions(assistantRow, sid);
+  } finally {
+    setBusy(false);
+    state.abortController = null;
+    await loadSessions();
+    const session = state.sessions.find((item) => item.id === sid);
+    if (session) updateConversationHeader(session);
+    renderSessions();
+  }
 }
 
 async function runChat({
@@ -1350,6 +1536,17 @@ async function regenerateLast() {
 
   setBusy(true);
   state.abortController = new AbortController();
+
+  if (currentProvider()?.runtime === "puter") {
+    await runPuterChat({
+      sid,
+      text: "",
+      bubble,
+      assistantRow,
+      regenerate: true,
+    });
+    return;
+  }
 
   await runChat({
     sid,

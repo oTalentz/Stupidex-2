@@ -17,6 +17,7 @@ class ProviderConfig:
     api_key_env: str | None = None
     needs_api_key: bool = False
     supports_vision: bool = False
+    runtime: str = "server"
     description: str = ""
 
 
@@ -90,7 +91,18 @@ PROVIDERS: dict[str, ProviderConfig] = {
         default_model="mistralai/mistral-large-2512",
         needs_api_key=False,
         supports_vision=True,
+        runtime="puter",
         description="Mistral via Puter.com — API gratuita e ilimitada",
+    ),
+    "puter-gpt-5.4-nano": ProviderConfig(
+        id="puter-gpt-5.4-nano",
+        name="GPT-5.4 Nano (Puter)",
+        base_url=None,
+        default_model="gpt-5.4-nano",
+        needs_api_key=False,
+        supports_vision=True,
+        runtime="puter",
+        description="GPT-5.4 Nano com visão via Puter.js no navegador",
     ),
 }
 
@@ -112,6 +124,7 @@ def list_providers() -> list[dict]:
             "model": p.default_model,
             "needs_api_key": p.needs_api_key,
             "supports_vision": p.supports_vision,
+            "runtime": p.runtime,
             "api_key_env": p.api_key_env,
             "description": p.description,
         }

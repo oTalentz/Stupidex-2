@@ -366,9 +366,11 @@ def add_cors(resp):
             "default-src 'self'; "
             "img-src 'self' data: https:; "
             "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; "
-            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://js.puter.com; "
             "font-src 'self' data: https://cdn.jsdelivr.net https://fonts.gstatic.com; "
-            "connect-src 'self'"
+            "connect-src 'self' https://puter.com https://*.puter.com wss://*.puter.com; "
+            "frame-src 'self' https://puter.com https://*.puter.com; "
+            "worker-src 'self' blob:"
         )
         resp.headers["Content-Security-Policy"] = csp
 
@@ -980,6 +982,72 @@ def session_messages(sid):
     return jsonify([m.to_dict() for m in db.get_messages(sid)])
 
 
+@app.route("/api/sessions/<sid>/browser-turn", methods=["POST"])
+@login_required
+@rate_limited("chat")
+def session_browser_turn(sid):
+    session = db.get_session_for_user(sid, request.user.id)
+    if not session:
+        return jsonify({"error": "session not found"}), 404
+    if session.trashed:
+        return jsonify({"error": "session is in trash"}), 409
+
+    data = request.get_json(force=True) or {}
+    provider_id = str(data.get("provider") or "").strip()
+    provider = PROVIDERS.get(provider_id)
+    if not provider or provider.runtime != "puter":
+        return jsonify({"error": "provider is not a browser Puter model"}), 400
+
+    user_text = str(data.get("message") or "").strip()
+    assistant_text = str(data.get("response") or "").strip()
+    regenerate = data.get("regenerate") is True
+    if len(user_text) > 100_000 or len(assistant_text) > 500_000:
+        return jsonify({"error": "message too long"}), 400
+    if not assistant_text:
+        return jsonify({"error": "empty assistant response"}), 400
+    if regenerate and not db.get_last_user_message(sid):
+        return jsonify({"error": "no user message to regenerate from"}), 400
+
+    images = data.get("images") or []
+    if not isinstance(images, list) or len(images) > MAX_CHAT_IMAGES:
+        return jsonify({"error": "invalid image metadata"}), 400
+    image_meta = []
+    for image in images:
+        if not isinstance(image, dict):
+            return jsonify({"error": "invalid image metadata"}), 400
+        name = str(image.get("name") or "image")[:255]
+        mime = str(image.get("mime") or "")[:100]
+        size = image.get("size")
+        if (
+            mime not in _CHAT_IMAGE_MIMES
+            or not isinstance(size, int)
+            or size < 0
+            or size > MAX_CHAT_IMAGE_BYTES
+        ):
+            return jsonify({"error": "invalid image metadata"}), 400
+        image_meta.append({"name": name, "mime": mime, "size": size})
+
+    if not regenerate and not user_text and not image_meta:
+        return jsonify({"error": "empty user message"}), 400
+
+    if not regenerate:
+        metadata = {}
+        if image_meta:
+            metadata["images"] = image_meta
+        if data.get("web_search") is True:
+            metadata["web_search"] = True
+        db.append_message(sid, "user", user_text, metadata=metadata or None)
+        db.auto_title(sid, user_text or "Análise de imagem")
+    model = str(data.get("model") or provider.default_model).strip()[:200]
+    db.append_message(
+        sid,
+        "assistant",
+        assistant_text,
+        metadata={"runtime": "puter", "model": model},
+    )
+    return jsonify({"ok": True, "title": db.get_session(sid).title})
+
+
 @app.route("/api/sessions/<sid>/clear", methods=["POST"])
 @login_required
 @rate_limited("default")
@@ -1127,9 +1195,14 @@ def session_regenerate(sid):
         user_text = last_user.content
 
     provider_id = data.get("provider") or s.provider
+    provider = PROVIDERS.get(provider_id, PROVIDERS[DEFAULT_FALLBACK_ID])
+    if provider.runtime != "server":
+        return jsonify(
+            {"error": "the selected Puter model must run in the browser"}
+        ), 400
     user_api_key = request.user.api_key or data.get("api_key")
     if (
-        PROVIDERS.get(provider_id, PROVIDERS[DEFAULT_FALLBACK_ID]).needs_api_key
+        provider.needs_api_key
         and not user_api_key
         and not has_api_key()
     ):
@@ -1184,6 +1257,10 @@ def _session_chat_impl(sid: str) -> Response:
 
     provider_id = data.get("provider") or session.provider
     provider = PROVIDERS.get(provider_id, PROVIDERS[DEFAULT_FALLBACK_ID])
+    if provider.runtime != "server":
+        return jsonify(
+            {"error": "the selected Puter model must run in the browser"}
+        ), 400
     if images and not provider.supports_vision:
         return jsonify(
             {"error": "the selected model does not support image input"}

@@ -601,6 +601,57 @@ def test_provider_capabilities_include_vision():
     assert providers["deepseek-v4-pro"]["supports_vision"] is False
     assert providers["deepseek-chat"]["supports_vision"] is False
     assert providers["openai"]["supports_vision"] is True
+    assert providers["puter-gpt-5.4-nano"]["supports_vision"] is True
+    assert providers["puter-gpt-5.4-nano"]["runtime"] == "puter"
+    assert providers["puter-gpt-5.4-nano"]["model"] == "gpt-5.4-nano"
+
+
+def test_browser_puter_turn_is_persisted_without_image_binary():
+    from stupidex import web
+
+    user, token = db.create_user("puter_turn_user", "validpass123")
+    session = db.create_session(
+        user.id, "puter-gpt-5.4-nano", "gpt-5.4-nano"
+    )
+    client = web.app.test_client()
+    response = client.post(
+        f"/api/sessions/{session.id}/browser-turn",
+        json={
+            "provider": "puter-gpt-5.4-nano",
+            "model": "gpt-5.4-nano",
+            "message": "O que há na imagem?",
+            "response": "Há uma interface escura.",
+            "images": [
+                {"name": "screen.png", "mime": "image/png", "size": 128}
+            ],
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    messages = db.get_messages(session.id)
+    assert [message.role for message in messages] == ["user", "assistant"]
+    assert messages[0].metadata["images"] == [
+        {"name": "screen.png", "mime": "image/png", "size": 128}
+    ]
+    assert "data_url" not in messages[0].metadata["images"][0]
+    assert messages[1].metadata["runtime"] == "puter"
+
+
+def test_server_chat_rejects_browser_only_puter_provider():
+    from stupidex import web
+
+    user, token = db.create_user("puter_server_reject", "validpass123")
+    session = db.create_session(
+        user.id, "puter-gpt-5.4-nano", "gpt-5.4-nano"
+    )
+    client = web.app.test_client()
+    response = client.post(
+        f"/api/sessions/{session.id}/chat",
+        json={"message": "olá", "provider": "puter-gpt-5.4-nano"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 400
+    assert "must run in the browser" in response.get_json()["error"]
 
 
 def test_chat_image_binary_is_not_persisted():
