@@ -96,6 +96,11 @@ FRONTEND_URL=https://seu-dominio.com
 ✅ **Repositórios públicos do GitHub e GitLab funcionam sem conexão**
 ✅ **Clonagem de repositórios privados do GitHub funciona com OAuth conectado**
 
+Se o OAuth não estiver configurado no servidor, o botão **Conectar** permite informar
+um token pessoal do GitHub. Prefira um token refinado limitado aos repositórios
+necessários, com `Contents: Read and write` quando o agente também precisar fazer
+commits e push. O token é validado no GitHub e armazenado cifrado.
+
 #### Acesso Automático a Repositórios do Provedor (Opcional)
 
 Se o provedor (administrador do Stupidex) quiser que **todos os usuários** tenham acesso automático aos **repositórios do provedor** sem precisar conectar individualmente:
@@ -219,7 +224,7 @@ python test_integration.py # Testes de integração
 - ✅ **Clonagem de repositórios privados**: Funciona com GitHub OAuth conectado
 - ✅ **Terminal widget**: Interface de terminal integrado no painel workspace
 - ✅ **Botão Git Pull**: Sincronização fácil com o repositório remoto
-- ✅ **Contexto automático de arquivos**: Todos os arquivos do workspace são automaticamente carregados no contexto do chat
+- ✅ **Contexto automático de arquivos**: A árvore e os arquivos prioritários do workspace são enviados ao modelo; modelos com ferramentas podem ler os demais arquivos sob demanda
 
 ## 📝 Roadmap
 

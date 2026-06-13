@@ -42,6 +42,7 @@ logging.getLogger("litellm").setLevel(logging.WARNING)
 
 MAX_TOOL_ITERATIONS = 20
 MAX_HISTORY_MESSAGES = 200  # safety net
+MAX_WORKSPACE_CONTEXT_BYTES = 48_000
 
 AGENT_SYSTEM_PROMPT = """\
 You are Stupidex, a secure coding agent. You operate EXCLUSIVELY inside the user's
@@ -158,8 +159,7 @@ def _workspace_summary(user_id: str = "") -> str:
     ws = workspaces_module.get_active_workspace(user_id)
     if not ws:
         return "(no active workspace — upload files or clone a repository first)"
-    ws_path = workspaces_module._user_dir(user_id) / ws.id
-    summary = f"Active workspace: '{ws.name}' (id={ws.id})\nPath: {ws_path}\nSource: {ws.source}"
+    summary = f"Active workspace: '{ws.name}' (id={ws.id})\nSource: {ws.source}"
     if ws.git_url:
         summary += f"\nGit: {ws.git_url}" + (
             f" (branch {ws.git_branch})" if ws.git_branch else ""
@@ -211,13 +211,16 @@ def _is_key_file(rel_path: str, name: str) -> bool:
     """Determine if a file is important enough to include in context."""
     if name in _KEY_FILE_NAMES:
         return True
+    normalized = rel_path.replace("\\", "/")
+    depth = normalized.count("/")
     ext = Path(name).suffix.lower()
-    if ext in _KEY_FILE_EXTENSIONS and "/" not in rel_path.replace(name, "").rstrip("/"):
+    if ext in _KEY_FILE_EXTENSIONS and depth == 0:
         return True  # Root-level config files
-    # Include top-level files (depth 1)
-    if rel_path.count("/") == 0 or rel_path.count("\\") == 0:
-        if ext in {".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs", ".java", ".rb"}:
-            return True
+    if ext in {
+        ".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs", ".java", ".rb",
+        ".php", ".cs", ".cpp", ".c", ".h", ".vue", ".svelte",
+    } and depth <= 4:
+        return True
     return False
 
 
@@ -239,23 +242,41 @@ def _workspace_files_list(user_id: str = "") -> list[dict[str, Any]]:
         return []
 
     files = []
-    max_preview_bytes = 3_000  # 3KB per file preview
-    max_total_bytes = 25_000   # 25KB total for all previews
+    max_preview_bytes = 4_000
+    max_total_bytes = MAX_WORKSPACE_CONTEXT_BYTES
     total_bytes = 0
 
-    for p in sorted(ws_path.rglob("*")):
-        if total_bytes >= max_total_bytes:
-            break
-        # Skip hidden files, .git, __pycache__, node_modules
+    candidates: list[tuple[int, int, str, Path]] = []
+    resolved_root = ws_path.resolve()
+    for p in ws_path.rglob("*"):
+        try:
+            relative = p.relative_to(ws_path)
+        except ValueError:
+            continue
+        parts = relative.parts
         if any(
-            part.startswith(".") or part in ("__pycache__", "node_modules", "dist", "build", ".next")
-            for part in p.parts
+            part in (".git", "__pycache__", "node_modules", "dist", "build", ".next")
+            or (part.startswith(".") and index < len(parts) - 1)
+            for index, part in enumerate(parts)
         ):
             continue
-        if not p.is_file():
+        if p.is_symlink() or not p.is_file():
             continue
+        try:
+            p.resolve().relative_to(resolved_root)
+        except (OSError, ValueError):
+            continue
+        rel_path = relative.as_posix()
+        name = p.name
+        if not _is_key_file(rel_path, name):
+            continue
+        priority = 0 if name in _KEY_FILE_NAMES else 1
+        candidates.append((priority, len(parts), rel_path.lower(), p))
 
-        rel_path = str(p.relative_to(ws_path))
+    for _, _, _, p in sorted(candidates):
+        if total_bytes >= max_total_bytes:
+            break
+        rel_path = p.relative_to(ws_path).as_posix()
         name = p.name
 
         # Skip binary/generated extensions
@@ -281,7 +302,11 @@ def _workspace_files_list(user_id: str = "") -> list[dict[str, Any]]:
             preview = content[:max_preview_bytes] if len(content) > max_preview_bytes else content
             preview_bytes = len(preview.encode("utf-8"))
             if total_bytes + preview_bytes > max_total_bytes:
-                break
+                remaining = max_total_bytes - total_bytes
+                if remaining < 500:
+                    break
+                preview = preview.encode("utf-8")[:remaining].decode("utf-8", errors="ignore")
+                preview_bytes = len(preview.encode("utf-8"))
             files.append({"path": rel_path, "size": size, "preview": preview})
             total_bytes += preview_bytes
         except (UnicodeDecodeError, OSError):
@@ -326,7 +351,11 @@ def _workspace_file_tree(user_id: str = "") -> str:
         entries = [
             e
             for e in entries
-            if not any(part.startswith(".") or part in ("__pycache__", "node_modules") for part in [e.name])
+            if not e.is_symlink()
+            and not any(
+                part.startswith(".") or part in ("__pycache__", "node_modules")
+                for part in [e.name]
+            )
             and e.name != ".stupidex.json"
         ]
 

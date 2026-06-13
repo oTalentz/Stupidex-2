@@ -806,6 +806,90 @@
             </div>
         </div>
 
+        <div
+            id="github-connect-modal"
+            class="modal hidden"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="github-connect-title"
+        >
+            <div class="modal-content" style="max-width: 520px">
+                <div class="modal-header">
+                    <h2 id="github-connect-title">Conectar GitHub</h2>
+                    <button
+                        id="close-github-connect"
+                        class="icon-btn"
+                        aria-label="Fechar"
+                    >
+                        <i class="ph ph-x"></i>
+                    </button>
+                </div>
+                <div class="modal-body github-connect-options">
+                    <section id="github-oauth-option" class="github-connect-option">
+                        <strong>Autorizar com GitHub</strong>
+                        <p>
+                            Autorize o Stupidex a acessar repositórios públicos e
+                            privados pela sua conta.
+                        </p>
+                        <button id="github-oauth-connect" class="primary-btn">
+                            <i class="ph ph-github-logo"></i>
+                            Continuar com GitHub
+                        </button>
+                    </section>
+                    <div id="github-connect-divider" class="github-connect-divider">
+                        ou conecte com token pessoal
+                    </div>
+                    <section class="github-connect-option">
+                        <strong>Token pessoal</strong>
+                        <p>
+                            Use um token de acesso refinado com acesso aos
+                            repositórios desejados e permissão
+                            <code>Contents: Read and write</code>.
+                        </p>
+                        <a
+                            href="https://github.com/settings/personal-access-tokens/new"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="github-token-link"
+                            >Criar token no GitHub</a
+                        >
+                        <label class="field">
+                            <span class="field-label">Token</span>
+                            <div class="api-key-row">
+                                <input
+                                    id="github-token-input"
+                                    type="password"
+                                    placeholder="github_pat_... ou ghp_..."
+                                    autocomplete="new-password"
+                                    spellcheck="false"
+                                />
+                                <button
+                                    id="toggle-github-token"
+                                    type="button"
+                                    class="ghost-btn"
+                                >
+                                    mostrar
+                                </button>
+                            </div>
+                        </label>
+                        <div id="github-token-status" class="field-hint"></div>
+                    </section>
+                    <p class="integration-privacy-note">
+                        O token é validado no GitHub, armazenado cifrado e nunca é
+                        incluído na URL do repositório ou enviado aos modelos.
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button id="cancel-github-connect" class="ghost-btn">
+                        Cancelar
+                    </button>
+                    <button id="confirm-github-token" class="primary-btn">
+                        Conectar token
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- Settings modal (preserved) -->
         <div
             id="settings-modal"
@@ -1046,6 +1130,6 @@
         </div>
 
         <script src="https://js.puter.com/v2/"></script>
-        <script src="/static/app.js?v=22"></script>
+        <script src="/static/app.js?v=23"></script>
     </body>
 </html>

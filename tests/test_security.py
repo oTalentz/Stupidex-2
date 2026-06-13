@@ -932,6 +932,99 @@ def test_repository_is_removed_only_by_explicit_disconnect():
     assert workspaces.get_active_workspace(user_id) is None
 
 
+def test_workspace_context_reads_files_under_hidden_data_directory(monkeypatch):
+    from stupidex import workspaces
+    from stupidex.llm.handle_input import (
+        _workspace_context_for_llm,
+        _workspace_files_list,
+    )
+
+    hidden_root = _TMP / ".stupidex-context" / "workspaces"
+    monkeypatch.setattr(workspaces, "WORKSPACES_BASE", hidden_root)
+    user_id = "context_hidden_parent"
+    workspace = workspaces.create_empty(user_id, "repo-context")
+    root = workspaces.workspace_path(user_id, workspace.id)
+    (root / "README.md").write_text("PROJECT_CONTEXT_MARKER", encoding="utf-8")
+    (root / "src").mkdir()
+    (root / "src" / "main.py").write_text("print('context')", encoding="utf-8")
+    workspaces.init_from_upload(user_id, workspace.id)
+    assert workspaces.set_active_workspace(user_id, workspace.id)
+
+    files = _workspace_files_list(user_id)
+    paths = {item["path"] for item in files}
+    context = _workspace_context_for_llm(user_id)
+
+    assert "README.md" in paths
+    assert "src/main.py" in paths
+    assert "PROJECT_CONTEXT_MARKER" in context
+    assert str(hidden_root) not in context
+
+
+def test_workspace_context_endpoint_returns_active_repository():
+    from stupidex import web, workspaces
+
+    user, token = db.create_user("workspace_context_api", "validpass123")
+    workspace = workspaces.create_empty(user.id, "api-context")
+    root = workspaces.workspace_path(user.id, workspace.id)
+    (root / "README.md").write_text("API_CONTEXT_MARKER", encoding="utf-8")
+    workspaces.init_from_upload(user.id, workspace.id)
+    workspaces.set_active_workspace(user.id, workspace.id)
+
+    response = web.app.test_client().get(
+        "/api/workspace/context",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    payload = response.get_json()
+    assert response.status_code == 200
+    assert payload["active"] is True
+    assert payload["workspace"]["id"] == workspace.id
+    assert "API_CONTEXT_MARKER" in payload["context"]
+
+
+def test_github_personal_token_connection_is_validated_and_encrypted(monkeypatch):
+    from stupidex import web
+
+    user, auth_token = db.create_user("github_pat_connect", "validpass123")
+    personal_token = "github_pat_valid_test_token_123456789"
+    monkeypatch.setattr(
+        web,
+        "_github_identity",
+        lambda token: ("octocat", "https://avatars.githubusercontent.com/u/1?v=4")
+        if token == personal_token
+        else (_ for _ in ()).throw(AssertionError("unexpected token")),
+    )
+    response = web.app.test_client().post(
+        "/api/integrations/github/token",
+        json={"token": personal_token},
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+    assert response.status_code == 200
+    connected = db.validate_token(auth_token)
+    assert connected.github_access_token == personal_token
+    with db.db_cursor() as cur:
+        stored = cur.execute(
+            "SELECT github_access_token FROM users WHERE id = ?", (user.id,)
+        ).fetchone()["github_access_token"]
+    assert stored.startswith("enc:v1:")
+    assert personal_token not in stored
+
+
+def test_github_status_offers_token_fallback_without_oauth(monkeypatch):
+    from stupidex import web
+
+    _, auth_token = db.create_user("github_token_fallback", "validpass123")
+    monkeypatch.setattr(web, "GITHUB_CLIENT_ID", "")
+    monkeypatch.setattr(web, "GITHUB_CLIENT_SECRET", "")
+    response = web.app.test_client().get(
+        "/api/integrations/github",
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+    payload = response.get_json()
+    assert response.status_code == 200
+    assert payload["oauth_configured"] is False
+    assert payload["token_connection_available"] is True
+
+
 def cleanup():
     shutil.rmtree(_TMP, ignore_errors=True)
 

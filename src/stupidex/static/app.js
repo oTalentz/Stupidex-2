@@ -112,6 +112,17 @@ const els = {
   cloneGithubDescription: $("clone-github-description"),
   cloneGithubAction: $("clone-github-action"),
 
+  githubConnectModal: $("github-connect-modal"),
+  closeGithubConnect: $("close-github-connect"),
+  cancelGithubConnect: $("cancel-github-connect"),
+  githubOauthOption: $("github-oauth-option"),
+  githubOauthConnect: $("github-oauth-connect"),
+  githubConnectDivider: $("github-connect-divider"),
+  githubTokenInput: $("github-token-input"),
+  toggleGithubToken: $("toggle-github-token"),
+  githubTokenStatus: $("github-token-status"),
+  confirmGithubToken: $("confirm-github-token"),
+
   settingsGithubCard: $("settings-github-card"),
   settingsGithubAvatar: $("settings-github-avatar"),
   settingsGithubTitle: $("settings-github-title"),
@@ -198,6 +209,8 @@ let state = {
   webSearchEnabled: false,
   github: {
     configured: false,
+    oauth_configured: false,
+    token_connection_available: true,
     connected: false,
     login: "",
     avatar_url: "",
@@ -1206,7 +1219,7 @@ function puterConversation(messages, regenerate = false) {
   }));
 }
 
-function puterImagePrompt(history, text) {
+function puterImagePrompt(history, text, workspaceContext = "") {
   const transcript = history
     .slice(-12)
     .map(
@@ -1216,9 +1229,21 @@ function puterImagePrompt(history, text) {
     .join("\n\n")
     .slice(-60_000);
   const current = text || "Analise cuidadosamente as imagens anexadas.";
-  return transcript
+  const conversation = transcript
     ? `Contexto recente da conversa:\n${transcript}\n\nSolicitação atual:\n${current}`
     : current;
+  return workspaceContext
+    ? `REPOSITÓRIO ATIVO:\n${workspaceContext}\n\n${conversation}`
+    : conversation;
+}
+
+async function loadWorkspaceModelContext() {
+  const response = await fetch("/api/workspace/context");
+  if (!response.ok) {
+    throw new Error(`Falha ao carregar o repositório (HTTP ${response.status})`);
+  }
+  const payload = await response.json();
+  return payload.active && typeof payload.context === "string" ? payload.context : "";
 }
 
 async function persistPuterTurn({ sid, text, response, images, regenerate }) {
@@ -1265,7 +1290,10 @@ async function runPuterChat({
         "Puter.js não carregou. Verifique a conexão e recarregue a página.",
       );
     }
-    const response = await fetch(`/api/sessions/${sid}/messages`);
+    const [response, workspaceContext] = await Promise.all([
+      fetch(`/api/sessions/${sid}/messages`),
+      loadWorkspaceModelContext(),
+    ]);
     if (!response.ok) {
       throw new Error(
         `Falha ao carregar o histórico (HTTP ${response.status})`,
@@ -1284,7 +1312,7 @@ async function runPuterChat({
 
     const completion = images.length
       ? await window.puter.ai.chat(
-          puterImagePrompt(history.slice(0, -1), text),
+          puterImagePrompt(history.slice(0, -1), text, workspaceContext),
           images.length === 1
             ? images[0].dataUrl
             : images.map((image) => image.dataUrl),
@@ -1295,7 +1323,11 @@ async function runPuterChat({
             {
               role: "system",
               content:
-                "Você é o Stupidex, um assistente técnico direto e preciso. Responda em português quando o usuário escrever em português.",
+                "Você é o Stupidex, um assistente técnico direto e preciso. " +
+                "Responda em português quando o usuário escrever em português. " +
+                "O conteúdo abaixo é o repositório ativo anexado pelo usuário. " +
+                "Use-o diretamente e nunca diga que não consegue acessar os arquivos quando ele estiver presente.\n\n" +
+                (workspaceContext || "Nenhum repositório está ativo."),
             },
             ...history,
           ],
@@ -2074,25 +2106,21 @@ function safeGithubAvatar(url) {
 function renderGithubIntegrationCard(card, title, description, action) {
   if (!card) return;
   const connected = state.github.connected;
-  const configured = state.github.configured;
+  const oauthConfigured =
+    state.github.oauth_configured ?? state.github.configured;
   card.classList.toggle("is-connected", connected);
-  card.classList.toggle("is-unavailable", !configured);
+  card.classList.remove("is-unavailable");
   title.textContent = connected
     ? `GitHub conectado · @${state.github.login}`
-    : configured
-      ? "GitHub não conectado"
-      : "Integração GitHub indisponível";
+    : "GitHub não conectado";
   description.textContent = connected
     ? "Acesso habilitado para repositórios públicos e privados."
-    : configured
+    : oauthConfigured
       ? "Conecte sua conta para clonar repositórios privados."
-      : "Configure GITHUB_CLIENT_ID e GITHUB_CLIENT_SECRET no servidor. Consulte o README.";
+      : "Conecte um token pessoal para acessar repositórios públicos e privados.";
   action.textContent = connected
     ? "Desconectar"
-    : configured
-      ? "Conectar"
-      : "Indisponível";
-  // Botão sempre clicável - handleGithubAction() trata o caso de não configurado
+    : "Conectar";
   action.disabled = false;
 
   const icon = card.querySelector(".github-integration-icon");
@@ -2137,6 +2165,8 @@ async function loadGithubIntegration() {
   } catch {
     state.github = {
       configured: false,
+      oauth_configured: false,
+      token_connection_available: true,
       connected: false,
       login: "",
       avatar_url: "",
@@ -2145,21 +2175,27 @@ async function loadGithubIntegration() {
   renderGithubIntegration();
 }
 
-function handleGithubAction() {
-  if (!state.github.configured) {
-    alert(
-      "Integração GitHub indisponível.\n\n" +
-        "O administrador do servidor precisa configurar:\n" +
-        "- GITHUB_CLIENT_ID\n" +
-        "- GITHUB_CLIENT_SECRET\n" +
-        "- GITHUB_REDIRECT_URI\n\n" +
-        "Consulte o README.md para instruções.",
-    );
-    return;
+function closeGithubConnectModal() {
+  els.githubConnectModal?.classList.add("hidden");
+  if (els.githubTokenInput) els.githubTokenInput.value = "";
+  if (els.githubTokenStatus) {
+    els.githubTokenStatus.textContent = "";
+    els.githubTokenStatus.className = "field-hint";
   }
+}
+
+function openGithubConnectModal() {
+  const oauthConfigured =
+    state.github.oauth_configured ?? state.github.configured;
+  els.githubOauthOption?.classList.toggle("hidden", !oauthConfigured);
+  els.githubConnectDivider?.classList.toggle("hidden", !oauthConfigured);
+  els.githubConnectModal?.classList.remove("hidden");
+  els.githubTokenInput?.focus();
+}
+
+function handleGithubAction() {
   if (!state.github.connected) {
-    // Inicia o processo de conexão GitHub OAuth
-    window.location.assign("/api/integrations/github/connect");
+    openGithubConnectModal();
     return;
   }
   showConfirm(
@@ -2181,6 +2217,36 @@ function handleGithubAction() {
       icon: "ph-link-break",
     },
   );
+}
+
+async function connectGithubToken() {
+  const token = els.githubTokenInput?.value.trim() || "";
+  if (!token) {
+    els.githubTokenStatus.textContent = "Informe um token do GitHub.";
+    els.githubTokenStatus.className = "field-hint err";
+    return;
+  }
+  els.confirmGithubToken.disabled = true;
+  els.githubTokenStatus.textContent = "Validando no GitHub...";
+  els.githubTokenStatus.className = "field-hint";
+  try {
+    const response = await fetch("/api/integrations/github/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload.error || `HTTP ${response.status}`);
+    }
+    await loadGithubIntegration();
+    closeGithubConnectModal();
+  } catch (error) {
+    els.githubTokenStatus.textContent = error.message;
+    els.githubTokenStatus.className = "field-hint err";
+  } finally {
+    els.confirmGithubToken.disabled = false;
+  }
 }
 
 async function openCloneModal() {
@@ -2225,6 +2291,26 @@ els.disconnectRepoBtn?.addEventListener("click", () => {
 });
 els.cloneGithubAction.addEventListener("click", handleGithubAction);
 els.settingsGithubAction.addEventListener("click", handleGithubAction);
+els.githubOauthConnect?.addEventListener("click", () => {
+  window.location.assign("/api/integrations/github/connect");
+});
+els.confirmGithubToken?.addEventListener("click", connectGithubToken);
+els.closeGithubConnect?.addEventListener("click", closeGithubConnectModal);
+els.cancelGithubConnect?.addEventListener("click", closeGithubConnectModal);
+els.githubConnectModal?.addEventListener("click", (event) => {
+  if (event.target === els.githubConnectModal) closeGithubConnectModal();
+});
+els.githubTokenInput?.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    connectGithubToken();
+  }
+});
+els.toggleGithubToken?.addEventListener("click", () => {
+  const showing = els.githubTokenInput.type === "text";
+  els.githubTokenInput.type = showing ? "password" : "text";
+  els.toggleGithubToken.textContent = showing ? "mostrar" : "ocultar";
+});
 els.closeClone.addEventListener("click", () =>
   els.cloneModal.classList.add("hidden"),
 );
@@ -2537,7 +2623,9 @@ els.settingsModal.addEventListener("click", (e) => {
 
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
-    if (!els.settingsModal.classList.contains("hidden")) closeSettings();
+    if (!els.githubConnectModal?.classList.contains("hidden"))
+      closeGithubConnectModal();
+    else if (!els.settingsModal.classList.contains("hidden")) closeSettings();
     else if (!els.profileModal.classList.contains("hidden")) closeProfile();
     else if (!els.cloneModal.classList.contains("hidden"))
       els.cloneModal.classList.add("hidden");
@@ -2986,8 +3074,8 @@ async function logout() {
   state = {
     providers: [],
     config: {
-      provider: "deepseek-v4-flash",
-      model: "deepseek-v4-flash",
+      provider: "deepseek-chat",
+      model: "deepseek-chat",
       has_api_key: false,
     },
     workspaces: { workspaces: [], active_id: null },
@@ -3006,6 +3094,8 @@ async function logout() {
     webSearchEnabled: false,
     github: {
       configured: false,
+      oauth_configured: false,
+      token_connection_available: true,
       connected: false,
       login: "",
       avatar_url: "",

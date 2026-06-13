@@ -52,6 +52,7 @@ import shutil
 import tempfile
 import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
@@ -595,6 +596,25 @@ def _github_configured() -> bool:
     return bool(GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET)
 
 
+def _github_identity(access_token: str) -> tuple[str, str]:
+    user_req = urllib.request.Request(
+        _GITHUB_USER_URL,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {access_token}",
+            "User-Agent": "Stupidex/0.1",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+    )
+    with urllib.request.urlopen(user_req, timeout=10) as user_resp:
+        github_user = json.loads(user_resp.read())
+    login = str(github_user.get("login") or "").strip()
+    avatar_url = str(github_user.get("avatar_url") or "").strip()
+    if not login:
+        raise RuntimeError("GitHub did not return an account login")
+    return login, avatar_url
+
+
 def _frontend_redirect_url(github_status: str) -> str:
     frontend = os.environ.get("FRONTEND_URL", "/").strip() or "/"
     if frontend != "/":
@@ -614,6 +634,8 @@ def github_integration_status():
     return jsonify(
         {
             "configured": _github_configured(),
+            "oauth_configured": _github_configured(),
+            "token_connection_available": True,
             "connected": bool(request.user.github_access_token),
             "login": request.user.github_login,
             "avatar_url": request.user.github_avatar_url,
@@ -714,21 +736,7 @@ def github_integration_callback():
         if "repo" not in granted_scopes:
             raise RuntimeError("GitHub did not grant private repository access")
 
-        user_req = urllib.request.Request(
-            _GITHUB_USER_URL,
-            headers={
-                "Accept": "application/vnd.github+json",
-                "Authorization": f"Bearer {access_token}",
-                "User-Agent": "Stupidex/0.1",
-                "X-GitHub-Api-Version": "2022-11-28",
-            },
-        )
-        with urllib.request.urlopen(user_req, timeout=10) as user_resp:
-            github_user = json.loads(user_resp.read())
-        login = (github_user.get("login") or "").strip()
-        avatar_url = (github_user.get("avatar_url") or "").strip()
-        if not login:
-            raise RuntimeError("GitHub did not return an account login")
+        login, avatar_url = _github_identity(access_token)
         db.update_github_connection(request.user.id, access_token, login, avatar_url)
     except Exception:
         resp = redirect(_frontend_redirect_url("error"))
@@ -738,6 +746,27 @@ def github_integration_callback():
     resp = redirect(_frontend_redirect_url("connected"))
     resp.set_cookie(_GITHUB_STATE_COOKIE, "", max_age=0, path="/")
     return resp
+
+
+@app.route("/api/integrations/github/token", methods=["POST"])
+@login_required
+@rate_limited("auth")
+def github_integration_token():
+    data = request.get_json(force=True) or {}
+    access_token = str(data.get("token") or "").strip()
+    if not 20 <= len(access_token) <= 500 or any(char.isspace() for char in access_token):
+        return jsonify({"error": "invalid GitHub token"}), 400
+    try:
+        login, avatar_url = _github_identity(access_token)
+    except urllib.error.HTTPError as exc:
+        status = 401 if exc.code in (401, 403) else 502
+        return jsonify({"error": "GitHub rejected this token"}), status
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+        return jsonify({"error": "GitHub is temporarily unavailable"}), 502
+    except RuntimeError as exc:
+        return jsonify({"error": str(exc)}), 400
+    db.update_github_connection(request.user.id, access_token, login, avatar_url)
+    return jsonify({"ok": True, "login": login, "avatar_url": avatar_url})
 
 
 @app.route("/api/integrations/github", methods=["DELETE"])
@@ -1740,6 +1769,24 @@ def workspace_debug():
         "full_context_length": len(_workspace_context_for_llm(user_id)),
         "full_context_preview": _workspace_context_for_llm(user_id)[:2000],
     })
+
+
+@app.route("/api/workspace/context", methods=["GET"])
+@login_required
+@rate_limited("default")
+def workspace_context():
+    from .llm.handle_input import _workspace_context_for_llm
+
+    active = workspaces_module.get_active_workspace(request.user.id)
+    if not active:
+        return jsonify({"active": False, "workspace": None, "context": ""})
+    return jsonify(
+        {
+            "active": True,
+            "workspace": active.to_dict(),
+            "context": _workspace_context_for_llm(request.user.id),
+        }
+    )
 
 
 @app.route("/api/workspaces/<ws_id>/file", methods=["GET"])

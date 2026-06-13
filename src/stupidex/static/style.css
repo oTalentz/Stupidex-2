@@ -2253,6 +2253,53 @@ body,
 .integration-privacy-note {
     margin: -2px 2px 0;
 }
+.github-connect-options {
+    display: grid;
+    gap: 16px;
+}
+.github-connect-option {
+    display: grid;
+    gap: 10px;
+}
+.github-connect-option > strong {
+    color: var(--text-main);
+    font-size: 13px;
+}
+.github-connect-option > p {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.55;
+}
+.github-connect-option .primary-btn {
+    width: 100%;
+    justify-content: center;
+}
+.github-connect-divider {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-muted);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+.github-connect-divider::before,
+.github-connect-divider::after {
+    content: "";
+    height: 1px;
+    flex: 1;
+    background: var(--border);
+}
+.github-token-link {
+    width: fit-content;
+    color: var(--accent-light);
+    font-size: 12px;
+    text-decoration: none;
+}
+.github-token-link:hover {
+    text-decoration: underline;
+}
 .section-title {
     font-size: 11px;
     font-weight: 600;
