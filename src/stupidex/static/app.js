@@ -525,8 +525,8 @@ function renderSessions() {
       if (state.multiSelectMode) {
         li.addEventListener("click", (e) => {
           if (e.target.classList.contains("session-checkbox")) return;
-          const is-selected = li.classList.toggle("selected");
-          if (is-selected) {
+          const isSelected = li.classList.toggle("selected");
+          if (isSelected) {
             state.selectedSessions.add(s.id);
           } else {
             state.selectedSessions.delete(s.id);
