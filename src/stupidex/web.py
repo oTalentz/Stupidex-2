@@ -1717,6 +1717,31 @@ def workspaces_tree(ws_id):
     return jsonify({"tree": workspaces_module.file_tree(request.user.id, ws_id)})
 
 
+@app.route("/api/workspace/debug", methods=["GET"])
+@login_required
+def workspace_debug():
+    """Diagnostic endpoint to see what the agent receives as workspace context."""
+    from .llm.handle_input import (
+        _workspace_file_tree,
+        _workspace_files_list,
+        _workspace_summary,
+        _workspace_context_for_llm,
+    )
+
+    user_id = request.user.id
+    return jsonify({
+        "user_id": user_id,
+        "summary": _workspace_summary(user_id),
+        "tree": _workspace_file_tree(user_id),
+        "key_files": [
+            {"path": f["path"], "size": f["size"], "preview_length": len(f["preview"])}
+            for f in _workspace_files_list(user_id)
+        ],
+        "full_context_length": len(_workspace_context_for_llm(user_id)),
+        "full_context_preview": _workspace_context_for_llm(user_id)[:2000],
+    })
+
+
 @app.route("/api/workspaces/<ws_id>/file", methods=["GET"])
 @login_required
 @rate_limited("default")
