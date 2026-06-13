@@ -565,36 +565,44 @@ function updateMultiSelectToolbar() {
 async function deleteSelectedSessions() {
   if (state.selectedSessions.size === 0) return;
 
-  const sessions = Array.from(state.selectedSessions)
-    .map((id) => state.sessions.find((s) => s.id === id))
-    .filter(Boolean);
-
+  const count = state.selectedSessions.size;
   const isTrashMode = state.trashMode;
 
   showConfirm(
     isTrashMode ? "Excluir permanentemente?" : "Mover para lixeira?",
-    `Tem certeza que deseja ${isTrashMode ? "excluir" : "mover para lixeira"} ${sessions.length} conversa${sessions.length !== 1 ? "s" : ""}?`,
+    `Tem certeza que deseja ${isTrashMode ? "excluir" : "mover para lixeira"} ${count} conversa${count !== 1 ? "s" : ""}?`,
     async () => {
       const ids = Array.from(state.selectedSessions);
-      for (const id of ids) {
-        if (isTrashMode) {
-          await fetch(`/api/sessions/${id}`, { method: "DELETE" });
-        } else {
-          await fetch(`/api/sessions/${id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ trashed: true }),
-          });
-        }
-      }
+      const results = await Promise.allSettled(
+        ids.map(async (id) => {
+          const resp = isTrashMode
+            ? await fetch(`/api/sessions/${id}`, { method: "DELETE" })
+            : await fetch(`/api/sessions/${id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ trashed: true }),
+              });
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        })
+      );
+
+      const failed = results.filter((r) => r.status === "rejected").length;
+
       state.selectedSessions.clear();
+      els.multiSelectToggleBtn.classList.remove("active");
+      state.multiSelectMode = false;
+      els.sessionList.classList.remove("multi-select-mode");
+      els.multiSelectToolbar.classList.add("hidden");
       await loadSessions();
+
+      if (failed > 0) {
+        throw new Error(
+          `${failed} de ${count} conversa${count !== 1 ? "s" : ""} não ${count !== 1 ? "puderam" : "pôde"} ser ${isTrashMode ? "excluída" : "movida"}.`
+        );
+      }
     },
     {
-      detail:
-        sessions.length > 1
-          ? `Esta ação afeta ${sessions.length} conversas.`
-          : undefined,
+      detail: count > 1 ? `Esta ação afeta ${count} conversas.` : undefined,
       confirmLabel: isTrashMode ? "Excluir" : "Mover para lixeira",
       icon: "ph-trash",
     },
