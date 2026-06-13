@@ -1,0 +1,3 @@
+[console_scripts]
+stupidex = stupidex.main:main
+stupidex-web = stupidex.web:main

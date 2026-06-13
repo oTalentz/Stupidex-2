@@ -17,8 +17,9 @@ os.environ["STUPIDEX_API_KEY"] = "sk-test-fake-for-unit-tests"
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from stupidex import db
-from stupidex.llm import tools
+# noqa: E402 - imports after sys.path modification
+from stupidex import db  # noqa: E402
+from stupidex.llm import tools  # noqa: E402
 
 
 def _setup_user() -> tuple[str, str]:
@@ -49,7 +50,7 @@ def test_invalid_username():
     for bad in ["", "x" * 100, "has space", "drop;table", "<script>"]:
         try:
             db.create_user(bad, "validpass123")
-        except ValueError as e:
+        except ValueError:
             continue
         raise AssertionError(f"username {bad!r} should have been rejected")
 
@@ -305,7 +306,8 @@ def test_run_shell_blocks_cwd_outside_workspace(monkeypatch):
 
 
 def test_run_shell_allows_safe_commands():
-    import os, sys, subprocess
+    import os
+    import sys
     os.environ["STUPIDEX_ENABLE_SHELL"] = "1"
     executable = Path(sys.executable).name
     os.environ["STUPIDEX_SHELL_COMMANDS"] = executable
@@ -709,7 +711,9 @@ def test_session_must_be_trashed_before_permanent_delete():
         headers=headers,
     )
     assert response.status_code == 200
-    trashed = client.get("/api/sessions?trashed=1", headers=headers).get_json()
+    trashed_response = client.get("/api/sessions?trashed=1", headers=headers).get_json()
+    # API now returns {sessions: [...], pagination: {...}}
+    trashed = trashed_response.get("sessions", [])
     assert [item["id"] for item in trashed] == [session.id]
 
     response = client.delete(f"/api/sessions/{session.id}", headers=headers)
@@ -937,7 +941,6 @@ def cleanup():
 
 
 if __name__ == "__main__":
-    import inspect
     tests = [(n, f) for n, f in globals().items()
              if n.startswith("test_") and callable(f)]
     passed, failed = 0, 0

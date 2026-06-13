@@ -1,0 +1,12 @@
+Metadata-Version: 2.4
+Name: stupidex
+Version: 0.1.0
+Requires-Python: >=3.11
+Requires-Dist: flask>=3.0
+Requires-Dist: litellm>=1.40
+Requires-Dist: textual>=0.80
+Requires-Dist: python-dotenv>=1.0
+Requires-Dist: gunicorn>=21.0
+Requires-Dist: waitress>=3.0
+Requires-Dist: cryptography>=42.0
+Requires-Dist: duckduckgo-mcp-server==0.4.0
