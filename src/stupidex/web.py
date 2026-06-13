@@ -278,12 +278,23 @@ def _request_token() -> str:
 
 
 def _set_auth_cookie(resp: Response, token: str) -> Response:
+    # Determine if we should use secure cookies based on environment
+    # In production with proper HTTPS, this will be True
+    # For local development over HTTP, we need to allow non-secure cookies
+    is_production = (
+        os.environ.get("FLASK_ENV") == "production"
+        or os.environ.get("RAILWAY_ENV") == "production"
+    )
+    use_secure = is_production and (
+        request.is_secure or request.headers.get("X-Forwarded-Proto") == "https"
+    )
+
     resp.set_cookie(
         _AUTH_COOKIE,
         token,
         max_age=86400 * 30,
         httponly=True,
-        secure=request.is_secure or request.headers.get("X-Forwarded-Proto") == "https",
+        secure=use_secure,
         samesite="Lax",
         path="/",
     )
