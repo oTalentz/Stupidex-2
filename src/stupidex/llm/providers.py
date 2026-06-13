@@ -99,9 +99,9 @@ PROVIDERS: dict[str, ProviderConfig] = {
         default_model="mistralai/mistral-large-2512",
         needs_api_key=False,
         supports_vision=True,
-        supports_tools=True,
+        supports_tools=False,
         runtime="puter",
-        description="Mistral via Puter.com — API gratuita e ilimitada",
+        description="Mistral via Puter.com — contexto anexado, sem ferramentas locais",
     ),
     "puter-gpt-5.4-nano": ProviderConfig(
         id="puter-gpt-5.4-nano",
@@ -110,9 +110,9 @@ PROVIDERS: dict[str, ProviderConfig] = {
         default_model="gpt-5.4-nano",
         needs_api_key=False,
         supports_vision=True,
-        supports_tools=True,
+        supports_tools=False,
         runtime="puter",
-        description="GPT-5.4 Nano com visão via Puter.js no navegador",
+        description="GPT-5.4 Nano com visão e contexto anexado via Puter.js",
     ),
 }
 

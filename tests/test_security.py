@@ -602,6 +602,7 @@ def test_provider_capabilities_include_vision():
     assert providers["deepseek-chat"]["supports_vision"] is False
     assert providers["openai"]["supports_vision"] is True
     assert providers["puter-gpt-5.4-nano"]["supports_vision"] is True
+    assert providers["puter-gpt-5.4-nano"]["supports_tools"] is False
     assert providers["puter-gpt-5.4-nano"]["runtime"] == "puter"
     assert providers["puter-gpt-5.4-nano"]["model"] == "gpt-5.4-nano"
 
@@ -1023,6 +1024,31 @@ def test_github_status_offers_token_fallback_without_oauth(monkeypatch):
     assert response.status_code == 200
     assert payload["oauth_configured"] is False
     assert payload["token_connection_available"] is True
+
+
+def test_grounded_request_places_repository_next_to_current_request():
+    from stupidex.llm.handle_input import (
+        WORKSPACE_CONTEXT_END,
+        WORKSPACE_CONTEXT_START,
+        _ground_user_request,
+    )
+
+    prompt = _ground_user_request(
+        "analise o repositório anexado",
+        "=== PROJECT FILE TREE ===\napi/\n  lib/\n    auth.js",
+    )
+    assert WORKSPACE_CONTEXT_START in prompt
+    assert WORKSPACE_CONTEXT_END in prompt
+    assert "api/" in prompt
+    assert "analise o repositório anexado" in prompt
+    assert prompt.index(WORKSPACE_CONTEXT_END) < prompt.index("<current_user_request>")
+    assert "Do not ask the user to paste a tree" in prompt
+
+
+def test_grounded_request_keeps_plain_message_without_workspace():
+    from stupidex.llm.handle_input import _ground_user_request
+
+    assert _ground_user_request("olá", "") == "olá"
 
 
 def cleanup():
