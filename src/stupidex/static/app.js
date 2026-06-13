@@ -177,6 +177,7 @@ let state = {
   },
   workspaces: { workspaces: [], active_id: null },
   sessions: [],
+  pagination: { total: 0, page: 1, has_next: false },
   currentSessionId: null,
   busy: false,
   abortController: null,
@@ -377,7 +378,14 @@ function fmtTokens(n) {
 async function loadSessions() {
   const r = await fetch("/api/sessions?include_trashed=1");
   if (!r.ok) return;
-  state.sessions = await r.json();
+  const data = await r.json();
+  // Handle paginated response: {sessions: [...], pagination: {...}} or direct array
+  state.sessions = data.sessions || data;
+  state.pagination = data.pagination || {
+    total: state.sessions.length,
+    page: 1,
+    has_next: false,
+  };
   renderSessions();
   if (state.currentSessionId) {
     updateConversationHeader(
@@ -609,13 +617,15 @@ async function newSession() {
     return null;
   }
   const s = await r.json();
-  state.sessions.unshift(s);
-  state.currentSessionId = s.id;
+  // Handle paginated response: {sessions: [...], pagination: {...}} or direct object
+  const newSession = s.sessions ? s.sessions[0] : s;
+  state.sessions.unshift(newSession);
+  state.currentSessionId = newSession.id;
   renderSessions();
   renderWelcome();
-  updateConversationHeader(s);
+  updateConversationHeader(newSession);
   els.input.focus();
-  return s;
+  return newSession;
 }
 
 async function openSession(id) {
