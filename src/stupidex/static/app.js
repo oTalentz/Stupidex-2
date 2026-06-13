@@ -1861,15 +1861,27 @@ async function createEmptyWorkspace() {
 // ---------- File tree ----------
 
 async function loadTree(wsId) {
-  const r = await fetch(`/api/workspaces/${wsId}/tree`);
-  if (!r.ok) {
+  if (!wsId) {
     state.tree = [];
     renderTree();
     return;
   }
-  const data = await r.json();
-  state.tree = data.tree || [];
-  renderTree();
+  // Show loading state
+  els.treeContainer.innerHTML = '<div class="tree-loading">Carregando arquivos...</div>';
+  try {
+    const r = await fetch(`/api/workspaces/${wsId}/tree`);
+    if (!r.ok) {
+      state.tree = [];
+      renderTree();
+      return;
+    }
+    const data = await r.json();
+    state.tree = data.tree || [];
+    renderTree();
+  } catch (error) {
+    state.tree = [];
+    renderTree();
+  }
 }
 
 function renderTree() {
@@ -1885,18 +1897,15 @@ function buildTreeNode(node, depth) {
     const head = document.createElement("div");
     head.className = "tree-node";
     head.style.paddingLeft = `${depth * 4}px`;
-    head.innerHTML = `<span class="icon">▸</span><span>📁 ${escapeHtml(node.name)}</span>`;
+    head.innerHTML = `<span class="icon">▾</span><span>📁 ${escapeHtml(node.name)}</span>`;
     const children = document.createElement("div");
-    children.className = "tree-children collapsed";
+    children.className = "tree-children";
     for (const child of node.children || []) {
       children.appendChild(buildTreeNode(child, depth + 1));
     }
     head.addEventListener("click", () => {
-      head.querySelector(".icon").textContent = children.classList.toggle(
-        "collapsed",
-      )
-        ? "▸"
-        : "▾";
+      const isCollapsed = children.classList.toggle("collapsed");
+      head.querySelector(".icon").textContent = isCollapsed ? "▸" : "▾";
     });
     wrap.appendChild(head);
     wrap.appendChild(children);
