@@ -726,6 +726,9 @@ def build_context(
     cfg = load_config()
     provider = get_provider(provider_id or cfg.provider)
     model = (model_override or provider.default_model).strip()
+    # Final validation: reject invalid model names before sending to litellm
+    if not model or model.lower() == "model":
+        model = provider.default_model
     api_key = api_key_override or cfg.api_key
     return AgentContext(
         session_id="",

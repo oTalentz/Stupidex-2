@@ -838,6 +838,9 @@ def get_config():
         provider = DEFAULT_FALLBACK_ID
     custom_model = request.user.custom_model or ""
     model = custom_model or request.user.model or PROVIDERS[provider].default_model
+    # Validate model: if it's a generic/invalid string, use provider default
+    if not model or model.strip() == "" or model.lower() == "model":
+        model = PROVIDERS[provider].default_model
     return jsonify(
         {
             "provider": provider,
@@ -861,6 +864,9 @@ def set_config():
     if provider not in PROVIDERS:
         provider = DEFAULT_FALLBACK_ID
     model = custom_model or PROVIDERS[provider].default_model
+    # Reject invalid model names
+    if not model or model.lower() == "model":
+        model = PROVIDERS[provider].default_model
     if len(custom_model) > 200:
         return jsonify({"error": "model name too long"}), 400
     db.update_user_config(
@@ -940,6 +946,9 @@ def sessions_create():
         or request.user.model
         or PROVIDERS[provider].default_model
     ).strip()[:200]
+    # Validate model: reject invalid names
+    if not model or model.lower() == "model":
+        model = PROVIDERS[provider].default_model
     # Per-user cap: 200 sessions
     existing = db.list_sessions(
         request.user.id, include_archived=True, include_trashed=True
