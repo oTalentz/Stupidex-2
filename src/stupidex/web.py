@@ -570,7 +570,17 @@ def auth_google_callback():
             or not parsed_frontend.netloc
         ):
             frontend = "/"
-    resp = redirect(frontend)
+    else:
+        # Default frontend URL based on the request host or common ports
+        frontend = "http://localhost:5000"
+    # Add google=connected to the redirect URL
+    parsed = urllib.parse.urlparse(frontend)
+    query = dict(urllib.parse.parse_qsl(parsed.query, keep_blank_values=True))
+    query["google"] = "connected"
+    redirect_url = urllib.parse.urlunparse(
+        parsed._replace(query=urllib.parse.urlencode(query))
+    )
+    resp = redirect(redirect_url)
     _set_auth_cookie(resp, token)
     resp.set_cookie(_OAUTH_STATE_COOKIE, "", max_age=0, path="/")
     return resp

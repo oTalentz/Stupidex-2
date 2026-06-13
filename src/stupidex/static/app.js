@@ -3027,6 +3027,8 @@ async function handleLoginResponse(r) {
   const data = await r.json().catch(() => ({}));
   if (r.ok) {
     if (data.token) setToken(data.token);
+    // Clear any cached auth state before booting
+    localStorage.setItem("stupidex-login-timestamp", Date.now().toString());
     await bootApp();
     showApp();
     return;
@@ -3199,22 +3201,43 @@ async function bootApp() {
 
 function showGithubCallbackResult() {
   const params = new URLSearchParams(window.location.search);
-  const result = params.get("github");
-  if (!result) return;
-  const messages = {
-    connected: "GitHub conectado. Repositórios privados estão disponíveis.",
-    denied: "A conexão com o GitHub foi cancelada.",
-    error: "Não foi possível conectar o GitHub. Tente novamente.",
-  };
-  els.status.textContent = messages[result] || "";
-  els.status.classList.toggle("hidden", !messages[result]);
-  params.delete("github");
-  const query = params.toString();
-  const cleanUrl = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`;
-  window.history.replaceState({}, "", cleanUrl);
+  const githubResult = params.get("github");
+  if (githubResult) {
+    const messages = {
+      connected: "GitHub conectado. Repositórios privados estão disponíveis.",
+      denied: "A conexão com o GitHub foi cancelada.",
+      error: "Não foi possível conectar o GitHub. Tente novamente.",
+    };
+    els.status.textContent = messages[githubResult] || "";
+    els.status.classList.toggle("hidden", !messages[githubResult]);
+    params.delete("github");
+    const query = params.toString();
+    const cleanUrl = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`;
+    window.history.replaceState({}, "", cleanUrl);
+  }
+}
+
+function showGoogleAuthResult() {
+  const params = new URLSearchParams(window.location.search);
+  const googleResult = params.get("google");
+  if (googleResult) {
+    const messages = {
+      connected: "Google conectado com sucesso!",
+      denied: "A conexão com o Google foi cancelada.",
+      error: "Não foi possível conectar com o Google. Tente novamente.",
+    };
+    els.status.textContent = messages[googleResult] || "";
+    els.status.classList.remove("hidden");
+    params.delete("google");
+    const query = params.toString();
+    const cleanUrl = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`;
+    window.history.replaceState({}, "", cleanUrl);
+  }
 }
 
 (async function init() {
+  showGoogleAuthResult();
+  showGithubCallbackResult();
   if (await checkAuth()) {
     showApp();
     const timeout = setTimeout(() => {
