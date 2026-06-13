@@ -36,6 +36,7 @@ Endpoints:
   POST /api/workspaces/<id>/upload-zip    → upload + extract zip
   POST /api/workspaces/<id>/clone         → git clone
   POST /api/workspaces/<id>/pull          → git pull
+  DELETE /api/workspaces/<id>/repository  → disconnect repository
   GET  /api/workspaces/<id>/tree         → file tree
   GET  /api/workspaces/<id>/file?path=   → file content
 """
@@ -1563,6 +1564,16 @@ def workspaces_pull(ws_id):
         request.user.id, ws_id, request.user.github_access_token
     )
     return jsonify({"ok": ok, "output": output}), 200 if ok else 400
+
+
+@app.route("/api/workspaces/<ws_id>/repository", methods=["DELETE"])
+@login_required
+@rate_limited("default")
+def workspaces_disconnect_repository(ws_id):
+    if not workspaces_module.disconnect_repository(request.user.id, ws_id):
+        return jsonify({"error": "git repository workspace not found"}), 404
+    active = workspaces_module.get_active_workspace(request.user.id)
+    return jsonify({"ok": True, "active_id": active.id if active else None})
 
 
 @app.route("/api/workspaces/<ws_id>/shell", methods=["POST"])

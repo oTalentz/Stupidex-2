@@ -43,6 +43,11 @@ const els = {
   gitPullBtn: $("ws-git-pull"),
   uploadBtn: $("upload-btn"),
   cloneBtn: $("clone-btn"),
+  repoConnected: $("repo-connected"),
+  repoConnectedName: $("repo-connected-name"),
+  repoConnectedUrl: $("repo-connected-url"),
+  repoConnectedBranch: $("repo-connected-branch"),
+  disconnectRepoBtn: $("disconnect-repo-btn"),
   newWsBtn: $("new-ws-btn"),
   fileInput: $("file-input"),
   wsFilesCount: $("ws-files-count"),
@@ -1422,6 +1427,16 @@ function updateWorkspaceIndicators() {
   if (els.researchActiveCount) {
     els.researchActiveCount.textContent = String(fileCount);
   }
+  els.cloneBtn?.classList.toggle("hidden", hasRepository);
+  els.repoConnected?.classList.toggle("hidden", !hasRepository);
+  if (hasRepository) {
+    els.repoConnectedName.textContent = active.name;
+    els.repoConnectedUrl.textContent = active.git_url || "Repositório Git";
+    els.repoConnectedUrl.title = active.git_url || "";
+    els.repoConnectedBranch.textContent = active.git_branch
+      ? `Branch: ${active.git_branch}`
+      : "Branch padrão";
+  }
   els.gitPullBtn?.classList.toggle("hidden", !hasRepository);
 }
 
@@ -1833,6 +1848,36 @@ async function openCloneModal() {
 }
 
 els.cloneBtn.addEventListener("click", openCloneModal);
+els.disconnectRepoBtn?.addEventListener("click", () => {
+  const active = (state.workspaces?.workspaces || []).find(
+    (workspace) => workspace.id === state.workspaces.active_id,
+  );
+  if (!active || active.source !== "git") return;
+  showConfirm(
+    "Desconectar repositório?",
+    `O repositório “${active.name}” será desconectado deste workspace.`,
+    async () => {
+      const response = await fetch(
+        `/api/workspaces/${active.id}/repository`,
+        { method: "DELETE" },
+      );
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(
+          data.error || "Não foi possível desconectar o repositório.",
+        );
+      }
+      await loadWorkspaces();
+      renderWelcome();
+    },
+    {
+      detail:
+        "Os arquivos locais deste repositório serão removidos. As conversas serão mantidas.",
+      confirmLabel: "Desconectar",
+      icon: "ph-plugs-connected",
+    },
+  );
+});
 els.cloneGithubAction.addEventListener("click", handleGithubAction);
 els.settingsGithubAction.addEventListener("click", handleGithubAction);
 els.closeClone.addEventListener("click", () =>

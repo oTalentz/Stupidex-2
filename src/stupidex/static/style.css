@@ -574,6 +574,67 @@ body,
     background: rgba(255, 255, 255, 0.03);
 }
 
+.repo-connected {
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr) 30px;
+    align-items: center;
+    gap: 9px;
+    padding: 10px;
+    border: 1px solid rgba(112, 103, 255, 0.32);
+    border-radius: 10px;
+    background: rgba(91, 76, 220, 0.1);
+}
+
+.repo-connected-icon,
+.repo-disconnect-btn {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+}
+
+.repo-connected-icon {
+    color: #a9a2ff;
+    background: rgba(112, 103, 255, 0.16);
+}
+
+.repo-connected-copy {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.repo-connected-copy strong,
+.repo-connected-copy span,
+.repo-connected-copy small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.repo-connected-copy strong {
+    color: var(--text-main);
+    font-size: 12px;
+}
+
+.repo-connected-copy span,
+.repo-connected-copy small {
+    color: var(--text-muted);
+    font-size: 9.5px;
+}
+
+.repo-disconnect-btn {
+    color: var(--text-muted);
+    background: transparent;
+}
+
+.repo-disconnect-btn:hover {
+    color: #fca5a5;
+    background: rgba(248, 113, 113, 0.1);
+}
+
 .workspace-section {
     display: flex;
     flex-direction: column;

@@ -258,6 +258,24 @@
                             <i class="ph ph-git-branch"></i>
                             Conectar repositorio
                         </button>
+                        <div id="repo-connected" class="repo-connected hidden">
+                            <div class="repo-connected-icon">
+                                <i class="ph ph-git-branch"></i>
+                            </div>
+                            <div class="repo-connected-copy">
+                                <strong id="repo-connected-name"></strong>
+                                <span id="repo-connected-url"></span>
+                                <small id="repo-connected-branch"></small>
+                            </div>
+                            <button
+                                id="disconnect-repo-btn"
+                                class="repo-disconnect-btn"
+                                title="Desconectar repositório"
+                                aria-label="Desconectar repositório"
+                            >
+                                <i class="ph ph-plugs-connected"></i>
+                            </button>
+                        </div>
                         <button id="upload-btn" class="ws-action outline">
                             <i class="ph ph-upload-simple"></i>
                             Upload local

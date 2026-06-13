@@ -434,6 +434,9 @@ def test_unavailable_workspace_controls_are_not_rendered():
     assert 'id="ws-git-pull"\n                            class="icon-btn hidden"' in html
     assert 'els.gitPullBtn?.classList.toggle("hidden", !hasRepository)' in js
     assert "#rail-workspace" in css
+    assert 'id="repo-connected"' in html
+    assert 'id="disconnect-repo-btn"' in html
+    assert "disconnectRepoBtn" in js
 
 
 def test_token_validation_rejects_expired():
@@ -804,6 +807,71 @@ def test_init_from_git_uses_real_clone_and_preserves_credentials(monkeypatch):
     assert (workspace_path / "README.md").read_text(encoding="utf-8") == "cloned"
     assert "private-token" not in " ".join(captured["command"])
     assert captured["env"]["GIT_CONFIG_VALUE_0"].startswith("Authorization: Basic ")
+
+
+def test_repository_clone_becomes_active_and_persists(monkeypatch):
+    from stupidex import workspaces
+
+    user_id = "persistent_repo_user"
+    previous = workspaces.create_empty(user_id, "previous")
+    repository = workspaces.create_empty(user_id, "connected-repo")
+    assert workspaces.set_active_workspace(user_id, previous.id)
+
+    def fake_clone(user_id, ws_id, url, branch, github_token=""):
+        ws = workspaces.get_workspace(user_id, ws_id)
+        ws.source = "git"
+        ws.git_url = url
+        ws.git_branch = branch
+        workspaces._write_meta(user_id, ws)
+        return ws, "cloned"
+
+    monkeypatch.setattr(workspaces.shutil, "which", lambda _: "git")
+    monkeypatch.setattr(workspaces, "_clone_repository", fake_clone)
+
+    cloned, _ = workspaces.init_from_git(
+        user_id,
+        repository.id,
+        "https://github.com/example/repo.git",
+        "main",
+    )
+
+    assert cloned.id == repository.id
+    assert workspaces.get_active_workspace(user_id).id == repository.id
+    active_file = workspaces._user_dir(user_id) / ".active_workspace"
+    assert active_file.read_text(encoding="utf-8") == repository.id
+
+
+def test_stale_active_workspace_reference_is_repaired():
+    from stupidex import workspaces
+
+    user_id = "repair_active_repo_user"
+    repository = workspaces.create_empty(user_id, "repo")
+    repository.source = "git"
+    repository.git_url = "https://github.com/example/repo.git"
+    workspaces._write_meta(user_id, repository)
+    active_file = workspaces._user_dir(user_id) / ".active_workspace"
+    active_file.write_text("000000000000", encoding="utf-8")
+
+    active = workspaces.get_active_workspace(user_id)
+
+    assert active.id == repository.id
+    assert active_file.read_text(encoding="utf-8") == repository.id
+
+
+def test_repository_is_removed_only_by_explicit_disconnect():
+    from stupidex import workspaces
+
+    user_id = "disconnect_repo_user"
+    repository = workspaces.create_empty(user_id, "repo")
+    repository.source = "git"
+    repository.git_url = "https://github.com/example/repo.git"
+    workspaces._write_meta(user_id, repository)
+    assert workspaces.set_active_workspace(user_id, repository.id)
+
+    assert workspaces.get_active_workspace(user_id).id == repository.id
+    assert workspaces.disconnect_repository(user_id, repository.id)
+    assert workspaces.get_workspace(user_id, repository.id) is None
+    assert workspaces.get_active_workspace(user_id) is None
 
 
 def cleanup():

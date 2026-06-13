@@ -213,11 +213,18 @@ def get_active_workspace(user_id: str) -> Workspace | None:
         try:
             active_id = cfg_path.read_text(encoding="utf-8").strip()
             if active_id:
-                return get_workspace(user_id, active_id)
+                active = get_workspace(user_id, active_id)
+                if active:
+                    return active
         except Exception:
             pass
+        cfg_path.unlink(missing_ok=True)
     ws_list = list_workspaces(user_id)
-    return ws_list[0] if ws_list else None
+    if not ws_list:
+        return None
+    fallback = ws_list[0]
+    set_active_workspace(user_id, fallback.id)
+    return fallback
 
 
 def set_active_workspace(user_id: str, ws_id: str) -> bool:
@@ -225,8 +232,15 @@ def set_active_workspace(user_id: str, ws_id: str) -> bool:
         return False
     if not (_user_dir(user_id) / ws_id).exists():
         return False
-    _user_dir(user_id).mkdir(parents=True, exist_ok=True)
-    (_user_dir(user_id) / ".active_workspace").write_text(ws_id, encoding="utf-8")
+    user_dir = _user_dir(user_id)
+    user_dir.mkdir(parents=True, exist_ok=True)
+    active_file = user_dir / ".active_workspace"
+    pending_file = user_dir / f".active_workspace.{uuid.uuid4().hex}.tmp"
+    try:
+        pending_file.write_text(ws_id, encoding="utf-8")
+        pending_file.replace(active_file)
+    finally:
+        pending_file.unlink(missing_ok=True)
     return True
 
 
@@ -291,11 +305,22 @@ def init_from_git(
     effective_token = github_token or os.environ.get("GITHUB_PAT", "")
 
     if shutil.which("git"):
-        return _clone_repository(user_id, ws_id, url, branch, effective_token)
+        ws_obj, msg = _clone_repository(user_id, ws_id, url, branch, effective_token)
+    else:
+        ws_obj, msg = _download_archive(user_id, ws_id, url, branch, effective_token)
+        _ensure_git_repo(ws_path, url, branch)
+        msg = f"{msg}; git CLI unavailable, repository history was not connected"
 
-    ws_obj, msg = _download_archive(user_id, ws_id, url, branch, effective_token)
-    _ensure_git_repo(ws_path, url, branch)
-    return ws_obj, f"{msg}; git CLI unavailable, repository history was not connected"
+    if not set_active_workspace(user_id, ws_obj.id):
+        raise RuntimeError("repository cloned but could not be activated")
+    return ws_obj, msg
+
+
+def disconnect_repository(user_id: str, ws_id: str) -> bool:
+    ws = get_workspace(user_id, ws_id)
+    if not ws or ws.source != "git":
+        return False
+    return delete_workspace(user_id, ws_id)
 
 
 def _git_environment(home: Path, github_token: str = "") -> dict[str, str]:
