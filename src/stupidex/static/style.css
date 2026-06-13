@@ -2227,6 +2227,14 @@ body,
     min-width: 92px;
     justify-content: center;
 }
+.github-integration-card.is-unavailable .github-integration-action {
+    opacity: 0.72;
+    cursor: pointer;
+}
+.github-integration-card.is-unavailable .github-integration-action:hover {
+    opacity: 1;
+    background: var(--bg-input);
+}
 .github-integration-compact {
     margin-bottom: 2px;
 }
@@ -2934,10 +2942,11 @@ body,
 
 @media (min-width: 1181px) {
     .app-shell {
-        grid-template-columns:
-            var(--nav-width) var(--workspace-width) minmax(0, 1fr) 0;
-        transition: grid-template-columns 0.26s
-            cubic-bezier(0.25, 0.8, 0.25, 1);
+        grid-template-columns: var(--nav-width) var(--workspace-width) minmax(
+                0,
+                1fr
+            ) 0;
+        transition: grid-template-columns 0.26s cubic-bezier(0.25, 0.8, 0.25, 1);
     }
 
     .app-shell.research-open {
@@ -3693,8 +3702,10 @@ body {
 
 @media (min-width: 1181px) {
     .app-shell {
-        grid-template-columns:
-            var(--nav-width) var(--workspace-width) minmax(0, 1fr) 0;
+        grid-template-columns: var(--nav-width) var(--workspace-width) minmax(
+                0,
+                1fr
+            ) 0;
     }
 
     .app-shell.research-open {

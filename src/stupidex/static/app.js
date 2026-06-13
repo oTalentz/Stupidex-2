@@ -1139,7 +1139,9 @@ async function runPuterChat({
     }
     const response = await fetch(`/api/sessions/${sid}/messages`);
     if (!response.ok) {
-      throw new Error(`Falha ao carregar o histórico (HTTP ${response.status})`);
+      throw new Error(
+        `Falha ao carregar o histórico (HTTP ${response.status})`,
+      );
     }
     const history = puterConversation(await response.json(), regenerate);
     if (!regenerate) {
@@ -1209,7 +1211,8 @@ async function runPuterChat({
     }
   } catch (error) {
     if (error.name === "AbortError") {
-      bubble.innerHTML = '<em style="color:var(--text-muted)">[interrompido]</em>';
+      bubble.innerHTML =
+        '<em style="color:var(--text-muted)">[interrompido]</em>';
     } else {
       bubble.innerHTML = `<em style="color:var(--danger)">Erro: ${escapeHtml(error.message)}</em>`;
     }
@@ -1952,7 +1955,8 @@ function renderGithubIntegrationCard(card, title, description, action) {
     : configured
       ? "Conectar"
       : "Indisponível";
-  action.disabled = !configured;
+  // Botão sempre clicável - handleGithubAction() trata o caso de não configurado
+  action.disabled = false;
 
   const icon = card.querySelector(".github-integration-icon");
   const avatar = connected ? safeGithubAvatar(state.github.avatar_url) : "";
@@ -1984,10 +1988,7 @@ function renderGithubIntegration() {
   );
   if (els.researchGithubState) {
     els.researchGithubState.textContent = state.github.connected ? "ON" : "OFF";
-    els.researchGithubState.classList.toggle(
-      "is-on",
-      state.github.connected,
-    );
+    els.researchGithubState.classList.toggle("is-on", state.github.connected);
   }
 }
 
@@ -2008,8 +2009,19 @@ async function loadGithubIntegration() {
 }
 
 function handleGithubAction() {
-  if (!state.github.configured) return;
+  if (!state.github.configured) {
+    alert(
+      "Integração GitHub indisponível.\n\n" +
+        "O administrador do servidor precisa configurar:\n" +
+        "- GITHUB_CLIENT_ID\n" +
+        "- GITHUB_CLIENT_SECRET\n" +
+        "- GITHUB_REDIRECT_URI\n\n" +
+        "Consulte o README.md para instruções.",
+    );
+    return;
+  }
   if (!state.github.connected) {
+    // Inicia o processo de conexão GitHub OAuth
     window.location.assign("/api/integrations/github/connect");
     return;
   }
@@ -2054,10 +2066,9 @@ els.disconnectRepoBtn?.addEventListener("click", () => {
     "Desconectar repositório?",
     `O repositório “${active.name}” será desconectado deste workspace.`,
     async () => {
-      const response = await fetch(
-        `/api/workspaces/${active.id}/repository`,
-        { method: "DELETE" },
-      );
+      const response = await fetch(`/api/workspaces/${active.id}/repository`, {
+        method: "DELETE",
+      });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(
@@ -2239,9 +2250,13 @@ function renderModelMenu() {
   }
 }
 
-function renderModelLoadError(message = "Não foi possível carregar os modelos") {
-  if (els.modelSelectLabel) els.modelSelectLabel.textContent = "Modelos indisponíveis";
-  if (els.modelSelectDetail) els.modelSelectDetail.textContent = "Clique para tentar novamente";
+function renderModelLoadError(
+  message = "Não foi possível carregar os modelos",
+) {
+  if (els.modelSelectLabel)
+    els.modelSelectLabel.textContent = "Modelos indisponíveis";
+  if (els.modelSelectDetail)
+    els.modelSelectDetail.textContent = "Clique para tentar novamente";
   if (!els.modelSelectMenu) return;
   els.modelSelectMenu.replaceChildren();
   const retry = document.createElement("button");
@@ -2257,7 +2272,8 @@ function renderModelLoadError(message = "Não foi possível carregar os modelos"
 }
 
 async function loadConfig() {
-  if (els.modelSelectLabel) els.modelSelectLabel.textContent = "Carregando modelos...";
+  if (els.modelSelectLabel)
+    els.modelSelectLabel.textContent = "Carregando modelos...";
   if (els.modelSelectDetail) els.modelSelectDetail.textContent = "Aguarde";
   try {
     const [provR, cfgR] = await Promise.all([
