@@ -2942,10 +2942,9 @@ body,
 
 @media (min-width: 1181px) {
     .app-shell {
-        grid-template-columns: var(--nav-width) var(--workspace-width) minmax(
-                0,
-                1fr
-            ) 0;
+        grid-template-columns:
+            var(--nav-width) var(--workspace-width) minmax(0, 1fr)
+            0;
         transition: grid-template-columns 0.26s cubic-bezier(0.25, 0.8, 0.25, 1);
     }
 
@@ -3702,10 +3701,9 @@ body {
 
 @media (min-width: 1181px) {
     .app-shell {
-        grid-template-columns: var(--nav-width) var(--workspace-width) minmax(
-                0,
-                1fr
-            ) 0;
+        grid-template-columns:
+            var(--nav-width) var(--workspace-width) minmax(0, 1fr)
+            0;
     }
 
     .app-shell.research-open {
@@ -3792,4 +3790,76 @@ body {
         right: 10px;
         padding-inline: 7px;
     }
+}
+
+/* Multi-select styles */
+.multi-select-toolbar {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 14px;
+    background: rgba(20, 20, 25, 0.95);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(10px);
+    z-index: 100;
+}
+
+.multi-select-toolbar.hidden {
+    display: none;
+}
+
+.multi-select-info {
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.multi-select-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.multi-select-toolbar .icon-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+}
+
+.session-list.multi-select-mode .session-item {
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.session-list.multi-select-mode .session-item:hover {
+    background: rgba(112, 103, 255, 0.08);
+}
+
+.session-list.multi-select-mode .session-item.selected {
+    background: rgba(112, 103, 255, 0.15);
+    border: 1px solid rgba(112, 103, 255, 0.3);
+}
+
+.session-checkbox {
+    width: 18px;
+    height: 18px;
+    margin-right: 10px;
+    cursor: pointer;
+    accent-color: var(--accent);
+}
+
+.session-item.pinned::before {
+    content: "";
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
 }

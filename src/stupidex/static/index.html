@@ -359,6 +359,14 @@
                                 id="trash-count"
                                 class="ws-mini-badge hidden"
                             ></span>
+                            <button
+                                id="multi-select-toggle-btn"
+                                class="icon-btn multi-select-toggle"
+                                title="Selecionar conversas"
+                                aria-label="Selecionar conversas"
+                            >
+                                <i class="ph ph-mouse-pointer"></i>
+                            </button>
                         </div>
                         <nav
                             id="session-list"
@@ -368,6 +376,29 @@
                     </div>
                 </div>
             </aside>
+
+            <!-- Multi-select toolbar (hidden by default) -->
+            <div id="multi-select-toolbar" class="multi-select-toolbar hidden">
+                <div class="multi-select-info">
+                    <span id="multi-select-count">0 selecionados</span>
+                </div>
+                <div class="multi-select-actions">
+                    <button
+                        id="multi-select-delete-btn"
+                        class="icon-btn danger"
+                        title="Excluir selecionados"
+                    >
+                        <i class="ph ph-trash"></i>
+                    </button>
+                    <button
+                        id="multi-select-cancel-btn"
+                        class="icon-btn"
+                        title="Cancelar"
+                    >
+                        <i class="ph ph-x"></i>
+                    </button>
+                </div>
+            </div>
 
             <!-- Pane 3: Central Chat Area -->
             <main id="main" class="main-area">
@@ -488,9 +519,7 @@
                                     >
                                         <i class="ph ph-globe"></i>
                                     </button>
-                                    <div
-                                        class="composer-attach-divider"
-                                    ></div>
+                                    <div class="composer-attach-divider"></div>
                                     <button
                                         type="button"
                                         id="composer-view-project"

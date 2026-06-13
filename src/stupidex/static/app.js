@@ -166,6 +166,13 @@ const els = {
   confirmMessage: $("confirm-message"),
   confirmDetail: $("confirm-detail"),
   confirmIcon: $("confirm-icon"),
+
+  // Multi-select toolbar
+  multiSelectToolbar: $("multi-select-toolbar"),
+  multiSelectCount: $("multi-select-count"),
+  multiSelectDeleteBtn: $("multi-select-delete-btn"),
+  multiSelectCancelBtn: $("multi-select-cancel-btn"),
+  multiSelectToggleBtn: $("multi-select-toggle-btn"),
 };
 
 let state = {
@@ -186,6 +193,8 @@ let state = {
   pendingImages: [],
   confirmCallback: null,
   trashMode: false,
+  multiSelectMode: false,
+  selectedSessions: new Set(),
   webSearchEnabled: false,
   github: {
     configured: false,
@@ -428,12 +437,35 @@ function renderSessions() {
     if (s.pinned) li.classList.add("pinned");
     if (s.trashed) li.classList.add("trashed");
 
+    // Add selected class for multi-select mode
+    if (state.multiSelectMode && state.selectedSessions.has(s.id)) {
+      li.classList.add("selected");
+    }
+
     if (s.pinned && !s.trashed) {
       const pin = document.createElement("span");
       pin.className = "pin-icon";
       pin.innerHTML = '<i class="ph-fill ph-push-pin"></i>';
       pin.title = "Fixada";
       li.appendChild(pin);
+    }
+
+    // Add checkbox for multi-select mode
+    if (state.multiSelectMode) {
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.className = "session-checkbox";
+      checkbox.checked = state.selectedSessions.has(s.id);
+      checkbox.addEventListener("change", (e) => {
+        e.stopPropagation();
+        if (checkbox.checked) {
+          state.selectedSessions.add(s.id);
+        } else {
+          state.selectedSessions.delete(s.id);
+        }
+        updateMultiSelectToolbar();
+      });
+      li.appendChild(checkbox);
     }
 
     const title = document.createElement("div");
@@ -489,10 +521,83 @@ function renderSessions() {
         showSessionMenu(s, more);
       });
       li.appendChild(more);
-      li.addEventListener("click", () => openSession(s.id));
+      // Handle click based on mode
+      if (state.multiSelectMode) {
+        li.addEventListener("click", (e) => {
+          if (e.target.classList.contains("session-checkbox")) return;
+          const is-selected = li.classList.toggle("selected");
+          if (is-selected) {
+            state.selectedSessions.add(s.id);
+          } else {
+            state.selectedSessions.delete(s.id);
+          }
+          updateMultiSelectToolbar();
+        });
+      } else {
+        li.addEventListener("click", () => openSession(s.id));
+      }
     }
     els.sessionList.appendChild(li);
   }
+}
+
+// ============================================================
+// MULTI-SELECT
+// ============================================================
+
+function toggleMultiSelectMode() {
+  state.multiSelectMode = !state.multiSelectMode;
+  state.selectedSessions.clear();
+  els.sessionList.classList.toggle("multi-select-mode", state.multiSelectMode);
+  if (!state.multiSelectMode) {
+    els.multiSelectToolbar.classList.add("hidden");
+  }
+  renderSessions();
+}
+
+function updateMultiSelectToolbar() {
+  const count = state.selectedSessions.size;
+  els.multiSelectCount.textContent = `${count} selecionado${count !== 1 ? "s" : ""}`;
+  els.multiSelectToolbar.classList.toggle("hidden", count === 0);
+}
+
+async function deleteSelectedSessions() {
+  if (state.selectedSessions.size === 0) return;
+
+  const sessions = Array.from(state.selectedSessions)
+    .map((id) => state.sessions.find((s) => s.id === id))
+    .filter(Boolean);
+
+  const isTrashMode = state.trashMode;
+
+  showConfirm(
+    isTrashMode ? "Excluir permanentemente?" : "Mover para lixeira?",
+    `Tem certeza que deseja ${isTrashMode ? "excluir" : "mover para lixeira"} ${sessions.length} conversa${sessions.length !== 1 ? "s" : ""}?`,
+    async () => {
+      const ids = Array.from(state.selectedSessions);
+      for (const id of ids) {
+        if (isTrashMode) {
+          await fetch(`/api/sessions/${id}`, { method: "DELETE" });
+        } else {
+          await fetch(`/api/sessions/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ trashed: true }),
+          });
+        }
+      }
+      state.selectedSessions.clear();
+      await loadSessions();
+    },
+    {
+      detail:
+        sessions.length > 1
+          ? `Esta ação afeta ${sessions.length} conversas.`
+          : undefined,
+      confirmLabel: isTrashMode ? "Excluir" : "Mover para lixeira",
+      icon: "ph-trash",
+    },
+  );
 }
 
 function showSessionMenu(session, anchorEl) {
@@ -2352,6 +2457,9 @@ function updateBadges() {
 // ============================================================
 
 els.newChatBtn.addEventListener("click", newSession);
+els.multiSelectToggleBtn.addEventListener("click", toggleMultiSelectMode);
+els.multiSelectDeleteBtn.addEventListener("click", deleteSelectedSessions);
+els.multiSelectCancelBtn.addEventListener("click", toggleMultiSelectMode);
 els.railWorkspace.addEventListener("click", () => {
   els.workspacePanel.classList.toggle("mobile-open");
 });
