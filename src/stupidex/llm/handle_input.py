@@ -22,7 +22,13 @@ from .. import workspaces as workspaces_module
 from . import _bootstrap  # noqa: F401 — must come first
 from .message import ChatMessage, MessageRole, MessageType, ToolCall, Usage
 from .providers import get_provider
-from .tools import TOOL_DEFINITIONS, TOOL_FUNCTIONS, WEB_TOOL_DEFINITIONS
+from .tools import (
+    TOOL_DEFINITIONS,
+    TOOL_FUNCTIONS,
+    WEB_TOOL_DEFINITIONS,
+    git as git_tool,
+    run_shell as run_shell_tool,
+)
 
 # Silence the litellm "Provider List" log spam
 litellm.suppress_debug_info = True
@@ -85,6 +91,7 @@ class AgentContext:
     cancel_event: threading.Event | None = None
     user_msg_id: int | None = None
     user_id: str = ""  # per-user isolation
+    github_token: str = ""
     web_search_enabled: bool = False
 
 
@@ -195,6 +202,34 @@ def _resolve_cwd(args: dict, user_id: str = "") -> None:
     active = _active_workspace_path(user_id)
     if active:
         args["cwd"] = active
+
+
+def _execute_tool(name: str, args: dict, ctx: AgentContext) -> str:
+    """Execute a tool with request-only credentials kept out of LLM arguments."""
+    workspace_root = _active_workspace_path(ctx.user_id)
+    if name == "run_shell":
+        if not workspace_root:
+            return "ERROR: no active workspace for shell execution"
+        return run_shell_tool(
+            args["command"],
+            args.get("cwd"),
+            args.get("timeout", 60),
+            workspace_root=workspace_root,
+            github_token=ctx.github_token,
+        )
+    if name == "git":
+        if not workspace_root:
+            return "ERROR: no active workspace for git execution"
+        return git_tool(
+            args["args"],
+            args.get("cwd"),
+            github_token=ctx.github_token,
+            workspace_root=workspace_root,
+        )
+    fn = TOOL_FUNCTIONS.get(name)
+    if fn is None:
+        return f"ERROR: unknown tool '{name}'"
+    return fn(args)
 
 
 def _litellm_kwargs(ctx: AgentContext) -> dict:
@@ -441,17 +476,12 @@ def stream_response(
                 "error": False,
             }
 
-            fn = TOOL_FUNCTIONS.get(call.name)
-            if fn is None:
-                result = f"ERROR: unknown tool '{call.name}'"
+            try:
+                result = _execute_tool(call.name, args, ctx)
+                is_error = result.startswith(("ERROR:", "SECURITY:"))
+            except Exception as exc:
+                result = f"ERROR: tool '{call.name}' raised: {exc}"
                 is_error = True
-            else:
-                try:
-                    result = fn(args)
-                    is_error = result.startswith("ERROR:")
-                except Exception as exc:
-                    result = f"ERROR: tool '{call.name}' raised: {exc}"
-                    is_error = True
 
             call.result = result
             call.error = is_error
@@ -505,6 +535,7 @@ def build_context(
     api_key_override: str | None,
     user_id: str = "",
     model_override: str = "",
+    github_token: str = "",
 ) -> AgentContext:
     """Build an AgentContext for a request from a session or default config."""
     from ..config import load_config
@@ -520,4 +551,5 @@ def build_context(
         model=model,
         base_url=provider.base_url,
         user_id=user_id,
+        github_token=github_token,
     )

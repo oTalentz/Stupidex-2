@@ -53,9 +53,9 @@ Dê duplo clique no `Stupidex.exe` para iniciar o servidor e abrir o navegador a
 - Configurações de provedor, modelo e API key são armazenadas por usuário
 - **Todas as chaves e tokens são criptografados em repouso** (Fernet)
 - Tokens OAuth do GitHub e Google são criptografados
-- **Execução de shell está habilitada por padrão no launcher** - Para ambientes de produção, configure:
+- **Execução de shell está habilitada por padrão** e limitada ao workspace/allowlist. Para desabilitar em produção, configure:
   ```bash
-  STUPIDEX_ENABLE_SHELL=1
+  STUPIDEX_ENABLE_SHELL=0
   # Opcionalmente, restrinja executáveis (git está incluído por padrão):
   STUPIDEX_SHELL_COMMANDS="python,python3,pytest,node,npm,git"
   ```
@@ -173,8 +173,8 @@ PORT=8080
 # Diretório de dados (padrão: ~/.stupidex)
 STUPIDEX_DATA_DIR=/caminho/para/dados
 
-# Habilitar execução de shell (DANGER!)
-STUPIDEX_ENABLE_SHELL=1
+# Desabilitar execução de shell, se necessário
+STUPIDEX_ENABLE_SHELL=0
 STUPIDEX_SHELL_COMMANDS="python,python3,pytest,node,npm"
 
 # CORS (para desenvolvimento)

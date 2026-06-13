@@ -1,3 +1,4 @@
+import base64
 import os
 import re
 import shlex
@@ -239,7 +240,11 @@ def delete(path: str, working_dir: str = ".") -> str:
 
 
 def run_shell(
-    command: str, cwd: str | None = None, timeout: int = DEFAULT_SHELL_TIMEOUT
+    command: str,
+    cwd: str | None = None,
+    timeout: int = DEFAULT_SHELL_TIMEOUT,
+    workspace_root: str | None = None,
+    github_token: str = "",
 ) -> str:
     """Run a shell command inside the workspace.
 
@@ -247,13 +252,15 @@ def run_shell(
     block dangerous command patterns that could escape the sandbox even with a
     contained cwd.
     """
-    if os.environ.get("STUPIDEX_ENABLE_SHELL", "").lower() not in {"1", "true", "yes"}:
+    if os.environ.get("STUPIDEX_ENABLE_SHELL", "1").lower() in {"0", "false", "no"}:
         return "SECURITY: shell execution is disabled by the server"
 
     # 1. The forced cwd is the sandbox root; no process-global state is used.
     work = Path(cwd).resolve() if cwd else Path.cwd()
-    workspace_root = work
-    if not _is_path_within(work, workspace_root):
+    root = Path(workspace_root).resolve() if workspace_root else work
+    if not work.is_dir():
+        return "ERROR: shell working directory does not exist"
+    if not _is_path_within(work, root):
         return "SECURITY: shell cwd is outside the workspace"
 
     # 2. Reject shell syntax and parse an argv without invoking a command shell.
@@ -289,6 +296,18 @@ def run_shell(
     executable = Path(argv[0]).name.lower()
     if executable not in allowed:
         return f"SECURITY: executable '{executable}' is not allowed"
+    if executable in {"git", "git.exe"}:
+        git_args = (
+            subprocess.list2cmdline(argv[1:])
+            if os.name == "nt"
+            else shlex.join(argv[1:])
+        )
+        return git(
+            git_args,
+            cwd=str(work),
+            github_token=github_token,
+            workspace_root=str(root),
+        )
 
     # 3. Clamp timeout
     timeout = max(1, min(int(timeout or DEFAULT_SHELL_TIMEOUT), MAX_SHELL_TIMEOUT))
@@ -300,6 +319,11 @@ def run_shell(
         "HOME": str(work),
         "LANG": "C.UTF-8",
         "NO_COLOR": "1",
+        "GIT_AUTHOR_NAME": "Stupidex Agent",
+        "GIT_AUTHOR_EMAIL": "agent@stupidex.local",
+        "GIT_COMMITTER_NAME": "Stupidex Agent",
+        "GIT_COMMITTER_EMAIL": "agent@stupidex.local",
+        "GIT_TERMINAL_PROMPT": "0",
     }
     try:
         result = subprocess.run(
@@ -324,10 +348,17 @@ def run_shell(
     return "\n".join(parts) or f"[exit {result.returncode}] (no output)"
 
 
-def git(args: str, cwd: str | None = None) -> str:
+def git(
+    args: str,
+    cwd: str | None = None,
+    github_token: str = "",
+    workspace_root: str | None = None,
+) -> str:
     work = Path(cwd).resolve() if cwd else Path.cwd()
-    workspace_root = work
-    if not _is_path_within(work, workspace_root):
+    root = Path(workspace_root).resolve() if workspace_root else work
+    if not work.is_dir():
+        return "ERROR: git working directory does not exist"
+    if not _is_path_within(work, root):
         return "SECURITY: git cwd is outside the workspace"
     # Only allow safe git subcommands
     safe = {
@@ -380,8 +411,24 @@ def git(args: str, cwd: str | None = None) -> str:
         "GIT_CONFIG_GLOBAL": os.devnull,
         "GIT_CONFIG_NOSYSTEM": "1",
         "GIT_PAGER": "cat",
+        "GIT_TERMINAL_PROMPT": "0",
+        "GIT_AUTHOR_NAME": "Stupidex Agent",
+        "GIT_AUTHOR_EMAIL": "agent@stupidex.local",
+        "GIT_COMMITTER_NAME": "Stupidex Agent",
+        "GIT_COMMITTER_EMAIL": "agent@stupidex.local",
         "LANG": "C.UTF-8",
     }
+    if github_token and parsed[0] in {"push", "pull", "fetch"}:
+        credentials = base64.b64encode(
+            f"x-access-token:{github_token}".encode("utf-8")
+        ).decode("ascii")
+        env.update(
+            {
+                "GIT_CONFIG_COUNT": "1",
+                "GIT_CONFIG_KEY_0": "http.https://github.com/.extraheader",
+                "GIT_CONFIG_VALUE_0": f"Authorization: Basic {credentials}",
+            }
+        )
     try:
         result = subprocess.run(
             cmd,

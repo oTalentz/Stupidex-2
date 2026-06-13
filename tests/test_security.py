@@ -288,10 +288,20 @@ def test_run_shell_blocks_escape_patterns():
         assert "SECURITY" in out, f"command {cmd!r} was NOT blocked: {out!r}"
 
 
-def test_run_shell_blocks_cwd_outside_workspace():
-    os.environ.pop("STUPIDEX_ENABLE_SHELL", None)
+def test_run_shell_can_be_explicitly_disabled(monkeypatch):
+    monkeypatch.setenv("STUPIDEX_ENABLE_SHELL", "0")
     out = tools.run_shell("python --version", cwd=str(_TMP))
     assert "SECURITY" in out, f"disabled shell was not blocked: {out!r}"
+
+
+def test_run_shell_blocks_cwd_outside_workspace(monkeypatch):
+    monkeypatch.setenv("STUPIDEX_ENABLE_SHELL", "1")
+    ws = _TMP / "isolated-workspace"
+    ws.mkdir(exist_ok=True)
+    out = tools.run_shell(
+        "python --version", cwd=str(_TMP), workspace_root=str(ws)
+    )
+    assert "SECURITY" in out, f"outside cwd was not blocked: {out!r}"
 
 
 def test_run_shell_allows_safe_commands():
@@ -304,6 +314,40 @@ def test_run_shell_allows_safe_commands():
     (ws / "hello.txt").write_text("oi")
     out = tools.run_shell(f'"{sys.executable}" --version', cwd=str(ws))
     assert "Python" in out, f"safe command failed: {out!r}"
+
+
+def test_run_shell_is_enabled_by_default(monkeypatch):
+    monkeypatch.delenv("STUPIDEX_ENABLE_SHELL", raising=False)
+    monkeypatch.setenv("STUPIDEX_SHELL_COMMANDS", Path(sys.executable).name)
+    out = tools.run_shell(f'"{sys.executable}" --version', cwd=str(_TMP))
+    assert "Python" in out, f"default shell execution failed: {out!r}"
+
+
+def test_run_shell_routes_git_through_git_tool(monkeypatch):
+    captured = {}
+
+    def fake_git(args, cwd=None, github_token="", workspace_root=None):
+        captured.update(
+            args=args,
+            cwd=cwd,
+            github_token=github_token,
+            workspace_root=workspace_root,
+        )
+        return "git-ok"
+
+    monkeypatch.delenv("STUPIDEX_ENABLE_SHELL", raising=False)
+    monkeypatch.setenv("STUPIDEX_SHELL_COMMANDS", "git")
+    monkeypatch.setattr(tools, "git", fake_git)
+    out = tools.run_shell(
+        "git status",
+        cwd=str(_TMP),
+        workspace_root=str(_TMP),
+        github_token="secret-token",
+    )
+
+    assert out == "git-ok"
+    assert captured["args"] == "status"
+    assert captured["github_token"] == "secret-token"
 
 
 def test_run_shell_timeout_clamped():
@@ -320,6 +364,43 @@ def test_git_only_safe_subcommands():
     assert "SECURITY" not in out
     out = tools.git("rm --cached foo", cwd=str(_TMP))
     assert "SECURITY" in out, f"git rm should be blocked: {out!r}"
+
+
+def test_git_remote_auth_is_ephemeral_and_not_in_command(monkeypatch):
+    captured = {}
+
+    class Result:
+        returncode = 0
+        stdout = "ok"
+        stderr = ""
+
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        captured["env"] = kwargs["env"]
+        return Result()
+
+    monkeypatch.setattr(tools.subprocess, "run", fake_run)
+    out = tools.git("fetch origin", cwd=str(_TMP), github_token="secret-token")
+
+    assert "[exit 0]" in out
+    assert "secret-token" not in " ".join(captured["command"])
+    assert captured["env"]["GIT_TERMINAL_PROMPT"] == "0"
+    assert captured["env"]["GIT_CONFIG_KEY_0"].endswith(".extraheader")
+    assert captured["env"]["GIT_CONFIG_VALUE_0"].startswith("Authorization: Basic ")
+
+
+def test_git_local_lifecycle_works_without_global_identity():
+    repo = _TMP / "git-lifecycle"
+    shutil.rmtree(repo, ignore_errors=True)
+    repo.mkdir()
+
+    assert "[exit 0]" in tools.git("init", cwd=str(repo))
+    (repo / "hello.txt").write_text("working", encoding="utf-8")
+    assert "[exit 0]" in tools.git("add hello.txt", cwd=str(repo))
+    committed = tools.git('commit -m "chat change"', cwd=str(repo))
+    assert "[exit 0]" in committed, committed
+    log = tools.git("log -1 --format=%s", cwd=str(repo))
+    assert "chat change" in log
 
 
 def test_sandbox_guard_path_traversal():
@@ -668,6 +749,46 @@ def test_git_pull_uses_server_pat_and_preserves_git_directory(monkeypatch):
     assert captured["token"] == "server-pat"
     assert git_marker.read_text(encoding="utf-8") == "keep"
     assert (workspace_path / "README.md").read_text(encoding="utf-8") == "updated"
+
+
+def test_init_from_git_uses_real_clone_and_preserves_credentials(monkeypatch):
+    from stupidex import workspaces
+
+    user_id = "clone_git_user"
+    workspace = workspaces.create_empty(user_id, "repo")
+    captured = {}
+
+    class Result:
+        returncode = 0
+        stdout = ""
+        stderr = "Cloning into repository..."
+
+    def fake_run(command, **kwargs):
+        if "clone" in command:
+            captured["command"] = command
+            captured["env"] = kwargs["env"]
+            destination = Path(command[-1])
+            (destination / ".git").mkdir(parents=True)
+            (destination / "README.md").write_text("cloned", encoding="utf-8")
+        return Result()
+
+    monkeypatch.setattr(workspaces.shutil, "which", lambda _: "git")
+    monkeypatch.setattr(workspaces.subprocess, "run", fake_run)
+
+    cloned, _ = workspaces.init_from_git(
+        user_id,
+        workspace.id,
+        "https://github.com/example/private.git",
+        "main",
+        "private-token",
+    )
+    workspace_path = workspaces.workspace_path(user_id, workspace.id)
+
+    assert cloned.source == "git"
+    assert (workspace_path / ".git").is_dir()
+    assert (workspace_path / "README.md").read_text(encoding="utf-8") == "cloned"
+    assert "private-token" not in " ".join(captured["command"])
+    assert captured["env"]["GIT_CONFIG_VALUE_0"].startswith("Authorization: Basic ")
 
 
 def cleanup():

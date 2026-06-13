@@ -1138,6 +1138,7 @@ def session_regenerate(sid):
         api_key_override=user_api_key,
         user_id=request.user.id,
         model_override=(data.get("model") or s.model),
+        github_token=request.user.github_access_token,
     )
     ctx.web_search_enabled = bool(last_user.metadata.get("web_search"))
     ctx.session_id = sid
@@ -1199,6 +1200,7 @@ def _session_chat_impl(sid: str) -> Response:
         api_key_override=user_api_key,
         user_id=request.user.id,
         model_override=(data.get("model") or session.model),
+        github_token=request.user.github_access_token,
     )
     ctx.web_search_enabled = data.get("web_search") is True
     ctx.session_id = sid
@@ -1576,7 +1578,12 @@ def workspaces_shell(ws_id):
         return jsonify({"error": "workspace not found"}), 404
     from stupidex.llm.tools import run_shell as run_shell_tool
 
-    output = run_shell_tool(cmd, cwd=str(ws_path))
+    output = run_shell_tool(
+        cmd,
+        cwd=str(ws_path),
+        workspace_root=str(ws_path),
+        github_token=request.user.github_access_token,
+    )
     tree_changed = False
     if "stdout:" in output or "stderr:" in output:
         tree_changed = True

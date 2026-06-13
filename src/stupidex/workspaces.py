@@ -13,6 +13,7 @@ GitHub token priority:
   2. Server's GITHUB_PAT (Personal Access Token) for system-wide access
 """
 
+import base64
 import json
 import os
 import re
@@ -44,6 +45,7 @@ _ARCHIVE_HOSTS = {
     "gitlab.com",
     "www.gitlab.com",
 }
+_GIT_HOSTS = {"github.com", "www.github.com", "gitlab.com", "www.gitlab.com"}
 
 
 class RepositoryAccessError(RuntimeError):
@@ -288,9 +290,132 @@ def init_from_git(
     # Token priority: user token first, then server PAT
     effective_token = github_token or os.environ.get("GITHUB_PAT", "")
 
+    if shutil.which("git"):
+        return _clone_repository(user_id, ws_id, url, branch, effective_token)
+
     ws_obj, msg = _download_archive(user_id, ws_id, url, branch, effective_token)
     _ensure_git_repo(ws_path, url, branch)
-    return ws_obj, msg
+    return ws_obj, f"{msg}; git CLI unavailable, repository history was not connected"
+
+
+def _git_environment(home: Path, github_token: str = "") -> dict[str, str]:
+    env = {
+        "PATH": os.environ.get("PATH", os.defpath),
+        "HOME": str(home),
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_TERMINAL_PROMPT": "0",
+        "GIT_PAGER": "cat",
+        "LANG": "C.UTF-8",
+    }
+    if github_token:
+        credentials = base64.b64encode(
+            f"x-access-token:{github_token}".encode("utf-8")
+        ).decode("ascii")
+        env.update(
+            {
+                "GIT_CONFIG_COUNT": "1",
+                "GIT_CONFIG_KEY_0": "http.https://github.com/.extraheader",
+                "GIT_CONFIG_VALUE_0": f"Authorization: Basic {credentials}",
+            }
+        )
+    return env
+
+
+def _clone_repository(
+    user_id: str,
+    ws_id: str,
+    url: str,
+    branch: str | None,
+    github_token: str = "",
+) -> tuple[Workspace, str]:
+    parsed = urllib.parse.urlparse(url)
+    if (
+        parsed.scheme != "https"
+        or (parsed.hostname or "").lower() not in _GIT_HOSTS
+        or parsed.username
+        or parsed.password
+    ):
+        raise ValueError("only credential-free HTTPS GitHub/GitLab URLs are allowed")
+
+    ws_path = workspace_path(user_id, ws_id)
+    if ws_path is None:
+        raise ValueError("workspace not found")
+    git = shutil.which("git")
+    if not git:
+        raise RuntimeError("git CLI is not installed")
+
+    stage = Path(tempfile.mkdtemp(prefix=f".{ws_id}-clone-", dir=ws_path.parent))
+    clone_path = stage / "repository"
+    cmd = [
+        git,
+        "-c",
+        "core.hooksPath=/dev/null",
+        "clone",
+        "--no-recurse-submodules",
+    ]
+    if branch:
+        cmd.extend(["--branch", branch, "--single-branch"])
+    cmd.extend([url, str(clone_path)])
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=str(stage),
+            capture_output=True,
+            text=True,
+            timeout=180,
+            env=_git_environment(ws_path, github_token),
+            shell=False,
+        )
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout or "git clone failed").strip()
+            raise RepositoryAccessError(detail[:2000])
+
+        size, count = _dir_stats(clone_path)
+        if size > MAX_WORKSPACE_BYTES or count > MAX_WORKSPACE_FILES:
+            raise RuntimeError("repository exceeds workspace limits")
+
+        for child in ws_path.iterdir():
+            if child.name == ".stupidex.json":
+                continue
+            if child.is_dir() and not child.is_symlink():
+                shutil.rmtree(child)
+            else:
+                child.unlink()
+        for child in clone_path.iterdir():
+            shutil.move(str(child), str(ws_path / child.name))
+
+        subprocess.run(
+            [git, "config", "user.email", "agent@stupidex.local"],
+            cwd=str(ws_path),
+            capture_output=True,
+            timeout=15,
+            env=_git_environment(ws_path),
+        )
+        subprocess.run(
+            [git, "config", "user.name", "Stupidex Agent"],
+            cwd=str(ws_path),
+            capture_output=True,
+            timeout=15,
+            env=_git_environment(ws_path),
+        )
+
+        meta = _read_meta(user_id, ws_id) or _default_meta(ws_id)
+        meta.update(
+            {
+                "source": "git",
+                "git_url": url,
+                "git_branch": branch,
+                "size_bytes": size,
+                "file_count": count,
+                "last_activity": time.time(),
+            }
+        )
+        ws_obj = Workspace(**meta)
+        _write_meta(user_id, ws_obj)
+        return ws_obj, (result.stderr or "repository cloned with git").strip()
+    finally:
+        shutil.rmtree(stage, ignore_errors=True)
 
 
 def _download_archive(
@@ -463,8 +588,44 @@ def git_pull(user_id: str, ws_id: str, github_token: str = "") -> tuple[bool, st
     # Token priority: user token first, then server PAT
     effective_token = github_token or os.environ.get("GITHUB_PAT", "")
 
-    # Preserve .git directory if it exists
+    git = shutil.which("git")
     git_dir = ws_path / ".git"
+    if git and git_dir.is_dir():
+        probe = subprocess.run(
+            [git, "rev-parse", "--is-inside-work-tree"],
+            cwd=str(ws_path),
+            capture_output=True,
+            text=True,
+            timeout=15,
+            env=_git_environment(ws_path),
+        )
+        if probe.returncode == 0:
+            result = subprocess.run(
+                [
+                    git,
+                    "-c",
+                    "core.hooksPath=/dev/null",
+                    "pull",
+                    "--ff-only",
+                ],
+                cwd=str(ws_path),
+                capture_output=True,
+                text=True,
+                timeout=120,
+                env=_git_environment(ws_path, effective_token),
+                shell=False,
+            )
+            output = "\n".join(
+                part
+                for part in ((result.stdout or "").strip(), (result.stderr or "").strip())
+                if part
+            )
+            if result.returncode != 0:
+                return False, output or "git pull failed"
+            touch(user_id, ws_id)
+            return True, output or "Already up to date."
+
+    # Preserve .git directory if it exists
     git_tmp = None
     if git_dir.is_dir():
         git_tmp = ws_path.parent / f".git.tmp.{ws_id}"
