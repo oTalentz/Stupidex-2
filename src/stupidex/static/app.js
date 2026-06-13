@@ -549,6 +549,7 @@ function toggleMultiSelectMode() {
   state.multiSelectMode = !state.multiSelectMode;
   state.selectedSessions.clear();
   els.sessionList.classList.toggle("multi-select-mode", state.multiSelectMode);
+  els.multiSelectToggleBtn.classList.toggle("active", state.multiSelectMode);
   if (!state.multiSelectMode) {
     els.multiSelectToolbar.classList.add("hidden");
   }

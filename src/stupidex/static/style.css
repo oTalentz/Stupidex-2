@@ -3853,6 +3853,38 @@ body {
     accent-color: var(--accent);
 }
 
+.multi-select-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+}
+
+.multi-select-toggle-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text);
+    border-color: var(--accent);
+}
+
+.multi-select-toggle-btn.active {
+    background: rgba(112, 103, 255, 0.15);
+    color: var(--accent);
+    border-color: var(--accent);
+}
+
+.multi-select-toggle-btn i {
+    font-size: 15px;
+}
+
 .session-item.pinned::before {
     content: "";
     position: absolute;
