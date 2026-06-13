@@ -425,11 +425,47 @@ def _force_utf8_static(resp):
 
 @app.route("/api/health")
 def health():
+    """Health check endpoint with comprehensive status."""
+    import shutil
+    
+    # Check database connectivity
+    db_ok = False
+    try:
+        from . import db as db_module
+        conn = db_module._connect()
+        conn.execute("SELECT 1")
+        conn.close()
+        db_ok = True
+    except Exception:
+        pass
+    
+    # Check LLM provider availability (basic config check)
+    llm_ok = has_api_key() or any(
+        not PROVIDERS[p].needs_api_key for p in PROVIDERS
+    )
+    
+    # Check disk space (warn if less than 100MB free)
+    try:
+        stat = shutil.disk_usage(DATA_DIR)
+        disk_free_mb = stat.free / (1024 * 1024)
+        disk_ok = disk_free_mb >= 100
+        disk_status = f"{disk_free_mb:.1f}MB free"
+    except Exception:
+        disk_ok = True  # Assume OK if we can't check
+        disk_status = "unknown"
+    
+    overall_ok = db_ok and disk_ok
+    
     return jsonify(
         {
-            "ok": True,
+            "ok": overall_ok,
             "ts": time.time(),
-            "v": "oauth-fix-v3",
+            "v": "0.2.0",
+            "checks": {
+                "database": {"ok": db_ok},
+                "llm_provider": {"ok": llm_ok},
+                "disk": {"ok": disk_ok, "free": disk_status},
+            },
             "integrations": {
                 "github_configured": _github_configured(),
                 "google_configured": bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET),
@@ -879,17 +915,45 @@ def sessions_list():
     include_archived = request.args.get("include_archived") == "1"
     include_trashed = request.args.get("include_trashed") == "1"
     only_trashed = request.args.get("trashed") == "1"
-    return jsonify(
-        [
-            s.to_dict()
-            for s in db.list_sessions(
-                request.user.id,
-                include_archived=include_archived,
-                include_trashed=include_trashed or only_trashed,
-                only_trashed=only_trashed,
-            )
-        ]
-    )
+    
+    # Pagination support (medium priority improvement)
+    try:
+        page = int(request.args.get("page", 1))
+        per_page = min(int(request.args.get("per_page", 20)), 100)
+    except ValueError:
+        page = 1
+        per_page = 20
+    
+    if page < 1:
+        page = 1
+    if per_page < 1:
+        per_page = 20
+    
+    offset = (page - 1) * per_page
+    
+    all_sessions = [
+        s.to_dict()
+        for s in db.list_sessions(
+            request.user.id,
+            include_archived=include_archived,
+            include_trashed=include_trashed or only_trashed,
+            only_trashed=only_trashed,
+        )
+    ]
+    
+    # Apply pagination
+    total = len(all_sessions)
+    paginated = all_sessions[offset : offset + per_page]
+    
+    return jsonify({
+        "sessions": paginated,
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "pages": (total + per_page - 1) // per_page if per_page > 0 else 0,
+        }
+    })
 
 
 @app.route("/api/sessions/search", methods=["GET"])
@@ -1228,13 +1292,21 @@ def session_regenerate(sid):
 def session_chat(sid):
     try:
         return _session_chat_impl(sid)
+    except ValueError as exc:
+        # Client errors (bad input, validation failures)
+        app.logger.warning("session_chat validation error sid=%s: %s", sid, exc)
+        return jsonify({"error": str(exc)}), 400
+    except PermissionError as exc:
+        # Access denied
+        app.logger.warning("session_chat permission denied sid=%s: %s", sid, exc)
+        return jsonify({"error": "access denied"}), 403
     except Exception as exc:
         import traceback
 
         tb = traceback.format_exc(limit=10)
         # Don't leak traceback to the client in production — log only.
         error_id = secrets.token_hex(6)
-        app.logger.error("session_chat fatal id=%s: %s\n%s", error_id, exc, tb)
+        app.logger.error("session_chat fatal id=%s sid=%s: %s\n%s", error_id, sid, exc, tb)
         return jsonify({"error": "internal server error", "error_id": error_id}), 500
 
 
@@ -1427,14 +1499,37 @@ def _path_within(path: Path, root: Path) -> bool:
 @login_required
 @rate_limited("default")
 def workspaces_list():
-    ws_list = [w.to_dict() for w in workspaces_module.list_workspaces(request.user.id)]
+    # Pagination support for workspaces (medium priority)
+    try:
+        page = int(request.args.get("page", 1))
+        per_page = min(int(request.args.get("per_page", 20)), 100)
+    except ValueError:
+        page = 1
+        per_page = 20
+    
+    if page < 1:
+        page = 1
+    if per_page < 1:
+        per_page = 20
+    
+    offset = (page - 1) * per_page
+    
+    all_workspaces = [w.to_dict() for w in workspaces_module.list_workspaces(request.user.id)]
     active = workspaces_module.get_active_workspace(request.user.id)
-    return jsonify(
-        {
-            "workspaces": ws_list,
-            "active_id": active.id if active else None,
+    
+    total = len(all_workspaces)
+    paginated = all_workspaces[offset : offset + per_page]
+    
+    return jsonify({
+        "workspaces": paginated,
+        "active_id": active.id if active else None,
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "pages": (total + per_page - 1) // per_page if per_page > 0 else 0,
         }
-    )
+    })
 
 
 @app.route("/api/workspaces", methods=["POST"])
@@ -1608,6 +1703,17 @@ def workspaces_clone(ws_id):
     if any(child.name != ".stupidex.json" for child in ws_path.iterdir()):
         return jsonify({"error": "workspace is not empty"}), 409
     url = (data.get("url") or "").strip()
+    
+    # Frontend validation helper: validate URL before cloning (medium priority)
+    if not url:
+        return jsonify({"error": "repository URL is required"}), 400
+    
+    # Basic URL format validation before expensive allowlist check
+    if not url.startswith("https://"):
+        return jsonify({
+            "error": "Invalid repository URL. Must start with https://"
+        }), 400
+    
     branch = (data.get("branch") or "").strip() or None
     err = _validate_git_url(url)
     if err:
