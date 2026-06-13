@@ -135,11 +135,19 @@ class AgentContext:
 
 
 def _build_system_message(user_id: str) -> ChatMessage:
+    workspace_context = _workspace_context_for_llm(user_id)
+    system_content = AGENT_SYSTEM_PROMPT.format(
+        workspace_files=workspace_context
+    )
+
+    # Log system message info for debugging
+    logging.info(f"[DEBUG] System message length: {len(system_content)} chars")
+    logging.info(f"[DEBUG] Workspace context length: {len(workspace_context)} chars")
+    logging.info(f"[DEBUG] User ID: {user_id}")
+
     return ChatMessage(
         role=MessageRole.SYSTEM,
-        content=AGENT_SYSTEM_PROMPT.format(
-            workspace_files=_workspace_context_for_llm(user_id)
-        ),
+        content=system_content,
         type=MessageType.TEXT,
     )
 
@@ -494,6 +502,10 @@ def _litellm_kwargs(ctx: AgentContext) -> dict:
     tools = TOOL_DEFINITIONS
     if ctx.web_search_enabled:
         tools = [*TOOL_DEFINITIONS, *WEB_TOOL_DEFINITIONS]
+
+    # Log tool information for debugging
+    logging.info(f"[DEBUG] Sending {len(tools)} tools to LLM: {[t['function']['name'] for t in tools]}")
+
     kw: dict = {
         "model": ctx.model,
         "stream": True,
