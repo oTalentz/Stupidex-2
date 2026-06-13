@@ -28,8 +28,7 @@ PROVIDERS: dict[str, ProviderConfig] = {
         default_model="deepseek-v4-flash",
         api_key_env="DEEPSEEK_API_KEY",
         needs_api_key=True,
-        supports_vision=True,
-        description="DeepSeek V4 Flash — rápido, multimodal, recomendado",
+        description="DeepSeek V4 Flash — rápido, texto e ferramentas, recomendado",
     ),
     "deepseek-v4-pro": ProviderConfig(
         id="deepseek-v4-pro",
@@ -38,7 +37,6 @@ PROVIDERS: dict[str, ProviderConfig] = {
         default_model="deepseek-v4-pro",
         api_key_env="DEEPSEEK_API_KEY",
         needs_api_key=True,
-        supports_vision=True,
         description="DeepSeek V4 Pro — mais capaz, mais lento",
     ),
     "deepseek-chat": ProviderConfig(

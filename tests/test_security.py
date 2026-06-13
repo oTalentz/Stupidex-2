@@ -572,28 +572,35 @@ def test_chat_image_validation_and_limits():
     assert "does not match" in error
 
 
-def test_non_vision_model_rejects_chat_images():
+def test_non_vision_models_reject_chat_images():
     from stupidex import web
     user, token = db.create_user("no_vision_user", "validpass123")
-    session = db.create_session(user.id, "deepseek-chat", "deepseek-chat")
     png = (
         "data:image/png;base64,"
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Z6wAAAABJRU5ErkJggg=="
     )
-    response = web.app.test_client().post(
-        f"/api/sessions/{session.id}/chat",
-        json={"message": "analise", "images": [{"name": "shot.png", "data_url": png}]},
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert response.status_code == 400
-    assert "does not support" in response.get_json()["error"]
+    client = web.app.test_client()
+    for provider_id in ("deepseek-v4-flash", "deepseek-v4-pro", "deepseek-chat"):
+        session = db.create_session(user.id, provider_id, provider_id)
+        response = client.post(
+            f"/api/sessions/{session.id}/chat",
+            json={
+                "message": "analise",
+                "images": [{"name": "shot.png", "data_url": png}],
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 400
+        assert "does not support" in response.get_json()["error"]
 
 
 def test_provider_capabilities_include_vision():
     from stupidex.llm.providers import list_providers
     providers = {provider["id"]: provider for provider in list_providers()}
-    assert providers["deepseek-v4-flash"]["supports_vision"] is True
+    assert providers["deepseek-v4-flash"]["supports_vision"] is False
+    assert providers["deepseek-v4-pro"]["supports_vision"] is False
     assert providers["deepseek-chat"]["supports_vision"] is False
+    assert providers["openai"]["supports_vision"] is True
 
 
 def test_chat_image_binary_is_not_persisted():
