@@ -147,7 +147,10 @@ const els = {
   composerViewProject: $("composer-view-project"),
   composerFileSummary: $("composer-file-summary"),
   composerRepoSummary: $("composer-repo-summary"),
-  modelSelect: $("model-select"),
+  modelSelectTrigger: $("model-select-trigger"),
+  modelSelectLabel: $("model-select-label"),
+  modelSelectDetail: $("model-select-detail"),
+  modelSelectMenu: $("model-select-menu"),
   researchSourcesList: $("research-sources-list"),
   researchActiveCount: $("research-active-count"),
   researchGithubState: $("research-github-state"),
@@ -2071,33 +2074,105 @@ async function saveSettings() {
   }
 }
 
+function providerDetail(provider) {
+  if (!provider) return "Modelo indisponível";
+  return [
+    provider.model,
+    provider.supports_vision ? "visão" : "texto",
+    provider.needs_api_key ? "requer chave" : "sem chave",
+  ].join(" · ");
+}
+
+function renderModelMenu() {
+  if (!els.modelSelectMenu) return;
+  els.modelSelectMenu.replaceChildren();
+  for (const provider of state.providers) {
+    const option = document.createElement("button");
+    option.type = "button";
+    option.className = "model-select-option";
+    option.dataset.provider = provider.id;
+    option.setAttribute("role", "option");
+    option.setAttribute(
+      "aria-selected",
+      String(provider.id === state.config.provider),
+    );
+
+    const icon = document.createElement("span");
+    icon.className = "model-option-icon";
+    icon.innerHTML = provider.supports_vision
+      ? '<i class="ph ph-eye"></i>'
+      : '<i class="ph ph-chat-circle-text"></i>';
+
+    const copy = document.createElement("span");
+    copy.className = "model-option-copy";
+    const name = document.createElement("strong");
+    name.textContent = provider.name;
+    const detail = document.createElement("small");
+    detail.textContent = providerDetail(provider);
+    copy.append(name, detail);
+
+    const selected = document.createElement("i");
+    selected.className = "ph ph-check model-option-check";
+    option.append(icon, copy, selected);
+    els.modelSelectMenu.appendChild(option);
+  }
+}
+
+function renderModelLoadError(message = "Não foi possível carregar os modelos") {
+  if (els.modelSelectLabel) els.modelSelectLabel.textContent = "Modelos indisponíveis";
+  if (els.modelSelectDetail) els.modelSelectDetail.textContent = "Clique para tentar novamente";
+  if (!els.modelSelectMenu) return;
+  els.modelSelectMenu.replaceChildren();
+  const retry = document.createElement("button");
+  retry.type = "button";
+  retry.className = "model-select-retry";
+  retry.innerHTML = '<i class="ph ph-arrow-clockwise"></i><span></span>';
+  retry.querySelector("span").textContent = message;
+  retry.addEventListener("click", async () => {
+    await loadConfig();
+    updateBadges();
+  });
+  els.modelSelectMenu.appendChild(retry);
+}
+
 async function loadConfig() {
-  const [provR, cfgR] = await Promise.all([
-    fetch("/api/providers"),
-    fetch("/api/config"),
-  ]);
-  state.providers = await provR.json();
-  state.config = await cfgR.json();
+  if (els.modelSelectLabel) els.modelSelectLabel.textContent = "Carregando modelos...";
+  if (els.modelSelectDetail) els.modelSelectDetail.textContent = "Aguarde";
+  try {
+    const [provR, cfgR] = await Promise.all([
+      fetch("/api/providers"),
+      fetch("/api/config"),
+    ]);
+    if (!provR.ok || !cfgR.ok) {
+      throw new Error(`HTTP ${!provR.ok ? provR.status : cfgR.status}`);
+    }
+    const providers = await provR.json();
+    const config = await cfgR.json();
+    if (!Array.isArray(providers) || !providers.length) {
+      throw new Error("Nenhum modelo disponível");
+    }
+    if (!config || typeof config !== "object" || !config.provider) {
+      throw new Error("Configuração de modelo inválida");
+    }
+    state.providers = providers;
+    state.config = config;
+  } catch (error) {
+    state.providers = [];
+    renderModelLoadError(error.message);
+    return false;
+  }
+
   els.providerSelect.innerHTML = "";
-  if (els.modelSelect) els.modelSelect.innerHTML = "";
   for (const p of state.providers) {
     const opt = document.createElement("option");
     opt.value = p.id;
     opt.textContent = p.name;
     opt.title = p.description || "";
     els.providerSelect.appendChild(opt);
-    if (els.modelSelect) {
-      const modelOption = document.createElement("option");
-      modelOption.value = p.id;
-      const capabilities = [
-        p.supports_vision ? "visão" : "texto",
-        p.needs_api_key ? "chave" : "sem chave",
-      ].join(" · ");
-      modelOption.textContent = `${p.name} — ${p.model} (${capabilities})`;
-      modelOption.title = p.description || p.model;
-      els.modelSelect.appendChild(modelOption);
-    }
   }
+  renderModelMenu();
+  updateBadges();
+  return true;
 }
 
 function updateBadges() {
@@ -2106,7 +2181,14 @@ function updateBadges() {
   if (els.researchModelName) {
     els.researchModelName.textContent = state.config.model;
   }
-  if (els.modelSelect) els.modelSelect.value = state.config.provider;
+  const provider = currentProvider();
+  if (els.modelSelectLabel) {
+    els.modelSelectLabel.textContent = provider?.name || state.config.model;
+  }
+  if (els.modelSelectDetail) {
+    els.modelSelectDetail.textContent = providerDetail(provider);
+  }
+  renderModelMenu();
   const hasVision = currentModelSupportsVision();
   els.visionIndicator?.classList.toggle("hidden", !hasVision);
   if (els.composerAttach) {
@@ -2375,44 +2457,64 @@ if (els.composerViewProject) {
   });
 }
 
-// Full provider/model selector
-if (els.modelSelect) {
-  els.modelSelect.addEventListener("change", async () => {
-    const provider = els.modelSelect.value;
-    if (!provider || provider === state.config.provider) return;
-    const selected = state.providers.find((item) => item.id === provider);
-    if (!selected) return;
-    const previous = state.config;
-    state.config = {
-      ...state.config,
-      provider,
-      model: selected.model,
-      custom_model: "",
-    };
-    updateBadges();
-    els.modelSelect.disabled = true;
-    try {
-      const response = await fetch("/api/config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider, custom_model: "" }),
-      });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload.error || `HTTP ${response.status}`);
-      }
-      state.config = await response.json();
-      updateBadges();
-    } catch (error) {
-      state.config = previous;
-      updateBadges();
-      els.status.textContent = `Não foi possível trocar o modelo: ${error.message}`;
-      els.status.classList.remove("hidden");
-    } finally {
-      els.modelSelect.disabled = false;
+async function selectProvider(providerId) {
+  if (!providerId || providerId === state.config.provider) return;
+  const selected = state.providers.find((item) => item.id === providerId);
+  if (!selected) return;
+  const previous = state.config;
+  state.config = {
+    ...state.config,
+    provider: providerId,
+    model: selected.model,
+    custom_model: "",
+  };
+  updateBadges();
+  els.modelSelectTrigger.disabled = true;
+  try {
+    const response = await fetch("/api/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: providerId, custom_model: "" }),
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.error || `HTTP ${response.status}`);
     }
-  });
+    state.config = await response.json();
+    updateBadges();
+  } catch (error) {
+    state.config = previous;
+    updateBadges();
+    els.status.textContent = `Não foi possível trocar o modelo: ${error.message}`;
+    els.status.classList.remove("hidden");
+  } finally {
+    els.modelSelectTrigger.disabled = false;
+  }
 }
+
+function setModelMenuOpen(open) {
+  if (!els.modelSelectMenu || !els.modelSelectTrigger) return;
+  els.modelSelectMenu.classList.toggle("hidden", !open);
+  els.modelSelectTrigger.classList.toggle("is-open", open);
+  els.modelSelectTrigger.setAttribute("aria-expanded", String(open));
+}
+
+els.modelSelectTrigger?.addEventListener("click", async () => {
+  if (!state.providers.length) await loadConfig();
+  const opening = els.modelSelectMenu.classList.contains("hidden");
+  setModelMenuOpen(opening);
+});
+
+els.modelSelectMenu?.addEventListener("click", async (event) => {
+  const option = event.target.closest(".model-select-option");
+  if (!option) return;
+  setModelMenuOpen(false);
+  await selectProvider(option.dataset.provider);
+});
+
+document.addEventListener("click", (event) => {
+  if (!event.target.closest("#model-switcher")) setModelMenuOpen(false);
+});
 
 // Shell widget wire-up
 if (els.shellRun && els.shellInput) {

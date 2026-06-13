@@ -66,7 +66,7 @@
             hljs.configure({ ignoreUnescapedHTML: true });
         </script>
 
-        <link rel="stylesheet" href="/static/style.css?v=19" />
+        <link rel="stylesheet" href="/static/style.css?v=20" />
     </head>
     <body>
         <!-- =========================================================
@@ -415,15 +415,32 @@
                             class="model-switcher"
                             title="Modelo"
                         >
-                            <i class="ph ph-sparkle model-select-icon"></i>
-                            <select
-                                id="model-select"
-                                class="model-select"
-                                aria-label="Selecionar modelo de IA"
+                            <button
+                                id="model-select-trigger"
+                                class="model-select-trigger"
+                                type="button"
+                                aria-haspopup="listbox"
+                                aria-expanded="false"
                             >
-                                <option value="">Carregando modelos...</option>
-                            </select>
-                            <i class="ph ph-caret-down model-select-caret"></i>
+                                <i class="ph ph-sparkle model-select-icon"></i>
+                                <span class="model-select-copy">
+                                    <strong id="model-select-label"
+                                        >Carregando modelos...</strong
+                                    >
+                                    <small id="model-select-detail"
+                                        >Aguarde</small
+                                    >
+                                </span>
+                                <i
+                                    class="ph ph-caret-down model-select-caret"
+                                ></i>
+                            </button>
+                            <div
+                                id="model-select-menu"
+                                class="model-select-menu hidden"
+                                role="listbox"
+                                aria-label="Modelos disponíveis"
+                            ></div>
                         </div>
                     </div>
 
@@ -1022,6 +1039,6 @@
             </div>
         </div>
 
-        <script src="/static/app.js?v=19"></script>
+        <script src="/static/app.js?v=20"></script>
     </body>
 </html>
