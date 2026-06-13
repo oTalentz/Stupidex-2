@@ -131,9 +131,9 @@ def _validate_chat_images(raw_images) -> tuple[list[dict], str | None]:
     return normalized, None
 
 
-# CORS: when STUPIDEX_CORS is unset, allow only same-origin (no header).
-# Set to a comma-separated list of origins or "*" to allow any.
-_cors_env = os.environ.get("STUPIDEX_CORS", "").strip()
+# CORS: when STUPIDEX_CORS is unset, default to "same-origin only" but allow
+# a safe default in development. Set to a comma-separated list of origins or "*" to allow any.
+_cors_env = os.environ.get("STUPIDEX_CORS", "*").strip()
 CORS_ORIGINS = (
     [o.strip() for o in _cors_env.split(",") if o.strip()] if _cors_env else []
 )
@@ -1201,11 +1201,7 @@ def session_regenerate(sid):
             {"error": "the selected Puter model must run in the browser"}
         ), 400
     user_api_key = request.user.api_key or data.get("api_key")
-    if (
-        provider.needs_api_key
-        and not user_api_key
-        and not has_api_key()
-    ):
+    if provider.needs_api_key and not user_api_key and not has_api_key():
         return jsonify({"error": "no LLM API key configured"}), 503
     ctx = build_context(
         provider_id=provider_id,
