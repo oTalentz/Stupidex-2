@@ -3434,8 +3434,22 @@ body {
 .composer-input {
     min-height: 58px;
     max-height: 180px;
-    padding: 17px 18px 6px;
+    padding: 17px 104px 6px 18px;
     line-height: 1.55;
+}
+
+.vision-indicator-corner {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    z-index: 3;
+    min-height: 27px;
+    padding: 5px 9px;
+    color: #c4b5fd;
+    background: rgba(112, 103, 255, 0.14);
+    border-color: rgba(112, 103, 255, 0.3);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    pointer-events: none;
 }
 
 .composer-bottom {
@@ -3687,5 +3701,15 @@ body {
 
     .composer-input-wrap {
         border-radius: 16px;
+    }
+
+    .composer-input {
+        padding-right: 88px;
+    }
+
+    .vision-indicator-corner {
+        top: 9px;
+        right: 10px;
+        padding-inline: 7px;
     }
 }
