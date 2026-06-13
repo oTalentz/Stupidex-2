@@ -80,73 +80,67 @@ class ChatMessage:
 
 
 def filter_valid_tool_messages(history: list["ChatMessage"]) -> list["ChatMessage"]:
-    """Filter out invalid tool call sequences.
+    """Return only provider-valid assistant/tool blocks.
 
-    This is needed for DeepSeek and other providers that require:
-    1. Tool messages must be preceded by an assistant message with tool_calls
-    2. Assistant messages with tool_calls must be followed by corresponding tool messages
-
-    If an assistant message has tool_calls but some don't have corresponding tool responses,
-    we filter out the tool_calls without responses to avoid API errors.
+    Providers such as DeepSeek require every assistant tool call to be followed
+    by one contiguous tool response with the matching ``tool_call_id``. Partial
+    blocks can exist after cancellation or history truncation, so retain only
+    calls that have responses inside their own block.
     """
     if not history:
         return history
 
-    # First pass: identify all tool_call_ids that have responses
-    tool_responses: set[str] = set()
-    for msg in history:
-        if msg.role == MessageRole.TOOL and msg.tool_call_id:
-            tool_responses.add(msg.tool_call_id)
-
-    # Second pass: filter and fix messages
-    filtered = []
-    for msg in history:
-        # Always include system and user messages
-        if msg.role in (MessageRole.SYSTEM, MessageRole.USER):
+    filtered: list[ChatMessage] = []
+    index = 0
+    while index < len(history):
+        msg = history[index]
+        if msg.role == MessageRole.TOOL:
+            index += 1
+            continue
+        if msg.role != MessageRole.ASSISTANT or not msg.tool_calls:
             filtered.append(msg)
-        # Handle assistant messages
-        elif msg.role == MessageRole.ASSISTANT:
-            # If this assistant message has tool_calls, filter out any that don't have responses
-            if msg.tool_calls:
-                # Only keep tool_calls that have corresponding responses
-                valid_tool_calls = [
-                    tc for tc in msg.tool_calls if tc.id in tool_responses
-                ]
-                if valid_tool_calls:
-                    # Create a new message with only valid tool_calls
-                    new_msg = ChatMessage(
-                        role=msg.role,
-                        content=msg.content,
-                        type=msg.type,
-                        tool_calls=valid_tool_calls,
-                        tool_call_id=msg.tool_call_id,
-                        metadata=msg.metadata,
-                        usage=msg.usage,
-                    )
-                    filtered.append(new_msg)
-                else:
-                    # All tool_calls are invalid - convert to text message
-                    new_msg = ChatMessage(
-                        role=msg.role,
-                        content=msg.content,
-                        type=MessageType.TEXT,
-                        tool_calls=[],
-                        tool_call_id=None,
-                        metadata=msg.metadata,
-                        usage=msg.usage,
-                    )
-                    filtered.append(new_msg)
-            else:
-                # Assistant message without tool_calls - always include
-                filtered.append(msg)
-        # Only include tool messages if preceded by an assistant message with tool_calls
-        elif msg.role == MessageRole.TOOL:
+            index += 1
+            continue
+
+        responses: dict[str, ChatMessage] = {}
+        cursor = index + 1
+        while cursor < len(history) and history[cursor].role == MessageRole.TOOL:
+            response = history[cursor]
+            if response.tool_call_id and response.tool_call_id not in responses:
+                responses[response.tool_call_id] = response
+            cursor += 1
+
+        valid_calls: list[ToolCall] = []
+        seen_call_ids: set[str] = set()
+        for call in msg.tool_calls:
             if (
-                filtered
-                and filtered[-1].role == MessageRole.ASSISTANT
-                and filtered[-1].tool_calls
-                and any(tc.id == msg.tool_call_id for tc in filtered[-1].tool_calls)
+                call.id
+                and call.id in responses
+                and call.id not in seen_call_ids
             ):
-                filtered.append(msg)
-            # Otherwise skip this tool message (it's orphaned)
+                valid_calls.append(call)
+                seen_call_ids.add(call.id)
+        if valid_calls:
+            filtered.append(
+                ChatMessage(
+                    role=msg.role,
+                    content=msg.content,
+                    type=msg.type,
+                    tool_calls=valid_calls,
+                    metadata=msg.metadata,
+                    usage=msg.usage,
+                )
+            )
+            filtered.extend(responses[call.id] for call in valid_calls)
+        elif msg.content:
+            filtered.append(
+                ChatMessage(
+                    role=msg.role,
+                    content=msg.content,
+                    type=MessageType.TEXT,
+                    metadata=msg.metadata,
+                    usage=msg.usage,
+                )
+            )
+        index = cursor
     return filtered

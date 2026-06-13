@@ -3150,16 +3150,53 @@ body {
 
 .model-switcher {
     min-height: 38px;
-    min-width: 220px;
-    justify-content: center;
-    padding: 3px;
+    width: clamp(250px, 25vw, 390px);
+    min-width: 250px;
+    justify-content: flex-start;
+    gap: 8px;
+    padding: 0 10px;
     border-radius: 12px;
     background: rgba(0, 0, 0, 0.27);
 }
 
-.model-chip {
-    min-height: 30px;
-    padding-inline: 10px;
+.model-select-icon {
+    flex: 0 0 auto;
+    color: var(--accent);
+    font-size: 16px;
+}
+
+.model-select {
+    min-width: 0;
+    flex: 1;
+    height: 36px;
+    padding: 0 22px 0 0;
+    border: 0;
+    outline: 0;
+    appearance: none;
+    color: var(--text-main);
+    background: transparent;
+    font-size: 12px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    cursor: pointer;
+}
+
+.model-select:disabled {
+    cursor: wait;
+    opacity: 0.65;
+}
+
+.model-select option {
+    color: var(--text-main);
+    background: #101014;
+}
+
+.model-select-caret {
+    flex: 0 0 auto;
+    margin-left: -20px;
+    color: var(--text-muted);
+    pointer-events: none;
+    font-size: 13px;
 }
 
 .research-toggle,
@@ -3434,11 +3471,37 @@ body {
 
 @media (max-width: 1040px) {
     .model-switcher {
-        min-width: 0;
+        width: min(300px, 34vw);
+        min-width: 190px;
     }
 
     .composer-view-project {
         display: none;
+    }
+}
+
+@media (max-width: 860px) {
+    .main-area {
+        grid-template-rows: auto minmax(0, 1fr) auto;
+    }
+
+    .model-switcher {
+        width: 100%;
+        min-width: 0;
+        order: 3;
+    }
+
+    .topbar {
+        flex-wrap: wrap;
+        height: auto;
+        min-height: var(--topbar-height);
+    }
+
+    .topbar-center {
+        display: flex;
+        order: 3;
+        width: 100%;
+        margin-left: 0;
     }
 }
 

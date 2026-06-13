@@ -147,7 +147,7 @@ const els = {
   composerViewProject: $("composer-view-project"),
   composerFileSummary: $("composer-file-summary"),
   composerRepoSummary: $("composer-repo-summary"),
-  modelSwitcher: $("model-switcher"),
+  modelSelect: $("model-select"),
   researchSourcesList: $("research-sources-list"),
   researchActiveCount: $("research-active-count"),
   researchGithubState: $("research-github-state"),
@@ -2079,12 +2079,24 @@ async function loadConfig() {
   state.providers = await provR.json();
   state.config = await cfgR.json();
   els.providerSelect.innerHTML = "";
+  if (els.modelSelect) els.modelSelect.innerHTML = "";
   for (const p of state.providers) {
     const opt = document.createElement("option");
     opt.value = p.id;
     opt.textContent = p.name;
     opt.title = p.description || "";
     els.providerSelect.appendChild(opt);
+    if (els.modelSelect) {
+      const modelOption = document.createElement("option");
+      modelOption.value = p.id;
+      const capabilities = [
+        p.supports_vision ? "visão" : "texto",
+        p.needs_api_key ? "chave" : "sem chave",
+      ].join(" · ");
+      modelOption.textContent = `${p.name} — ${p.model} (${capabilities})`;
+      modelOption.title = p.description || p.model;
+      els.modelSelect.appendChild(modelOption);
+    }
   }
 }
 
@@ -2094,13 +2106,7 @@ function updateBadges() {
   if (els.researchModelName) {
     els.researchModelName.textContent = state.config.model;
   }
-  // v3: reflect the active model on the model chip switcher
-  if (els.modelSwitcher) {
-    const model = state.config.model || "deepseek-v4-flash";
-    els.modelSwitcher.querySelectorAll(".model-chip").forEach((c) => {
-      c.classList.toggle("model-chip-active", c.dataset.model === model);
-    });
-  }
+  if (els.modelSelect) els.modelSelect.value = state.config.provider;
   const hasVision = currentModelSupportsVision();
   els.visionIndicator?.classList.toggle("hidden", !hasVision);
   if (els.composerAttach) {
@@ -2369,32 +2375,41 @@ if (els.composerViewProject) {
   });
 }
 
-// Model chip switcher
-if (els.modelSwitcher) {
-  els.modelSwitcher.addEventListener("click", async (e) => {
-    const chip = e.target.closest(".model-chip");
-    if (!chip) return;
-    const model = chip.dataset.model;
+// Full provider/model selector
+if (els.modelSelect) {
+  els.modelSelect.addEventListener("change", async () => {
+    const provider = els.modelSelect.value;
+    if (!provider || provider === state.config.provider) return;
+    const selected = state.providers.find((item) => item.id === provider);
+    if (!selected) return;
     const previous = state.config;
     state.config = {
       ...state.config,
-      provider: model,
-      model,
+      provider,
+      model: selected.model,
       custom_model: "",
     };
     updateBadges();
+    els.modelSelect.disabled = true;
     try {
       const response = await fetch("/api/config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: model, custom_model: "" }),
+        body: JSON.stringify({ provider, custom_model: "" }),
       });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || `HTTP ${response.status}`);
+      }
       state.config = await response.json();
       updateBadges();
-    } catch {
+    } catch (error) {
       state.config = previous;
       updateBadges();
+      els.status.textContent = `Não foi possível trocar o modelo: ${error.message}`;
+      els.status.classList.remove("hidden");
+    } finally {
+      els.modelSelect.disabled = false;
     }
   });
 }

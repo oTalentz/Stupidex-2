@@ -415,22 +415,15 @@
                             class="model-switcher"
                             title="Modelo"
                         >
-                            <button
-                                class="model-chip model-chip-static"
-                                data-model="deepseek-v4-flash"
+                            <i class="ph ph-sparkle model-select-icon"></i>
+                            <select
+                                id="model-select"
+                                class="model-select"
+                                aria-label="Selecionar modelo de IA"
                             >
-                                <span class="chip-dot"></span>
-                                <span class="chip-label"
-                                    >deepseek-v4-flash</span
-                                >
-                            </button>
-                            <button
-                                class="model-chip model-chip-active"
-                                data-model="deepseek-v4-pro"
-                            >
-                                <span class="chip-dot"></span>
-                                <span class="chip-label">deepseek-v4-pro</span>
-                            </button>
+                                <option value="">Carregando modelos...</option>
+                            </select>
+                            <i class="ph ph-caret-down model-select-caret"></i>
                         </div>
                     </div>
 
