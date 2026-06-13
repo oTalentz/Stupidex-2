@@ -148,11 +148,64 @@ def _workspace_summary(user_id: str = "") -> str:
     return summary
 
 
-def _workspace_files_list(user_id: str = "") -> list[dict[str, Any]]:
-    """List all files in the workspace with their content snippets.
+# Key file patterns that should always be included in context
+_KEY_FILE_NAMES = {
+    "README", "README.md", "README.txt", "README.rst",
+    "CHANGELOG", "CHANGELOG.md",
+    "LICENSE", "LICENSE.md", "LICENSE.txt",
+    "package.json", "package-lock.json",
+    "Cargo.toml", "Cargo.lock",
+    "pyproject.toml", "setup.py", "setup.cfg", "requirements.txt", "Pipfile",
+    "go.mod", "go.sum",
+    "pom.xml", "build.gradle", "build.gradle.kts",
+    "Makefile", "Dockerfile", "docker-compose.yml", "docker-compose.yaml",
+    ".env.example", ".env.template",
+    "tsconfig.json", "jsconfig.json",
+    ".eslintrc", ".prettierrc", ".editorconfig",
+    "next.config.js", "next.config.mjs", "next.config.ts",
+    "vite.config.js", "vite.config.ts", "webpack.config.js",
+    "tailwind.config.js", "tailwind.config.ts",
+    "index.html", "index.ts", "index.tsx", "index.js", "index.jsx",
+    "main.py", "main.ts", "main.tsx", "main.js", "main.jsx",
+    "app.py", "app.ts", "app.tsx", "app.js", "app.jsx",
+    "server.py", "server.ts", "server.js",
+}
 
-    Returns a list of dicts with file metadata and content preview.
-    Only text files are included; binary files are skipped.
+_KEY_FILE_EXTENSIONS = {".md", ".toml", ".yaml", ".yml", ".json", ".lock"}
+
+# Extensions to always skip (binary/generated)
+_SKIP_EXTENSIONS = {
+    ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".svg", ".webp",
+    ".mp3", ".mp4", ".avi", ".mov", ".wav",
+    ".zip", ".tar", ".gz", ".bz2", ".7z", ".rar",
+    ".pdf", ".doc", ".docx", ".xls", ".xlsx",
+    ".exe", ".dll", ".so", ".dylib", ".o", ".a",
+    ".woff", ".woff2", ".ttf", ".eot",
+    ".pyc", ".pyo", ".class",
+    ".map", ".min.js", ".min.css",
+    ".sqlite", ".db",
+}
+
+
+def _is_key_file(rel_path: str, name: str) -> bool:
+    """Determine if a file is important enough to include in context."""
+    if name in _KEY_FILE_NAMES:
+        return True
+    ext = Path(name).suffix.lower()
+    if ext in _KEY_FILE_EXTENSIONS and "/" not in rel_path.replace(name, "").rstrip("/"):
+        return True  # Root-level config files
+    # Include top-level files (depth 1)
+    if rel_path.count("/") == 0 or rel_path.count("\\") == 0:
+        if ext in {".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs", ".java", ".rb"}:
+            return True
+    return False
+
+
+def _workspace_files_list(user_id: str = "") -> list[dict[str, Any]]:
+    """List key files in the workspace with content previews.
+
+    Only includes important files (README, configs, entry points) to keep
+    the context manageable. The agent can use read_file() for other files.
     """
     if not user_id:
         return []
@@ -166,15 +219,16 @@ def _workspace_files_list(user_id: str = "") -> list[dict[str, Any]]:
         return []
 
     files = []
-    max_preview_bytes = 4_000  # 4KB per file preview
-    max_files = 200  # Limit total files to process
+    max_preview_bytes = 3_000  # 3KB per file preview
+    max_total_bytes = 25_000   # 25KB total for all previews
+    total_bytes = 0
 
     for p in sorted(ws_path.rglob("*")):
-        if len(files) >= max_files:
+        if total_bytes >= max_total_bytes:
             break
         # Skip hidden files, .git, __pycache__, node_modules
         if any(
-            part.startswith(".") or part in ("__pycache__", "node_modules")
+            part.startswith(".") or part in ("__pycache__", "node_modules", "dist", "build", ".next")
             for part in p.parts
         ):
             continue
@@ -182,11 +236,21 @@ def _workspace_files_list(user_id: str = "") -> list[dict[str, Any]]:
             continue
 
         rel_path = str(p.relative_to(ws_path))
+        name = p.name
+
+        # Skip binary/generated extensions
+        ext = p.suffix.lower()
+        if ext in _SKIP_EXTENSIONS or name.endswith(".min.js") or name.endswith(".min.css"):
+            continue
+
+        # Only include key files
+        if not _is_key_file(rel_path, name):
+            continue
 
         # Skip large files
         try:
             size = p.stat().st_size
-            if size > 100_000:  # Skip files > 100KB
+            if size > 50_000:
                 continue
         except OSError:
             continue
@@ -194,28 +258,14 @@ def _workspace_files_list(user_id: str = "") -> list[dict[str, Any]]:
         # Try to read as text
         try:
             content = p.read_text(encoding="utf-8")
-            # Truncate preview
-            preview = (
-                content[:max_preview_bytes]
-                if len(content) > max_preview_bytes
-                else content
-            )
-            files.append(
-                {
-                    "path": rel_path,
-                    "size": size,
-                    "preview": preview,
-                }
-            )
+            preview = content[:max_preview_bytes] if len(content) > max_preview_bytes else content
+            preview_bytes = len(preview.encode("utf-8"))
+            if total_bytes + preview_bytes > max_total_bytes:
+                break
+            files.append({"path": rel_path, "size": size, "preview": preview})
+            total_bytes += preview_bytes
         except (UnicodeDecodeError, OSError):
-            # Binary or unreadable file
-            files.append(
-                {
-                    "path": rel_path,
-                    "size": size,
-                    "preview": f"[binary file - {size} bytes]",
-                }
-            )
+            pass
 
     return files
 
@@ -278,11 +328,18 @@ def _workspace_context_for_llm(user_id: str = "") -> str:
     """Generate a context string with workspace structure and files for the LLM."""
     tree = _workspace_file_tree(user_id)
     files = _workspace_files_list(user_id)
+    summary = _workspace_summary(user_id)
 
-    if not tree and not files:
+    if not tree and not files and not summary:
         return ""
 
     context_lines = []
+
+    # Workspace metadata
+    if summary:
+        context_lines.append("=== WORKSPACE INFO ===")
+        context_lines.append(summary)
+        context_lines.append("")
 
     # File tree gives structural overview
     if tree:
@@ -290,16 +347,21 @@ def _workspace_context_for_llm(user_id: str = "") -> str:
         context_lines.append(tree)
         context_lines.append("")
 
-    # File contents for key files
+    # Key file contents
     if files:
-        context_lines.append("=== WORKSPACE FILE CONTENTS ===")
+        context_lines.append("=== KEY FILE CONTENTS (truncated) ===")
         context_lines.append(
-            "Below are previews of workspace files. "
-            "Use read_file() to read full content when needed."
+            "Below are previews of important files. "
+            "Use read_file(path) to read complete contents before editing."
         )
         for f in files:
             context_lines.append(f"\n--- {f['path']} ({f['size']} bytes) ---")
             context_lines.append(f["preview"])
+
+    if not files and tree:
+        context_lines.append(
+            "Use list_dir() and read_file() to explore the project files above."
+        )
 
     return "\n".join(context_lines)
 
@@ -319,8 +381,9 @@ def _history_for_llm(session_id: str, user_id: str = "") -> list[ChatMessage]:
 
     raw = db.get_messages(session_id)
     history: list[ChatMessage] = []
-    if not raw or raw[0].role != MessageRole.SYSTEM:
-        history.append(_build_system_message(user_id))
+    # Always prepend a FRESH system message with current workspace context.
+    # The stored system message (if any) is stale and skipped below.
+    history.append(_build_system_message(user_id))
     for r in raw:
         if r.role == MessageRole.SYSTEM:
             continue
