@@ -219,6 +219,7 @@ python test_integration.py # Testes de integração
 - ✅ **Clonagem de repositórios privados**: Funciona com GitHub OAuth conectado
 - ✅ **Terminal widget**: Interface de terminal integrado no painel workspace
 - ✅ **Botão Git Pull**: Sincronização fácil com o repositório remoto
+- ✅ **Contexto automático de arquivos**: Todos os arquivos do workspace são automaticamente carregados no contexto do chat
 
 ## 📝 Roadmap
 
