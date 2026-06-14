@@ -66,7 +66,12 @@ from flask import Flask, Response, jsonify, redirect, request, send_from_directo
 from . import db
 from . import workspaces as workspaces_module
 from .config import DATA_DIR, has_api_key, load_config
-from .llm.handle_input import build_context, stream_response
+from .llm.handle_input import (
+    AGENT_BRIDGE_TOOLS,
+    build_context,
+    execute_workspace_tool,
+    stream_response,
+)
 from .llm.providers import DEFAULT_FALLBACK_ID, PROVIDERS, list_providers
 
 app = Flask(__name__, static_folder="static")
@@ -76,12 +81,45 @@ app.config["MAX_CONTENT_LENGTH"] = (
 
 MAX_CHAT_IMAGES = 4
 MAX_CHAT_IMAGE_BYTES = 5 * 1024 * 1024
+MAX_BROWSER_TOOL_TRACE = 20
+MAX_BROWSER_TOOL_RESULT_CHARS = 64 * 1024
 _CHAT_IMAGE_MIMES = {
     "image/png": b"\x89PNG\r\n\x1a\n",
     "image/jpeg": b"\xff\xd8\xff",
     "image/gif": (b"GIF87a", b"GIF89a"),
     "image/webp": b"RIFF",
 }
+
+
+def _validate_browser_tool_trace(raw_trace) -> tuple[list[dict], str | None]:
+    if raw_trace is None:
+        return [], None
+    if not isinstance(raw_trace, list) or len(raw_trace) > MAX_BROWSER_TOOL_TRACE:
+        return [], "invalid tool trace"
+    normalized = []
+    for item in raw_trace:
+        if not isinstance(item, dict):
+            return [], "invalid tool trace"
+        call_id = str(item.get("id") or "")[:128]
+        name = str(item.get("name") or "")[:80]
+        arguments = item.get("arguments") or {}
+        result = str(item.get("result") or "")[:MAX_BROWSER_TOOL_RESULT_CHARS]
+        if (
+            not call_id
+            or name not in AGENT_BRIDGE_TOOLS
+            or not isinstance(arguments, dict)
+        ):
+            return [], "invalid tool trace"
+        normalized.append(
+            {
+                "id": call_id,
+                "name": name,
+                "arguments": arguments,
+                "result": result,
+                "error": bool(item.get("error")),
+            }
+        )
+    return normalized, None
 
 
 def _validate_chat_images(raw_images) -> tuple[list[dict], str | None]:
@@ -1088,6 +1126,9 @@ def session_browser_turn(sid):
 
     if not regenerate and not user_text and not image_meta:
         return jsonify({"error": "empty user message"}), 400
+    tool_trace, trace_error = _validate_browser_tool_trace(data.get("tool_trace"))
+    if trace_error:
+        return jsonify({"error": trace_error}), 400
 
     if not regenerate:
         metadata = {}
@@ -1097,6 +1138,34 @@ def session_browser_turn(sid):
             metadata["web_search"] = True
         db.append_message(sid, "user", user_text, metadata=metadata or None)
         db.auto_title(sid, user_text or "Análise de imagem")
+    for item in tool_trace:
+        serialized = json.dumps(item["arguments"], ensure_ascii=False)
+        db.append_message(
+            sid,
+            "assistant",
+            "",
+            type_="tool_call",
+            tool_calls=[
+                {
+                    "id": item["id"],
+                    "name": item["name"],
+                    "arguments": serialized,
+                }
+            ],
+            metadata={"runtime": "puter-agent"},
+        )
+        db.append_message(
+            sid,
+            "tool",
+            item["result"],
+            type_="tool_result",
+            tool_call_id=item["id"],
+            metadata={
+                "runtime": "puter-agent",
+                "tool_name": item["name"],
+                "error": item["error"],
+            },
+        )
     model = str(data.get("model") or provider.default_model).strip()[:200]
     db.append_message(
         sid,
@@ -1105,6 +1174,57 @@ def session_browser_turn(sid):
         metadata={"runtime": "puter", "model": model},
     )
     return jsonify({"ok": True, "title": db.get_session(sid).title})
+
+
+@app.route("/api/sessions/<sid>/agent-tool", methods=["POST"])
+@login_required
+@rate_limited("chat")
+def session_agent_tool(sid):
+    session = db.get_session_for_user(sid, request.user.id)
+    if not session:
+        return jsonify({"error": "session not found"}), 404
+    if session.trashed:
+        return jsonify({"error": "session is in trash"}), 409
+    data = request.get_json(force=True) or {}
+    provider = PROVIDERS.get(str(data.get("provider") or ""))
+    if not provider or provider.runtime != "puter" or not provider.supports_agent_bridge:
+        return jsonify({"error": "provider does not support the agent bridge"}), 400
+    if data.get("agent_enabled") is not True:
+        return jsonify({"error": "agent mode is not authorized"}), 403
+    name = str(data.get("name") or "").strip()
+    arguments = data.get("arguments") or {}
+    if not isinstance(arguments, dict):
+        return jsonify({"error": "tool arguments must be an object"}), 400
+    if len(json.dumps(arguments, ensure_ascii=False)) > 500_000:
+        return jsonify({"error": "tool arguments are too large"}), 400
+    ctx = build_context(
+        provider_id=DEFAULT_FALLBACK_ID,
+        api_key_override=None,
+        user_id=request.user.id,
+        github_token=request.user.github_access_token,
+    )
+    result = execute_workspace_tool(name, arguments, ctx)
+    is_error = result.startswith(("ERROR:", "SECURITY:"))
+    active = workspaces_module.get_active_workspace(request.user.id)
+    tree_changed = not is_error and name in {
+        "write_file",
+        "edit_file",
+        "mkdir",
+        "delete",
+    }
+    if not is_error and name in {"run_shell", "git"}:
+        tree_changed = True
+    if tree_changed and active:
+        workspaces_module.touch(request.user.id, active.id)
+    return jsonify(
+        {
+            "id": f"puter_{secrets.token_hex(12)}",
+            "name": name,
+            "result": result,
+            "error": is_error,
+            "tree_changed": tree_changed,
+        }
+    )
 
 
 @app.route("/api/sessions/<sid>/clear", methods=["POST"])

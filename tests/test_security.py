@@ -603,6 +603,7 @@ def test_provider_capabilities_include_vision():
     assert providers["openai"]["supports_vision"] is True
     assert providers["puter-gpt-5.4-nano"]["supports_vision"] is True
     assert providers["puter-gpt-5.4-nano"]["supports_tools"] is False
+    assert providers["puter-gpt-5.4-nano"]["supports_agent_bridge"] is True
     assert providers["puter-gpt-5.4-nano"]["runtime"] == "puter"
     assert providers["puter-gpt-5.4-nano"]["model"] == "gpt-5.4-nano"
 
@@ -653,6 +654,144 @@ def test_server_chat_rejects_browser_only_puter_provider():
     )
     assert response.status_code == 400
     assert "must run in the browser" in response.get_json()["error"]
+
+
+def test_puter_agent_bridge_writes_only_to_active_workspace():
+    from stupidex import web, workspaces
+
+    user, token = db.create_user("puter_agent_write", "validpass123")
+    session = db.create_session(
+        user.id, "puter-gpt-5.4-nano", "gpt-5.4-nano"
+    )
+    workspace = workspaces.create_empty(user.id, "agent-project")
+    assert workspaces.set_active_workspace(user.id, workspace.id)
+    client = web.app.test_client()
+    response = client.post(
+        f"/api/sessions/{session.id}/agent-tool",
+        json={
+            "provider": "puter-gpt-5.4-nano",
+            "agent_enabled": True,
+            "name": "write_file",
+            "arguments": {"path": "src/example.txt", "content": "changed"},
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    assert response.get_json()["error"] is False
+    workspace_path = workspaces.workspace_path(user.id, workspace.id)
+    assert (workspace_path / "src" / "example.txt").read_text() == "changed"
+
+
+def test_puter_agent_bridge_requires_explicit_mode_authorization():
+    from stupidex import web
+
+    user, token = db.create_user("puter_agent_denied", "validpass123")
+    session = db.create_session(
+        user.id, "puter-gpt-5.4-nano", "gpt-5.4-nano"
+    )
+    response = web.app.test_client().post(
+        f"/api/sessions/{session.id}/agent-tool",
+        json={
+            "provider": "puter-gpt-5.4-nano",
+            "agent_enabled": False,
+            "name": "list_dir",
+            "arguments": {"path": "."},
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 403
+
+
+def test_puter_agent_bridge_keeps_github_token_server_side(monkeypatch):
+    from stupidex import web, workspaces
+
+    user, token = db.create_user("puter_agent_push", "validpass123")
+    db.update_github_connection(user.id, "github-write-token", "alice", "")
+    session = db.create_session(
+        user.id, "puter-gpt-5.4-nano", "gpt-5.4-nano"
+    )
+    workspace = workspaces.create_empty(user.id, "push-project")
+    assert workspaces.set_active_workspace(user.id, workspace.id)
+    captured = {}
+
+    def fake_execute(name, arguments, ctx):
+        captured.update(name=name, arguments=arguments, token=ctx.github_token)
+        return "[exit 0]"
+
+    monkeypatch.setattr(web, "execute_workspace_tool", fake_execute)
+    response = web.app.test_client().post(
+        f"/api/sessions/{session.id}/agent-tool",
+        json={
+            "provider": "puter-gpt-5.4-nano",
+            "agent_enabled": True,
+            "name": "git",
+            "arguments": {"args": "push origin HEAD"},
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    assert captured == {
+        "name": "git",
+        "arguments": {"args": "push origin HEAD"},
+        "token": "github-write-token",
+    }
+    assert "github-write-token" not in response.get_data(as_text=True)
+
+
+def test_puter_agent_bridge_blocks_destructive_git_commands():
+    from stupidex.llm.handle_input import AgentContext, execute_workspace_tool
+
+    ctx = AgentContext(
+        session_id="test",
+        provider_id="deepseek-chat",
+        api_key="",
+        model="deepseek-chat",
+        base_url=None,
+        user_id="missing-user",
+    )
+    result = execute_workspace_tool("git", {"args": "reset --hard HEAD"}, ctx)
+    assert result.startswith("SECURITY:")
+
+
+def test_browser_puter_turn_persists_agent_tool_trace():
+    from stupidex import web
+
+    user, token = db.create_user("puter_agent_trace", "validpass123")
+    session = db.create_session(
+        user.id, "puter-gpt-5.4-nano", "gpt-5.4-nano"
+    )
+    response = web.app.test_client().post(
+        f"/api/sessions/{session.id}/browser-turn",
+        json={
+            "provider": "puter-gpt-5.4-nano",
+            "message": "edite o arquivo",
+            "response": "Arquivo editado.",
+            "tool_trace": [
+                {
+                    "id": "puter_test_call",
+                    "name": "edit_file",
+                    "arguments": {
+                        "path": "app.js",
+                        "old_text": "a",
+                        "new_text": "b",
+                    },
+                    "result": "OK: edited",
+                    "error": False,
+                }
+            ],
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    messages = db.get_messages(session.id)
+    assert [message.role for message in messages] == [
+        "user",
+        "assistant",
+        "tool",
+        "assistant",
+    ]
+    assert messages[1].tool_calls[0]["name"] == "edit_file"
+    assert messages[2].tool_call_id == "puter_test_call"
 
 
 def test_chat_image_binary_is_not_persisted():

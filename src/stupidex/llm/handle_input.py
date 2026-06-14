@@ -10,6 +10,8 @@ Key properties:
 
 import json
 import logging
+import os
+import shlex
 import threading
 import traceback
 from collections.abc import Generator
@@ -498,6 +500,23 @@ _DEFAULT_WD_TOOLS = {
     "delete",
 }
 _CWD_TOOLS = {"run_shell", "git"}
+AGENT_BRIDGE_TOOLS = _DEFAULT_WD_TOOLS | _CWD_TOOLS
+AGENT_BRIDGE_GIT_SUBCOMMANDS = {
+    "status",
+    "log",
+    "diff",
+    "show",
+    "ls-files",
+    "ls-tree",
+    "rev-parse",
+    "add",
+    "commit",
+    "push",
+    "pull",
+    "fetch",
+    "remote",
+    "branch",
+}
 
 
 def _resolve_working_dir(args: dict, user_id: str = "") -> None:
@@ -544,6 +563,33 @@ def _execute_tool(name: str, args: dict, ctx: AgentContext) -> str:
     if fn is None:
         return f"ERROR: unknown tool '{name}'"
     return fn(args)
+
+
+def execute_workspace_tool(name: str, args: dict, ctx: AgentContext) -> str:
+    """Execute one model-requested tool inside the authenticated user's workspace."""
+    if name not in AGENT_BRIDGE_TOOLS:
+        return f"SECURITY: tool '{name}' is not available to the workspace agent"
+    if not isinstance(args, dict):
+        return "ERROR: tool arguments must be an object"
+    normalized = dict(args)
+    if name == "run_shell" and str(normalized.get("command") or "").lstrip().lower().startswith(
+        "git "
+    ):
+        return "SECURITY: use the git tool for repository operations"
+    if name == "git":
+        try:
+            git_args = shlex.split(
+                str(normalized.get("args") or ""), posix=os.name != "nt"
+            )
+        except ValueError:
+            return "ERROR: invalid git arguments"
+        if not git_args or git_args[0] not in AGENT_BRIDGE_GIT_SUBCOMMANDS:
+            return "SECURITY: git subcommand is not available to the workspace agent"
+    if name in _DEFAULT_WD_TOOLS:
+        _resolve_working_dir(normalized, ctx.user_id)
+    else:
+        _resolve_cwd(normalized, ctx.user_id)
+    return _execute_tool(name, normalized, ctx)
 
 
 def _litellm_kwargs(ctx: AgentContext) -> dict:

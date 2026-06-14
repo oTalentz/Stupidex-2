@@ -18,6 +18,7 @@ class ProviderConfig:
     needs_api_key: bool = False
     supports_vision: bool = False
     supports_tools: bool = True  # Whether the model supports function/tool calling
+    supports_agent_bridge: bool = False
     runtime: str = "server"
     description: str = ""
 
@@ -100,8 +101,9 @@ PROVIDERS: dict[str, ProviderConfig] = {
         needs_api_key=False,
         supports_vision=True,
         supports_tools=False,
+        supports_agent_bridge=True,
         runtime="puter",
-        description="Mistral via Puter.com — contexto anexado, sem ferramentas locais",
+        description="Mistral via Puter.com — agente de código via workspace seguro",
     ),
     "puter-gpt-5.4-nano": ProviderConfig(
         id="puter-gpt-5.4-nano",
@@ -111,8 +113,9 @@ PROVIDERS: dict[str, ProviderConfig] = {
         needs_api_key=False,
         supports_vision=True,
         supports_tools=False,
+        supports_agent_bridge=True,
         runtime="puter",
-        description="GPT-5.4 Nano com visão e contexto anexado via Puter.js",
+        description="GPT-5.4 Nano com visão e agente de código via Puter.js",
     ),
 }
 
@@ -136,6 +139,7 @@ def list_providers() -> list[dict]:
             "needs_api_key": p.needs_api_key,
             "supports_vision": p.supports_vision,
             "supports_tools": p.supports_tools,
+            "supports_agent_bridge": p.supports_agent_bridge,
             "runtime": p.runtime,
             "api_key_env": p.api_key_env,
             "description": p.description,
