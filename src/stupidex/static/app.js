@@ -40,6 +40,8 @@ const els = {
   workspaceList: $("workspace-list"),
   treeContainer: $("tree-container"),
   refreshWs: $("ws-refresh"),
+  workspaceUtilityTrigger: $("workspace-utility-trigger"),
+  workspaceUtilityMenu: $("workspace-utility-menu"),
   gitPullBtn: $("ws-git-pull"),
   uploadBtn: $("upload-btn"),
   cloneBtn: $("clone-btn"),
@@ -284,6 +286,47 @@ function currentModelSupportsTools() {
     provider?.supports_tools ||
       (provider?.supports_agent_bridge && state.agentModeEnabled),
   );
+}
+
+function mountWorkspaceUtilityMenu() {
+  if (!els.workspaceUtilityMenu || !els.workspaceUtilityTrigger) return;
+  const topbarLeft = document.querySelector(".topbar-left");
+  if (topbarLeft && els.railWorkspace) {
+    els.railWorkspace.classList.add("mobile-workspace-trigger");
+    topbarLeft.prepend(els.railWorkspace);
+  }
+  const actions = [
+    els.newChatBtn,
+    els.railTrash,
+    els.userProfileBanner,
+    els.openSettings,
+    els.logoutBtn,
+  ].filter(Boolean);
+  for (const action of actions) {
+    action.classList.add("workspace-utility-action");
+    els.workspaceUtilityMenu.appendChild(action);
+  }
+  const closeMenu = () => {
+    els.workspaceUtilityMenu.classList.add("hidden");
+    els.workspaceUtilityTrigger.setAttribute("aria-expanded", "false");
+  };
+  els.workspaceUtilityTrigger.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const opening = els.workspaceUtilityMenu.classList.contains("hidden");
+    els.workspaceUtilityMenu.classList.toggle("hidden", !opening);
+    els.workspaceUtilityTrigger.setAttribute("aria-expanded", String(opening));
+  });
+  els.workspaceUtilityMenu.addEventListener("click", (event) => {
+    if (event.target.closest("button, .user-profile-banner")) closeMenu();
+  });
+  document.addEventListener("click", (event) => {
+    if (
+      !els.workspaceUtilityMenu.contains(event.target) &&
+      !els.workspaceUtilityTrigger.contains(event.target)
+    ) {
+      closeMenu();
+    }
+  });
 }
 
 function fileToDataUrl(file) {
@@ -3517,6 +3560,7 @@ function showGoogleAuthResult() {
 }
 
 (async function init() {
+  mountWorkspaceUtilityMenu();
   showGoogleAuthResult();
   showGithubCallbackResult();
   if (await checkAuth()) {

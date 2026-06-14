@@ -66,9 +66,9 @@
             hljs.configure({ ignoreUnescapedHTML: true });
         </script>
 
-        <link rel="stylesheet" href="/static/style.css?v=22" />
+        <link rel="stylesheet" href="/static/style.css?v=23" />
     </head>
-    <body>
+    <body class="reference-interface">
         <!-- =========================================================
          LOGIN SCREEN
          ========================================================= -->
@@ -220,14 +220,19 @@
             <!-- Pane 2: Workspace & Files (renamed from old sidebar/ws panel) -->
             <aside id="workspace-panel" class="workspace-panel">
                 <div class="workspace-header">
-                    <div class="workspace-heading">
-                        <p class="pane-eyebrow">Workspace</p>
-                        <div class="workspace-title-wrap">
-                            <h2 class="workspace-title">Stupidex</h2>
-                            <span
-                                id="ws-files-count"
-                                class="ws-count-badge"
-                            ></span>
+                    <div class="workspace-brand">
+                        <div class="workspace-brand-mark" aria-hidden="true">S</div>
+                        <div class="workspace-heading">
+                            <div class="workspace-title-wrap">
+                                <h2 class="workspace-title">Stupidex</h2>
+                            </div>
+                            <p class="workspace-subtitle">
+                                Workspace
+                                <span
+                                    id="ws-files-count"
+                                    class="ws-count-badge"
+                                ></span>
+                            </p>
                         </div>
                     </div>
                     <div class="workspace-header-actions">
@@ -245,6 +250,19 @@
                         >
                             <i class="ph ph-arrows-clockwise"></i>
                         </button>
+                        <button
+                            id="workspace-utility-trigger"
+                            class="icon-btn workspace-utility-trigger"
+                            title="Menu do workspace"
+                            aria-label="Menu do workspace"
+                            aria-expanded="false"
+                        >
+                            <i class="ph ph-caret-up-down"></i>
+                        </button>
+                        <div
+                            id="workspace-utility-menu"
+                            class="workspace-utility-menu hidden"
+                        ></div>
                     </div>
                 </div>
 
@@ -290,7 +308,7 @@
                         <div class="workspace-section-title">
                             <span>
                                 <i class="ph ph-upload-simple"></i>
-                                Contexto ativo
+                                Workspaces
                             </span>
                             <span
                                 id="ws-active-badge"

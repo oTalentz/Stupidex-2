@@ -1567,6 +1567,657 @@ body,
     background: rgba(34, 197, 94, 0.1);
     box-shadow: inset 0 0 0 1px rgba(34, 197, 94, 0.25);
 }
+
+/* ============================================================
+   Reference interface - New-Interface/Page_1
+   ============================================================ */
+body.reference-interface {
+    --nav-width: 0px;
+    --workspace-width: 280px;
+    --topbar-height: 56px;
+    --research-width: 340px;
+    --bg-main: #09090b;
+    --bg-panel: #09090b;
+    --bg-card: #121214;
+    --bg-input: #18181b;
+    --border-soft: rgba(255, 255, 255, 0.045);
+    --border: rgba(255, 255, 255, 0.085);
+    --border-strong: rgba(255, 255, 255, 0.14);
+    --text-main: #e4e4e7;
+    --text: #a1a1aa;
+    --text-muted: #71717a;
+    font-family: "Inter", "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.reference-interface .app-shell,
+.reference-interface .app-shell.research-open {
+    grid-template-columns: var(--workspace-width) minmax(0, 1fr) 0 0;
+    background: #09090b;
+}
+
+.reference-interface .app-shell.research-open {
+    grid-template-columns: var(--workspace-width) minmax(0, 1fr) 0 var(--research-width);
+}
+
+.reference-interface .nav-rail {
+    display: none;
+}
+
+.reference-interface .workspace-panel {
+    grid-column: 1;
+    background: #09090b;
+    border-right-color: rgba(255, 255, 255, 0.07);
+    box-shadow: none;
+}
+
+.reference-interface .workspace-header {
+    position: relative;
+    height: 56px;
+    padding: 0 14px 0 16px;
+    border-bottom-color: rgba(255, 255, 255, 0.07);
+}
+
+.reference-interface .workspace-brand {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 11px;
+}
+
+.reference-interface .workspace-brand-mark {
+    width: 28px;
+    height: 28px;
+    flex: 0 0 28px;
+    display: grid;
+    place-items: center;
+    border-radius: 4px;
+    background: #f4f4f5;
+    color: #18181b;
+    font-size: 16px;
+    font-weight: 750;
+    line-height: 1;
+}
+
+.reference-interface .workspace-heading {
+    min-width: 0;
+    display: grid;
+    gap: 1px;
+}
+
+.reference-interface .workspace-title {
+    color: #f4f4f5;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+.reference-interface .workspace-subtitle {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: #52525b;
+    font-size: 9.5px;
+    font-weight: 650;
+    letter-spacing: 0.08em;
+    line-height: 1;
+    text-transform: uppercase;
+}
+
+.reference-interface .ws-count-badge {
+    padding: 0;
+    color: #71717a;
+    background: transparent;
+    font-size: 9.5px;
+}
+
+.reference-interface .workspace-header-actions {
+    position: relative;
+    gap: 1px;
+}
+
+.reference-interface .workspace-header-actions .icon-btn {
+    width: 27px;
+    height: 27px;
+    border-radius: 7px;
+    color: #71717a;
+}
+
+.reference-interface .workspace-utility-menu {
+    position: absolute;
+    top: 35px;
+    right: 0;
+    z-index: 100;
+    width: 186px;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+    padding: 7px;
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    background: rgba(18, 18, 20, 0.98);
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(18px);
+}
+
+.reference-interface .workspace-utility-action,
+.reference-interface .workspace-utility-menu .nav-rail-btn,
+.reference-interface .workspace-utility-menu .user-profile-banner {
+    width: 30px;
+    height: 30px;
+    min-width: 30px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 7px;
+    display: grid;
+    place-items: center;
+    color: #a1a1aa;
+    background: transparent;
+    box-shadow: none;
+}
+
+.reference-interface .workspace-utility-menu .nav-rail-btn:hover,
+.reference-interface .workspace-utility-menu .user-profile-banner:hover {
+    color: #f4f4f5;
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.reference-interface .workspace-content {
+    padding: 16px;
+    gap: 24px;
+    background: #09090b;
+}
+
+.reference-interface .workspace-actions {
+    order: 1;
+    gap: 7px;
+    padding: 0;
+}
+
+.reference-interface .workspace-actions::before {
+    content: "Contexto ativo";
+    margin-bottom: 5px;
+    color: #71717a;
+    font-size: 10px;
+    font-weight: 650;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.reference-interface .workspace-action-title {
+    display: none;
+}
+
+.reference-interface .repo-connected {
+    min-height: 62px;
+    padding: 11px 12px;
+    border: 1px solid #27272a;
+    border-radius: 8px;
+    background: rgba(24, 24, 27, 0.58);
+    box-shadow: none;
+}
+
+.reference-interface .repo-connected:hover {
+    border-color: #3f3f46;
+    background: rgba(24, 24, 27, 0.78);
+}
+
+.reference-interface .repo-connected-icon {
+    color: #818cf8;
+    background: transparent;
+}
+
+.reference-interface .repo-connected-copy strong {
+    color: #d4d4d8;
+    font-size: 12px;
+}
+
+.reference-interface .repo-connected-copy span,
+.reference-interface .repo-connected-copy small {
+    color: #52525b;
+    font-size: 10px;
+}
+
+.reference-interface .ws-action {
+    min-height: 36px;
+    justify-content: center;
+    padding: 7px 11px;
+    border-radius: 8px;
+    color: #a1a1aa;
+    font-size: 11.5px;
+    font-weight: 500;
+}
+
+.reference-interface .ws-action.primary,
+.reference-interface .ws-action.outline {
+    border: 1px dashed #3f3f46;
+    background: transparent;
+}
+
+.reference-interface .ws-action.primary:hover,
+.reference-interface .ws-action.outline:hover {
+    color: #e4e4e7;
+    border-color: #71717a;
+    background: rgba(255, 255, 255, 0.025);
+}
+
+.reference-interface .ws-action.ghost {
+    min-height: 30px;
+    justify-content: flex-start;
+    padding-inline: 8px;
+    color: #71717a;
+}
+
+.reference-interface .workspace-section {
+    padding: 0;
+    border: 0;
+    background: transparent;
+}
+
+.reference-interface .workspace-section:has(#workspace-list) {
+    order: 2;
+}
+
+.reference-interface .workspace-section:has(#tree-container) {
+    order: 3;
+    min-height: 160px;
+}
+
+.reference-interface .workspace-section:has(#session-list) {
+    order: 4;
+}
+
+.reference-interface .workspace-section:has(.shell-wrap) {
+    order: 5;
+    margin-top: auto;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.reference-interface .workspace-section-title {
+    margin-bottom: 8px;
+    color: #71717a;
+    font-size: 10px;
+    font-weight: 650;
+    letter-spacing: 0.08em;
+}
+
+.reference-interface .workspace-section-title i {
+    display: none;
+}
+
+.reference-interface .workspace-section-hint {
+    display: none;
+}
+
+.reference-interface .workspace-list {
+    gap: 3px;
+}
+
+.reference-interface .workspace-item,
+.reference-interface .session-item {
+    min-height: 32px;
+    padding: 6px 8px;
+    border: 0;
+    border-radius: 7px;
+    color: #71717a;
+    background: transparent;
+    font-size: 11px;
+}
+
+.reference-interface .workspace-item.active,
+.reference-interface .session-item.active {
+    color: #d4d4d8;
+    background: rgba(99, 102, 241, 0.11);
+    box-shadow: inset 2px 0 #6366f1;
+}
+
+.reference-interface .tree-container {
+    max-height: none;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font-family: var(--font-mono);
+    font-size: 11px;
+}
+
+.reference-interface .tree-node {
+    min-height: 26px;
+    padding-block: 4px;
+    border-radius: 5px;
+    color: #a1a1aa;
+}
+
+.reference-interface .tree-node:hover {
+    color: #e4e4e7;
+    background: rgba(255, 255, 255, 0.035);
+}
+
+.reference-interface .shell-wrap {
+    min-height: 38px;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.22);
+}
+
+.reference-interface .shell-output:empty {
+    display: none;
+}
+
+.reference-interface .shell-input-row {
+    min-height: 38px;
+    padding: 6px 8px;
+    border: 0;
+}
+
+.reference-interface .shell-input,
+.reference-interface .shell-prompt {
+    font-size: 10.5px;
+}
+
+.reference-interface .main-area {
+    grid-column: 2;
+    background: #09090b;
+}
+
+.reference-interface .topbar {
+    height: 56px;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 12px;
+    padding: 0 24px;
+    border-bottom-color: rgba(255, 255, 255, 0.07);
+    background: rgba(18, 18, 20, 0.76);
+    backdrop-filter: blur(14px);
+}
+
+.reference-interface .pane-eyebrow {
+    display: none;
+}
+
+.reference-interface .topbar-title {
+    max-width: 420px;
+    color: #f4f4f5;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.reference-interface #rail-workspace {
+    display: none;
+}
+
+.reference-interface .topbar-meta {
+    color: #52525b;
+    font-size: 10px;
+}
+
+.reference-interface .topbar-center {
+    justify-self: end;
+}
+
+.reference-interface .model-switcher {
+    width: 162px;
+    min-width: 162px;
+    padding: 0;
+    border: 1px solid #3f3f46;
+    border-radius: 8px;
+    background: rgba(24, 24, 27, 0.82);
+}
+
+.reference-interface .model-select-trigger {
+    height: 42px;
+    padding: 0 11px;
+    border-radius: 8px;
+}
+
+.reference-interface .model-select-copy strong {
+    font-size: 11.5px;
+}
+
+.reference-interface .model-select-copy small {
+    font-size: 8px;
+    text-transform: uppercase;
+}
+
+.reference-interface .topbar-action,
+.reference-interface .research-toggle {
+    height: 34px;
+    border-radius: 7px;
+    border-color: #3f3f46;
+    background: rgba(24, 24, 27, 0.62);
+}
+
+.reference-interface .messages {
+    padding: 0 24px 20px;
+    background: #09090b;
+}
+
+.reference-interface .messages-inner {
+    max-width: 760px;
+    gap: 30px;
+    padding: 32px 0 56px;
+}
+
+.reference-interface .message {
+    gap: 14px;
+}
+
+.reference-interface .message.user .avatar {
+    display: none;
+}
+
+.reference-interface .avatar.assistant {
+    width: 30px;
+    height: 30px;
+    border-radius: 5px;
+    border-color: rgba(99, 102, 241, 0.2);
+    background: rgba(99, 102, 241, 0.1);
+    box-shadow: none;
+}
+
+.reference-interface .message.user .bubble {
+    max-width: 82%;
+    padding: 13px 18px;
+    border: 1px solid #27272a;
+    border-radius: 15px 4px 15px 15px;
+    color: #d4d4d8;
+    background: rgba(39, 39, 42, 0.42);
+    box-shadow: none;
+}
+
+.reference-interface .message.assistant .bubble {
+    flex: 1;
+    max-width: calc(100% - 44px);
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    color: #d4d4d8;
+    background: transparent;
+    box-shadow: none;
+    font-size: 13.5px;
+    line-height: 1.62;
+}
+
+.reference-interface .bubble pre {
+    margin: 10px 0 16px;
+    border: 1px solid #27272a;
+    border-radius: 10px;
+    background: #0d0d0f;
+    box-shadow: 0 8px 24px -16px rgba(0, 0, 0, 0.7);
+}
+
+.reference-interface .bubble pre code {
+    padding: 15px 16px;
+    font-size: 11.5px;
+    line-height: 1.65;
+}
+
+.reference-interface .bubble code:not(pre code) {
+    border-radius: 4px;
+    color: #c4b5fd;
+    background: #27272a;
+}
+
+.reference-interface .tool-block {
+    border-radius: 9px;
+    border-color: #27272a;
+    background: #0d0d0f;
+}
+
+.reference-interface .composer {
+    padding: 42px 20px 14px;
+    background: linear-gradient(180deg, transparent, #09090b 34%, #09090b 100%);
+}
+
+.reference-interface .composer-form {
+    max-width: 768px;
+}
+
+.reference-interface .composer-input-wrap {
+    overflow: visible;
+    border: 1px solid #3f3f46;
+    border-radius: 18px;
+    background: #18181b;
+    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.46);
+}
+
+.reference-interface .composer-input-wrap:focus-within {
+    border-color: #52525b;
+    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.5);
+}
+
+.reference-interface .composer-input {
+    min-height: 58px;
+    max-height: 180px;
+    padding: 17px 18px 5px;
+    color: #e4e4e7;
+    font-size: 13px;
+}
+
+.reference-interface .composer-bottom {
+    min-height: 44px;
+    padding: 4px 8px 8px 12px;
+}
+
+.reference-interface .composer-icon-btn,
+.reference-interface .composer-view-project,
+.reference-interface .composer-agent-btn {
+    height: 28px;
+    border-radius: 7px;
+    color: #71717a;
+}
+
+.reference-interface .composer-context-stat {
+    display: none;
+}
+
+.reference-interface .composer-send {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    color: #18181b;
+    background: #f4f4f5;
+    box-shadow: none;
+}
+
+.reference-interface .composer-send:hover {
+    color: #09090b;
+    background: #ffffff;
+    transform: translateY(-1px);
+}
+
+.reference-interface .vision-indicator-corner {
+    top: auto;
+    right: 52px;
+    bottom: 10px;
+    min-height: 28px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    color: #a5b4fc;
+    background: rgba(99, 102, 241, 0.13);
+}
+
+.reference-interface .status:not(.hidden) {
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 10px);
+    z-index: 5;
+    width: max-content;
+    max-width: min(620px, calc(100vw - 48px));
+    padding: 6px 12px;
+    border: 1px solid rgba(245, 158, 11, 0.23);
+    border-radius: 999px;
+    color: #d6a52e;
+    background: rgba(67, 48, 5, 0.72);
+    font-size: 9.5px;
+    transform: translateX(-50%);
+}
+
+.reference-interface .composer-hint {
+    margin-top: 10px;
+    color: #3f3f46;
+    font-size: 9px;
+}
+
+.reference-interface .research-panel {
+    border-left-color: rgba(255, 255, 255, 0.07);
+    background: #09090b;
+}
+
+:root[data-theme="light"] .reference-interface,
+:root[data-theme="light"] body.reference-interface {
+    --bg-main: #fafafa;
+    --bg-panel: #ffffff;
+    --bg-card: #f4f4f5;
+    --bg-input: #ffffff;
+    --text-main: #18181b;
+    --text: #52525b;
+    --text-muted: #71717a;
+}
+
+@media (max-width: 900px) {
+    .reference-interface .app-shell,
+    .reference-interface .app-shell.research-open {
+        grid-template-columns: 1fr;
+    }
+
+    .reference-interface .workspace-panel {
+        position: fixed;
+        inset: 0 auto 0 0;
+        width: min(280px, 88vw);
+        z-index: 80;
+        transform: translateX(-100%);
+        transition: transform 0.2s ease;
+    }
+
+    .reference-interface .workspace-panel.mobile-open {
+        transform: translateX(0);
+    }
+
+    .reference-interface .main-area {
+        grid-column: 1;
+    }
+
+    .reference-interface .topbar {
+        padding-inline: 12px;
+    }
+
+    .reference-interface #rail-workspace.mobile-workspace-trigger {
+        width: 32px;
+        height: 32px;
+        flex: 0 0 32px;
+        display: grid;
+        place-items: center;
+        border: 1px solid #3f3f46;
+        border-radius: 7px;
+        color: #a1a1aa;
+        background: rgba(24, 24, 27, 0.72);
+    }
+
+    .reference-interface .model-switcher {
+        width: 150px;
+        min-width: 150px;
+    }
+}
 .composer-attach-divider {
     width: 1px;
     height: 16px;
