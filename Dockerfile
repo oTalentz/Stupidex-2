@@ -14,6 +14,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY src/ ./src/
 COPY pyproject.toml ./
+COPY gunicorn.conf.py ./
 
 ENV PYTHONPATH=/app/src
 ENV STUPIDEX_HOST=0.0.0.0
@@ -21,6 +22,7 @@ ENV STUPIDEX_PORT=5000
 ENV STUPIDEX_DEBUG=0
 ENV STUPIDEX_DATA_DIR=/data
 ENV STUPIDEX_ENABLE_SHELL=1
+ENV STUPIDEX_SERVER=1
 
 # GitHub OAuth for private repository cloning (optional)
 # Uncomment and set these to enable GitHub integration:
@@ -33,10 +35,7 @@ USER stupidex
 
 EXPOSE 5000
 
-CMD ["gunicorn", "stupidex.web:app", \
-     "--bind", "0.0.0.0:5000", \
-     "--workers", "1", \
-     "--timeout", "120", \
-     "--threads", "8", \
-     "--access-logfile", "-", \
-     "--error-logfile", "-"]
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=15s \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/health')" || exit 1
+
+CMD ["gunicorn", "-c", "gunicorn.conf.py", "stupidex.web:app"]

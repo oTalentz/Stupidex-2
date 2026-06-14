@@ -4,6 +4,7 @@ Endpoints:
   GET  /                                  → SPA
   GET  /api/health                        → liveness probe
 
+  POST /api/auth/enter                    → {username, password} → {user, token} (create-or-login)
   POST /api/auth/register                 → {username, password} → {user, token}
   POST /api/auth/login                    → {username, password} → {user, token}
   POST /api/auth/logout                   → invalidate token (login_required)
@@ -44,6 +45,7 @@ Endpoints:
 import base64
 import binascii
 import json
+import logging
 import os
 import queue
 import re
@@ -73,6 +75,14 @@ from .llm.handle_input import (
     stream_response,
 )
 from .llm.providers import DEFAULT_FALLBACK_ID, PROVIDERS, list_providers
+
+# Try to import structured logging; fall back to basic logging.
+try:
+    from .logging_config import setup_logging
+
+    _structured_logger = setup_logging()
+except Exception:
+    _structured_logger = None
 
 app = Flask(__name__, static_folder="static")
 app.config["MAX_CONTENT_LENGTH"] = (
@@ -170,9 +180,15 @@ def _validate_chat_images(raw_images) -> tuple[list[dict], str | None]:
     return normalized, None
 
 
-# CORS: when STUPIDEX_CORS is unset, default to "same-origin only" but allow
-# a safe default in development. Set to a comma-separated list of origins or "*" to allow any.
-_cors_env = os.environ.get("STUPIDEX_CORS", "*").strip()
+# CORS: when STUPIDEX_CORS is unset, default to same-origin only in production
+# and "*" in development. Set to a comma-separated list of origins to allow any.
+_is_production = (
+    os.environ.get("FLASK_ENV") == "production"
+    or os.environ.get("RAILWAY_ENV") == "production"
+    or os.environ.get("STUPIDEX_SERVER") == "1"
+)
+_cors_default = "" if _is_production else "*"
+_cors_env = os.environ.get("STUPIDEX_CORS", _cors_default).strip()
 CORS_ORIGINS = (
     [o.strip() for o in _cors_env.split(",") if o.strip()] if _cors_env else []
 )
@@ -251,6 +267,22 @@ def _load_or_create_secret() -> bytes:
 
 app.secret_key = _load_or_create_secret()
 
+# ============================================================
+# Session-level locking — prevents concurrent writes to the
+# same session (fixes the "messages not queued" bug).
+# ============================================================
+_SESSION_LOCKS: dict[str, threading.Lock] = {}
+_SESSION_LOCKS_GUARD = threading.Lock()
+
+
+def _session_lock(session_id: str) -> threading.Lock:
+    """Return (and lazily create) a per-session lock."""
+    with _SESSION_LOCKS_GUARD:
+        if session_id not in _SESSION_LOCKS:
+            _SESSION_LOCKS[session_id] = threading.Lock()
+        return _SESSION_LOCKS[session_id]
+
+
 # In-memory rate limiter (per IP+user). Sliding window.
 _RL_LOCK = threading.Lock()
 _RL_BUCKETS: dict[str, list[float]] = defaultdict(list)
@@ -261,6 +293,28 @@ _RL_RULES: list[tuple[str, int, float]] = [
     ("upload", 20, 60.0),  # upload, clone
     ("default", 240, 60.0),  # everything else
 ]
+
+
+# Periodic cleanup of stale rate limiter buckets to prevent memory leaks
+# in long-running production servers.
+def _rate_limit_cleanup() -> None:
+    """Background thread: clean stale buckets every 5 minutes."""
+    while True:
+        time.sleep(300)
+        now = time.time()
+        max_window = max(rule[2] for rule in _RL_RULES)
+        with _RL_LOCK:
+            stale = [
+                k
+                for k, values in _RL_BUCKETS.items()
+                if not values or values[-1] < now - max_window
+            ]
+            for k in stale:
+                _RL_BUCKETS.pop(k, None)
+
+
+_cleanup_thread = threading.Thread(target=_rate_limit_cleanup, daemon=True)
+_cleanup_thread.start()
 
 
 def _rate_limit_check(bucket: str, identity: str) -> bool:
@@ -475,11 +529,26 @@ def _force_utf8_static(resp):
 
 @app.route("/api/health")
 def health():
+    """Liveness + readiness probe. Returns 200 when the app is healthy."""
+    db_ok = False
+    try:
+        with db.db_cursor() as cur:
+            cur.execute("SELECT 1")
+            db_ok = True
+    except Exception:
+        pass
+
+    # Count active streams (for monitoring)
+    active_streams = len(getattr(app, "_stream_instances", {}))
+
     return jsonify(
         {
             "ok": True,
             "ts": time.time(),
-            "v": "oauth-fix-v3",
+            "v": "1.0.0",
+            "db_ok": db_ok,
+            "shadow_mode": False,
+            "active_streams": active_streams,
             "integrations": {
                 "github_configured": _github_configured(),
                 "google_configured": bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET),
@@ -1420,47 +1489,62 @@ def _session_chat_impl(sid: str) -> Response:
     if session.trashed:
         return jsonify({"error": "session is in trash"}), 409
 
-    data = request.get_json(force=True) or {}
-    user_msg = (data.get("message") or "").strip()
-    images, image_error = _validate_chat_images(data.get("images"))
-    if image_error:
-        return jsonify({"error": image_error}), 400
-    if not user_msg and not images:
-        return jsonify({"error": "empty message"}), 400
-    if len(user_msg) > 100_000:
-        return jsonify({"error": "message too long (max 100k chars)"}), 400
+    # Serialize concurrent requests to the same session to prevent
+    # race conditions when writing messages to the database.
+    lock = _session_lock(sid)
+    if not lock.acquire(blocking=False):
+        return jsonify({"error": "session is busy — try again shortly"}), 429
+    try:
+        # Re-validate session inside the lock (it could have been trashed).
+        session = db.get_session_for_user(sid, request.user.id)
+        if not session:
+            return jsonify({"error": "session not found"}), 404
+        if session.trashed:
+            return jsonify({"error": "session is in trash"}), 409
 
-    provider_id = data.get("provider") or session.provider
-    provider = PROVIDERS.get(provider_id, PROVIDERS[DEFAULT_FALLBACK_ID])
-    if provider.runtime != "server":
-        return jsonify(
-            {"error": "the selected Puter model must run in the browser"}
-        ), 400
-    if images and not provider.supports_vision:
-        return jsonify(
-            {"error": "the selected model does not support image input"}
-        ), 400
-    user_api_key = request.user.api_key or data.get("api_key")
-    if provider.needs_api_key and not user_api_key and not has_api_key():
-        return jsonify(
-            {
-                "error": "no LLM API key configured. Set DEEPSEEK_API_KEY in the server env, "
-                "or add your own key in Settings."
-            }
-        ), 503
-    ctx = build_context(
-        provider_id=provider_id,
-        api_key_override=user_api_key,
-        user_id=request.user.id,
-        model_override=(data.get("model") or session.model),
-        github_token=request.user.github_access_token,
-    )
-    ctx.web_search_enabled = data.get("web_search") is True
-    ctx.session_id = sid
-    ctx.cancel_event = _claim_stream(sid)
-    if ctx.cancel_event is None:
-        return jsonify({"error": "session is already generating"}), 409
-    return _stream_response(sid, user_msg, ctx, images=images)
+        data = request.get_json(force=True) or {}
+        user_msg = (data.get("message") or "").strip()
+        images, image_error = _validate_chat_images(data.get("images"))
+        if image_error:
+            return jsonify({"error": image_error}), 400
+        if not user_msg and not images:
+            return jsonify({"error": "empty message"}), 400
+        if len(user_msg) > 100_000:
+            return jsonify({"error": "message too long (max 100k chars)"}), 400
+
+        provider_id = data.get("provider") or session.provider
+        provider = PROVIDERS.get(provider_id, PROVIDERS[DEFAULT_FALLBACK_ID])
+        if provider.runtime != "server":
+            return jsonify(
+                {"error": "the selected Puter model must run in the browser"}
+            ), 400
+        if images and not provider.supports_vision:
+            return jsonify(
+                {"error": "the selected model does not support image input"}
+            ), 400
+        user_api_key = request.user.api_key or data.get("api_key")
+        if provider.needs_api_key and not user_api_key and not has_api_key():
+            return jsonify(
+                {
+                    "error": "no LLM API key configured. Set DEEPSEEK_API_KEY in the server env, "
+                    "or add your own key in Settings."
+                }
+            ), 503
+        ctx = build_context(
+            provider_id=provider_id,
+            api_key_override=user_api_key,
+            user_id=request.user.id,
+            model_override=(data.get("model") or session.model),
+            github_token=request.user.github_access_token,
+        )
+        ctx.web_search_enabled = data.get("web_search") is True
+        ctx.session_id = sid
+        ctx.cancel_event = _claim_stream(sid)
+        if ctx.cancel_event is None:
+            return jsonify({"error": "session is already generating"}), 409
+        return _stream_response(sid, user_msg, ctx, images=images)
+    finally:
+        lock.release()
 
 
 def _stream_response(

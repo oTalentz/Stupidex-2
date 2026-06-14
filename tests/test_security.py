@@ -1190,6 +1190,16 @@ def test_grounded_request_keeps_plain_message_without_workspace():
     assert _ground_user_request("olá", "") == "olá"
 
 
+def test_session_lock_prevents_concurrent_chat():
+    """The session lock must serialize concurrent chat requests."""
+    from stupidex import web
+    lock_a = web._session_lock("sess-1")
+    lock_b = web._session_lock("sess-2")
+    lock_c = web._session_lock("sess-1")  # same session as a
+    assert lock_a is lock_c, "same session should return same lock"
+    assert lock_a is not lock_b, "different sessions should have different locks"
+
+
 def cleanup():
     shutil.rmtree(_TMP, ignore_errors=True)
 

@@ -218,9 +218,14 @@ def _connect() -> sqlite3.Connection:
     DB_FILE.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(DB_FILE), check_same_thread=False, timeout=30.0)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
-    conn.execute("PRAGMA synchronous=NORMAL")
+    # Production-hardened SQLite settings:
+    conn.execute("PRAGMA journal_mode=WAL")         # Write-ahead log for concurrent reads
+    conn.execute("PRAGMA foreign_keys=ON")           # Enforce FK constraints
+    conn.execute("PRAGMA synchronous=NORMAL")        # WAL-safe and fast
+    conn.execute("PRAGMA busy_timeout=5000")         # Wait up to 5s on lock
+    conn.execute("PRAGMA cache_size=-8000")           # 8MB page cache
+    conn.execute("PRAGMA temp_store=MEMORY")          # Temp tables in RAM
+    conn.execute("PRAGMA mmap_size=67108864")         # 64MB memory-mapped I/O
     return conn
 
 

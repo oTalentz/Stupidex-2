@@ -9,4 +9,15 @@ dist/
 test_*.py
 DEPLOY.md
 HOSTING.md
+SQUARECLOUD.md
 README.md
+nginx.example.conf
+docker-compose.yml
+.env
+.env.*
+*.bat
+*.vbs
+Logo-Stupidex/
+New-Interface/
+.pytest_cache/
+.ruff_cache/
