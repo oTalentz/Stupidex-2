@@ -110,18 +110,13 @@ def _try_waitress(app, host: str, port: int) -> None:
 
 
 def _try_gunicorn(app, host: str, port: int) -> None:
-    from gunicorn import config as gconfig
-    from gunicorn.app.wsgiapp import WSGIApplication
+    import gunicorn.app.wsgiapp
 
-    cfg = gconfig.Config()
-    cfg.set("bind", f"{host}:{port}")
-    cfg.set("workers", 1)
-    cfg.set("threads", 8)
-    cfg.set("timeout", 120)
-    cfg.set("wsgi_app", "stupidex.web:app")
-    cfg.set("default_proc_name", "stupidex")
     logging.info("Starting gunicorn on %s:%d", host, port)
-    WSGIApplication(cfg).run()
+    gunicorn.app.wsgiapp.WSGIApplication(
+        "%(prog)s -c gunicorn.conf.py -b %(bind)s stupidex.web:app"
+        % {"prog": "gunicorn", "bind": f"{host}:{port}"}
+    ).run()
 
 
 def _try_flask(app, host: str, port: int) -> None:

@@ -33,18 +33,8 @@ cursor = conn.execute('SELECT COUNT(*) FROM users')
 print(f'[health] DB OK — {cursor.fetchone()[0]} users')
 " 2>&1 || echo "[health] WARN: DB check failed"
 
-# Start Gunicorn
+# Start Gunicorn with centralized config
 exec gunicorn \
+  -c gunicorn.conf.py \
   --bind "0.0.0.0:${PORT:-8080}" \
-  --workers "${STUPIDEX_WORKERS:-1}" \
-  --threads "${STUPIDEX_THREADS:-8}" \
-  --worker-class gthread \
-  --timeout "${STUPIDEX_TIMEOUT:-300}" \
-  --max-requests 10000 \
-  --max-requests-jitter 1000 \
-  --access-logfile '-' \
-  --error-logfile '-' \
-  --log-level "${STUPIDEX_LOG_LEVEL:-info}" \
-  --capture-output \
-  --enable-stdio-inheritance \
   stupidex.web:app
