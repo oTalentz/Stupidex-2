@@ -7,6 +7,7 @@ __pycache__/
 venv/
 env/
 *.egg-info/
+**/*.egg-info/
 dist/
 build/
 
@@ -50,6 +51,11 @@ package-lock.json
 .agents/
 .claude/
 .mcp.json
+.aidesigner/
+.amazonq/
+
+# IDE design exports
+design-export/
 
 # Runtime data (should not be in repo)
 *.db
@@ -57,5 +63,3 @@ package-lock.json
 *.db-shm
 .keyvault
 .flask_secret
-.aidesigner/*
-!.aidesigner/.gitkeep
