@@ -5,17 +5,26 @@ set -euo pipefail
 APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$APP_DIR"
 
+# Pre-flight: ensure the package is importable
+echo "[start] Installing stupidex package..."
+pip install -e . --quiet 2>&1 | sed 's/^/[pip] /'
+export PYTHONPATH="${APP_DIR}/src:${PYTHONPATH:-}"
+
+# Pre-flight: verify app can be imported
+echo "[start] Verifying app import..."
+python -c "from stupidex.web import app; print('[ok] stupidex.web:app imported')" || {
+  echo "[FATAL] Cannot import stupidex.web:app — check PYTHONPATH and dependencies"
+  exit 1
+}
+
 # Persistent data directory (Square Cloud persists /data)
 DATA_DIR="${STUPIDEX_DATA_DIR:-${DATA_DIR:-./data}}"
 mkdir -p "$DATA_DIR"/{workspaces,db,logs,tmp}
 export STUPIDEX_DATA_DIR="$DATA_DIR"
 
 # Verify/default env vars
-# FRONTEND_URL: usado pelo OAuth redirect — opcional em modo local
 : "${FRONTEND_URL:=https://${HOSTNAME:-localhost}}"
-# NVIDIA_API_KEY: se não definida, usa a chave embutida em providers.py
 : "${NVIDIA_API_KEY:=}"
-# Shell: auto-approve por padrão (mude para "ask" para exigir confirmação)
 : "${STUPIDEX_ENABLE_SHELL:=1}"
 : "${STUPIDEX_SHELL_APPROVAL_MODE:=auto}"
 

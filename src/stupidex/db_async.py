@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 _engine = None
 _SessionLocal = None
 
-SQLITE_PATH = os.environ.get("STUPIDEX_DATA_DIR", str(Path.home() / ".stupidex")) / Path("stupidex.db")
+SQLITE_PATH = Path(os.environ.get("STUPIDEX_DATA_DIR", str(Path.home() / ".stupidex"))) / Path("stupidex.db")
 
 
 def get_database_url() -> str:
