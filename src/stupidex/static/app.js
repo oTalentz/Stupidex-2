@@ -29,7 +29,6 @@ const USER_AVATAR_HTML = `<div class="avatar user">U</div>`;
 const $ = (id) => document.getElementById(id);
 
 const els = {
-  sidebar: $("sidebar"),
   sessionList: $("session-list"),
   newChatBtn: $("new-chat-btn"),
   openSettings: $("open-settings"),
@@ -64,9 +63,6 @@ const els = {
   stopBtn: $("stop-btn"),
   status: $("status"),
 
-  providerBadge: $("provider-badge"),
-  modelBadge: $("model-badge"),
-
   settingsModal: $("settings-modal"),
   closeSettings: $("close-settings"),
   cancelSettings: $("cancel-settings"),
@@ -78,6 +74,8 @@ const els = {
   apiKeyHint: $("api-key-hint"),
   toggleKeyBtn: $("toggle-key-visibility"),
   modelInput: $("model-input"),
+  shellApprovalToggle: $("shell-approval-toggle"),
+  shellApprovalLabel: $("shell-approval-label"),
 
   themeToggle: $("theme-toggle"),
 
@@ -150,7 +148,7 @@ const els = {
   },
   composerAttach: $("composer-attach"),
   composerSearch: $("composer-search"),
-  composerAgent: $("composer-agent"),
+  composerModes: $("composer-modes"),
   composerImageInput: $("composer-image-input"),
   composerImagePreview: $("composer-image-preview"),
   composerInputWrap: $("composer-input-wrap"),
@@ -192,9 +190,10 @@ const els = {
 let state = {
   providers: [],
   config: {
-    provider: "deepseek-chat",
-    model: "deepseek-chat",
+    provider: "nvidia-nim",
+    model: "deepseek-ai/deepseek-v4-pro",
     has_api_key: false,
+    shell_approval_mode: "auto",
   },
   workspaces: { workspaces: [], active_id: null },
   sessions: [],
@@ -210,7 +209,7 @@ let state = {
   multiSelectMode: false,
   selectedSessions: new Set(),
   webSearchEnabled: false,
-  agentModeEnabled: localStorage.getItem("stupidex_agent_mode") !== "0",
+  mode: localStorage.getItem("stupidex_mode") || "agent",
   github: {
     configured: false,
     oauth_configured: false,
@@ -282,9 +281,10 @@ function currentModelSupportsVision() {
 
 function currentModelSupportsTools() {
   const provider = currentProvider();
+  const isToolMode = state.mode === "agent" || state.mode === "debug";
   return Boolean(
     provider?.supports_tools ||
-      (provider?.supports_agent_bridge && state.agentModeEnabled),
+      (provider?.supports_agent_bridge && isToolMode),
   );
 }
 
@@ -1224,6 +1224,7 @@ async function sendMessage() {
       provider: state.config.provider,
       model: state.config.model,
       web_search: state.webSearchEnabled,
+      mode: state.mode,
       images: images.map((image) => ({
         name: image.name,
         data_url: image.dataUrl,
@@ -1283,7 +1284,7 @@ function buildPuterPrompt(history, text, workspaceContext = "", toolTrace = []) 
   const repository = workspaceContext
     ? `<attached_repository_context>\n${workspaceContext}\n</attached_repository_context>`
     : "<attached_repository_context>nenhum repositorio ativo</attached_repository_context>";
-  const agentInstructions = state.agentModeEnabled
+  const agentInstructions = state.mode === "agent" || state.mode === "debug"
     ? [
         "MODO AGENTE ATIVO: voce pode operar no workspace usando a ponte de ferramentas.",
         "Quando precisar de uma ferramenta, responda SOMENTE com:",
@@ -1350,7 +1351,7 @@ async function executePuterTool(sid, call) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       provider: state.config.provider,
-      agent_enabled: state.agentModeEnabled,
+      agent_enabled: state.mode === "agent" || state.mode === "debug",
       name: call.name,
       arguments: call.arguments,
     }),
@@ -1478,7 +1479,7 @@ async function runPuterChat({
         answer = puterResponseText(completion);
       }
 
-      const call = state.agentModeEnabled ? parsePuterToolCall(answer) : null;
+      const call = (state.mode === "agent" || state.mode === "debug") ? parsePuterToolCall(answer) : null;
       if (!call) break;
       bubble.textContent = `Executando ${call.name}...`;
       const executed = await executePuterTool(sid, call);
@@ -1876,7 +1877,7 @@ async function regenerateLast() {
     bubble,
     thinking,
     url: `/api/sessions/${sid}/regenerate`,
-    body: { provider: state.config.provider, model: state.config.model },
+    body: { provider: state.config.provider, model: state.config.model, mode: state.mode },
     assistantRow,
   });
 }
@@ -2534,10 +2535,21 @@ async function openSettings() {
   els.modelInput.value = state.config.custom_model || "";
   els.apiKeyInput.value = "";
   updateApiKeyVisibility();
+  updateShellApprovalUI();
   els.settingsModal.classList.remove("hidden");
 }
 function closeSettings() {
   els.settingsModal.classList.add("hidden");
+}
+
+function updateShellApprovalUI() {
+  if (state.config.shell_approval_mode === "ask") {
+    els.shellApprovalLabel.textContent = "Confirmar sempre";
+    els.shellApprovalToggle.innerHTML = '<i class="ph ph-shield-warning"></i> Confirmar sempre';
+  } else {
+    els.shellApprovalLabel.textContent = "Automático";
+    els.shellApprovalToggle.innerHTML = '<i class="ph ph-lightning"></i> Automático';
+  }
 }
 
 function updateApiKeyVisibility() {
@@ -2567,6 +2579,7 @@ async function saveSettings() {
   const body = {
     provider: els.providerSelect.value,
     custom_model: els.modelInput.value.trim(),
+    shell_approval_mode: state.config.shell_approval_mode,
   };
   if (els.apiKeyInput.value.trim()) body.api_key = els.apiKeyInput.value.trim();
   try {
@@ -2710,8 +2723,6 @@ async function loadConfig() {
 }
 
 function updateBadges() {
-  if (els.providerBadge) els.providerBadge.textContent = state.config.provider;
-  if (els.modelBadge) els.modelBadge.textContent = state.config.model;
   if (els.researchModelName) {
     els.researchModelName.textContent = state.config.model;
   }
@@ -2727,16 +2738,7 @@ function updateBadges() {
       : `⚠️ ${detail} (SEM suporte a ferramentas)`;
   }
   renderModelMenu();
-  const usesAgentBridge = Boolean(provider?.supports_agent_bridge);
-  els.composerAgent?.classList.toggle("hidden", !usesAgentBridge);
-  els.composerAgent?.classList.toggle(
-    "is-active",
-    usesAgentBridge && state.agentModeEnabled,
-  );
-  els.composerAgent?.setAttribute(
-    "aria-pressed",
-    String(usesAgentBridge && state.agentModeEnabled),
-  );
+  const isToolMode = state.mode === "agent" || state.mode === "debug";
   const hasVision = currentModelSupportsVision();
   els.visionIndicator?.classList.toggle("hidden", !hasVision);
   if (els.composerAttach) {
@@ -2792,6 +2794,10 @@ els.toggleKeyBtn.addEventListener("click", () => {
     els.apiKeyInput.type = "password";
     els.toggleKeyBtn.textContent = "mostrar";
   }
+});
+els.shellApprovalToggle.addEventListener("click", () => {
+  state.config.shell_approval_mode = state.config.shell_approval_mode === "ask" ? "auto" : "ask";
+  updateShellApprovalUI();
 });
 
 els.closeFile.addEventListener("click", () =>
@@ -2981,17 +2987,22 @@ if (els.composerSearch) {
     els.webSearchIndicator?.classList.toggle("hidden", !state.webSearchEnabled);
   });
 }
-if (els.composerAgent) {
-  els.composerAgent.addEventListener("click", () => {
-    state.agentModeEnabled = !state.agentModeEnabled;
-    localStorage.setItem(
-      "stupidex_agent_mode",
-      state.agentModeEnabled ? "1" : "0",
-    );
+if (els.composerModes) {
+  const modeBtns = els.composerModes.querySelectorAll(".mode-btn");
+  const setMode = (mode) => {
+    state.mode = mode;
+    localStorage.setItem("stupidex_mode", mode);
+    modeBtns.forEach((btn) => {
+      btn.classList.toggle("is-active", btn.dataset.mode === mode);
+    });
     updateBadges();
-    els.composerAgent.title = state.agentModeEnabled
-      ? "Agente ativo: pode editar, testar, fazer commit e push"
-      : "Ativar acesso do agente ao workspace";
+  };
+  modeBtns.forEach((btn) => {
+    btn.addEventListener("click", () => setMode(btn.dataset.mode));
+  });
+  // init active state
+  modeBtns.forEach((btn) => {
+    btn.classList.toggle("is-active", btn.dataset.mode === state.mode);
   });
 }
 els.composerImageInput?.addEventListener("change", async () => {
@@ -3273,8 +3284,8 @@ async function logout() {
   state = {
     providers: [],
     config: {
-      provider: "deepseek-chat",
-      model: "deepseek-chat",
+      provider: "nvidia-nim",
+      model: "deepseek-ai/deepseek-v4-pro",
       has_api_key: false,
     },
     workspaces: { workspaces: [], active_id: null },
@@ -3291,7 +3302,7 @@ async function logout() {
     multiSelectMode: false,
     selectedSessions: new Set(),
     webSearchEnabled: false,
-    agentModeEnabled: localStorage.getItem("stupidex_agent_mode") !== "0",
+    mode: localStorage.getItem("stupidex_mode") || "agent",
     github: {
       configured: false,
       oauth_configured: false,
@@ -3364,7 +3375,7 @@ async function handleLoginResponse(r) {
 // SHELL
 // ============================================================
 
-async function runShellCommand(cmd) {
+async function runShellCommand(cmd, approved) {
   if (!cmd.trim()) return;
   const wsId = state.workspaces.active_id;
   if (!wsId) {
@@ -3373,12 +3384,23 @@ async function runShellCommand(cmd) {
   }
   appendShellLine("prompt", `$ ${cmd}`);
   try {
+    const body = { command: cmd };
+    if (approved) body.approved = true;
     const r = await fetch(`/api/workspaces/${wsId}/shell`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ command: cmd }),
+      body: JSON.stringify(body),
     });
     const data = await r.json();
+    if (data.approval_required) {
+      appendShellLine("warning", data.output);
+      if (confirm(`O comando "${cmd}" requer confirmação. Executar mesmo assim?`)) {
+        return runShellCommand(cmd, true);
+      }
+      appendShellLine("error", "Comando cancelado.");
+      els.shellInput.value = "";
+      return;
+    }
     if (data.output) {
       const lines = data.output.split("\n");
       for (const line of lines) {

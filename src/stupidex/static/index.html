@@ -1,1163 +1,772 @@
 <!doctype html>
-<html lang="pt-br">
-    <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <meta
-            http-equiv="Cache-Control"
-            content="no-cache, no-store, must-revalidate"
-        />
-        <meta http-equiv="Pragma" content="no-cache" />
-        <meta http-equiv="Expires" content="0" />
-        <link rel="icon" type="image/webp" href="/static/logo.webp" />
-        <title>Stupidex</title>
+<html lang="pt-br" class="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <link rel="icon" type="image/webp" href="/static/logo.webp" />
+    <title>Stupidex | Intelligence Platform</title>
 
-        <!-- Fonts: Outfit (UI) + JetBrains Mono (code) -->
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-        <link
-            href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700&display=swap"
-            rel="stylesheet"
-        />
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
 
-        <!-- Phosphor Icons webfont (CSS-based — works with our strict CSP).
-         We load the CSS directly from jsdelivr because the @phosphor-icons/web
-         helper package points to unpkg.com internally, which our CSP blocks. -->
-        <link
-            rel="stylesheet"
-            href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css"
-        />
-        <link
-            rel="stylesheet"
-            href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/fill/style.css"
-        />
-        <link
-            rel="stylesheet"
-            href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/bold/style.css"
-        />
+    <!-- Phosphor Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/fill/style.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/bold/style.css" />
 
-        <!-- Markdown libs (preserved) -->
-        <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.10.0/lib/core.min.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.10.0/lib/languages/python.min.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.10.0/lib/languages/javascript.min.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.10.0/lib/languages/json.min.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.10.0/lib/languages/bash.min.js"></script>
-        <link
-            rel="stylesheet"
-            href="https://cdn.jsdelivr.net/npm/highlight.js@11.10.0/styles/github-dark.min.css"
-        />
+    <!-- Markdown -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.10.0/lib/core.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.10.0/lib/languages/python.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.10.0/lib/languages/javascript.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.10.0/lib/languages/json.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.10.0/lib/languages/bash.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.10.0/styles/github-dark.min.css" />
 
-        <!-- Theme boot: apply before CSS loads to avoid flash -->
-        <script>
-            (function () {
-                try {
-                    var t = localStorage.getItem("stupidex-theme");
-                    if (t === "light")
-                        document.documentElement.setAttribute(
-                            "data-theme",
-                            "light",
-                        );
-                } catch (e) {}
-            })();
-        </script>
-        <script>
-            hljs.configure({ ignoreUnescapedHTML: true });
-        </script>
+    <!-- Puter.js — browser-side AI (Anthropic, OpenAI via Puter cloud) -->
+    <script src="https://js.puter.com/v2/"></script>
 
-        <link rel="stylesheet" href="/static/style.css?v=23" />
-    </head>
-    <body class="reference-interface">
-        <!-- =========================================================
-         LOGIN SCREEN
-         ========================================================= -->
-        <div id="login-screen" class="login-screen">
-            <div class="login-card">
-                <div class="login-logo">
-                    <img
-                        src="/static/logo.webp"
-                        alt="Stupidex"
-                        onerror="
-                            this.style.display = 'none';
-                            this.nextElementSibling.style.display = 'flex';
-                        "
-                    />
-                    <span class="login-logo-fallback" style="display: none"
-                        >S</span
-                    >
-                </div>
-                <h1 class="login-title">Stupidex</h1>
-                <p class="login-subtitle">Agente de código com IA</p>
+    <!-- Theme boot -->
+    <script>(function(){try{var t=localStorage.getItem("stupidex-theme");if(t==="light")document.documentElement.setAttribute("data-theme","light");}catch(e){}})()</script>
+    <script>try{hljs&&hljs.configure({ignoreUnescapedHTML:true});}catch(e){}</script>
 
-                <a
-                    id="google-login-btn"
-                    class="google-btn"
-                    href="/api/auth/google"
-                >
-                    <svg width="20" height="20" viewBox="0 0 24 24">
-                        <path
-                            fill="#4285F4"
-                            d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
-                        />
-                        <path
-                            fill="#34A853"
-                            d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                        />
-                        <path
-                            fill="#FBBC05"
-                            d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                        />
-                        <path
-                            fill="#EA4335"
-                            d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                        />
-                    </svg>
-                    Entrar com Google
-                </a>
+    <link rel="stylesheet" href="/static/style.css?v=32" />
+</head>
+<body>
 
-                <div class="login-divider"><span>ou</span></div>
+<!-- ============================================================
+     LOGIN SCREEN
+     ============================================================ -->
+<div id="login-screen" class="login-screen">
+    <div class="login-card">
+        <div class="login-logo">
+            <div class="login-logo-icon">
+                <i class="ph-bold ph-lightning"></i>
+            </div>
+        </div>
+        <h1 class="login-title">Stupidex</h1>
+        <p class="login-subtitle">Intelligence Platform</p>
 
-                <form id="login-form" class="login-form" autocomplete="off">
-                    <input
-                        type="email"
-                        id="login-email"
-                        placeholder="Email"
-                        required
-                    />
-                    <input
-                        type="password"
-                        id="login-password"
-                        placeholder="Senha"
-                    />
-                    <button type="submit" class="primary-btn block">
-                        Entrar
-                    </button>
-                </form>
+        <a id="google-login-btn" class="google-btn" href="/api/auth/google">
+            <svg width="18" height="18" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+            </svg>
+            Entrar com Google
+        </a>
 
-                <p class="login-hint">
-                    Primeiro acesso? Preencha email e senha para criar conta.
-                </p>
-                <div id="login-error" class="login-error hidden"></div>
+        <div class="login-divider"><span>ou</span></div>
+
+        <form id="login-form" class="login-form" autocomplete="off">
+            <input type="email" id="login-email" placeholder="Email" required />
+            <input type="password" id="login-password" placeholder="Senha" />
+            <button type="submit" class="primary-btn block">Entrar</button>
+        </form>
+        <p class="login-hint">Primeiro acesso? Preencha email e senha para criar conta.</p>
+        <div id="login-error" class="login-error hidden"></div>
+    </div>
+</div>
+
+<!-- ============================================================
+     MAIN APP — TRI-PANE LAYOUT
+     Left Sidebar | Center Chat | Right Panel
+     ============================================================ -->
+<div id="main-app" class="app-shell hidden">
+
+    <!-- ──────────────────────────────────────────────────────
+         PANE 1: LEFT SIDEBAR
+         ────────────────────────────────────────────────────── -->
+    <aside id="workspace-panel" class="workspace-panel">
+        <!-- Brand -->
+        <div class="sidebar-brand">
+            <div class="sidebar-brand-icon">
+                <i class="ph-bold ph-lightning"></i>
+            </div>
+            <span class="sidebar-brand-name">Stupidex</span>
+        </div>
+
+        <!-- Primary Actions -->
+        <div class="sidebar-actions">
+            <button id="new-chat-btn" class="sidebar-new-chat-btn">
+                <i class="ph ph-chat-teardrop-text"></i>
+                Nova conversa
+            </button>
+            <div class="sidebar-action-row">
+                <button id="upload-btn" class="sidebar-secondary-btn">
+                    <i class="ph ph-folder-plus"></i>
+                    Projeto
+                </button>
+                <button class="sidebar-secondary-btn js-agent-trigger"
+                    title="Menu do workspace">
+                    <i class="ph ph-robot"></i>
+                    Agente
+                </button>
+                <div class="workspace-utility-menu hidden js-agent-menu"></div>
             </div>
         </div>
 
-        <!-- =========================================================
-         MAIN APP
-         4 panes: nav (icon-rail) + workspace + main + research (collapsible)
-         ========================================================= -->
-        <div id="main-app" class="app-shell hidden">
-            <!-- Pane 1: Icon rail nav (thin) -->
-            <nav id="nav-rail" class="nav-rail">
-                <div class="nav-rail-logo" title="Stupidex">
-                    <img
-                        src="/static/logo.webp"
-                        alt="Stupidex"
-                        onerror="
-                            this.style.display = 'none';
-                            this.nextElementSibling.style.display = 'block';
-                        "
-                    />
-                    <span class="nav-rail-logo-fallback" style="display: none"
-                        >S</span
-                    >
-                </div>
+        <!-- Scrollable content -->
+        <div class="sidebar-content">
 
-                <div class="nav-rail-items">
-                    <button
-                        id="new-chat-btn"
-                        class="nav-rail-btn nav-rail-active"
-                        title="Nova conversa"
-                    >
-                        <i class="ph ph-plus"></i>
-                    </button>
-                    <button
-                        id="rail-workspace"
-                        class="nav-rail-btn"
-                        title="Workspace"
-                    >
-                        <i class="ph ph-folder-open"></i>
-                    </button>
-                    <button
-                        id="rail-trash"
-                        class="nav-rail-btn"
-                        title="Lixeira"
-                    >
-                        <i class="ph ph-trash"></i>
-                    </button>
-                </div>
-
-                <div class="nav-rail-bottom">
-                    <div
-                        id="user-profile-banner"
-                        class="user-profile-banner hidden"
-                        title=""
-                    >
-                        <img
-                            id="user-profile-avatar"
-                            class="user-profile-avatar"
-                            src=""
-                            alt="Avatar"
-                        />
-                    </div>
-                    <button
-                        id="open-settings"
-                        class="nav-rail-btn"
-                        title="Configurações"
-                    >
-                        <i class="ph ph-gear-six"></i>
-                    </button>
-                    <button
-                        id="logout-btn"
-                        class="nav-rail-btn nav-rail-avatar"
-                        title="Sair"
-                    >
-                        <i class="ph ph-sign-out"></i>
-                    </button>
-                </div>
-            </nav>
-
-            <!-- Pane 2: Workspace & Files (renamed from old sidebar/ws panel) -->
-            <aside id="workspace-panel" class="workspace-panel">
-                <div class="workspace-header">
-                    <div class="workspace-brand">
-                        <div class="workspace-brand-mark" aria-hidden="true">S</div>
-                        <div class="workspace-heading">
-                            <div class="workspace-title-wrap">
-                                <h2 class="workspace-title">Stupidex</h2>
-                            </div>
-                            <p class="workspace-subtitle">
-                                Workspace
-                                <span
-                                    id="ws-files-count"
-                                    class="ws-count-badge"
-                                ></span>
-                            </p>
-                        </div>
-                    </div>
-                    <div class="workspace-header-actions">
-                        <button
-                            id="ws-git-pull"
-                            class="icon-btn hidden"
-                            title="Git Pull - Sincronizar com repositório"
-                        >
+            <!-- Workspace section -->
+            <div class="sidebar-section">
+                <div class="sidebar-section-header">
+                    <span class="sidebar-section-label">Workspace</span>
+                    <div class="sidebar-section-actions">
+                        <button id="ws-git-pull" class="sidebar-icon-btn hidden" title="Git Pull">
                             <i class="ph ph-git-pull-request"></i>
                         </button>
-                        <button
-                            id="ws-refresh"
-                            class="icon-btn"
-                            title="Atualizar"
-                        >
+                        <button id="ws-refresh" class="sidebar-icon-btn" title="Atualizar">
                             <i class="ph ph-arrows-clockwise"></i>
                         </button>
-                        <button
-                            id="workspace-utility-trigger"
-                            class="icon-btn workspace-utility-trigger"
-                            title="Menu do workspace"
-                            aria-label="Menu do workspace"
-                            aria-expanded="false"
-                        >
-                            <i class="ph ph-caret-up-down"></i>
-                        </button>
-                        <div
-                            id="workspace-utility-menu"
-                            class="workspace-utility-menu hidden"
-                        ></div>
                     </div>
                 </div>
 
-                <div class="workspace-content">
-                    <div class="workspace-actions">
-                        <div class="workspace-action-title">
+                <!-- Active workspace indicator -->
+                <div id="workspace-list" class="workspace-list"></div>
+
+                <!-- Repo connect -->
+                <button id="clone-btn" class="sidebar-repo-btn">
+                    <i class="ph ph-github-logo"></i>
+                    <span>Conectar repositório</span>
+                </button>
+                <div id="repo-connected" class="repo-connected hidden">
+                    <div class="repo-connected-icon"><i class="ph ph-git-branch"></i></div>
+                    <div class="repo-connected-copy">
+                        <strong id="repo-connected-name"></strong>
+                        <span id="repo-connected-url"></span>
+                        <small id="repo-connected-branch"></small>
+                    </div>
+                    <button id="disconnect-repo-btn" class="repo-disconnect-btn" title="Desconectar">
+                        <i class="ph ph-plugs-connected"></i>
+                    </button>
+                </div>
+                <button id="new-ws-btn" class="sidebar-ghost-btn">
+                    <i class="ph ph-plus"></i>
+                    Novo workspace
+                </button>
+                <span id="ws-files-count" class="ws-count-badge"></span>
+                <span id="ws-active-badge" class="ws-mini-badge"></span>
+            </div>
+
+            <!-- Recent Conversations -->
+            <div class="sidebar-section">
+                <div class="sidebar-section-header">
+                    <span id="sessions-section-title" class="sidebar-section-label">Recentes</span>
+                    <span id="trash-count" class="ws-mini-badge hidden"></span>
+                    <button id="multi-select-toggle-btn" class="sidebar-icon-btn" title="Selecionar múltiplas">
+                        <i class="ph ph-check-square"></i>
+                    </button>
+                </div>
+                <nav id="session-list" class="session-list" aria-label="Conversas"></nav>
+            </div>
+
+        </div><!-- /sidebar-content -->
+
+        <!-- Bottom User Area -->
+        <div class="sidebar-footer">
+            <!-- Usage mini-stat (hidden until model loads) -->
+            <div id="sidebar-usage" class="sidebar-usage hidden">
+                <div class="sidebar-usage-row">
+                    <span id="sidebar-usage-label" class="sidebar-usage-label">DeepSeek V4 Pro</span>
+                    <span id="sidebar-usage-tokens" class="sidebar-usage-value">0 tokens</span>
+                </div>
+                <div class="sidebar-usage-bar">
+                    <div id="sidebar-usage-fill" class="sidebar-usage-fill" style="width:0%"></div>
+                </div>
+            </div>
+
+            <button id="open-settings" class="sidebar-user-btn" title="Configurações">
+                <div id="user-profile-banner" class="user-profile-avatar-wrap hidden" title="">
+                    <div id="user-profile-avatar" class="user-profile-avatar-img"></div>
+                </div>
+                <div class="sidebar-user-info">
+                    <span class="sidebar-user-name">Carregando...</span>
+                    <span class="sidebar-user-role">Pro Plan</span>
+                </div>
+                <i class="ph ph-gear sidebar-user-gear"></i>
+            </button>
+            <button id="logout-btn" class="sidebar-logout-btn" title="Sair">
+                <i class="ph ph-sign-out"></i>
+            </button>
+        </div>
+
+        <!-- Legacy nav-rail IDs (kept for JS compatibility) -->
+        <button id="rail-workspace" class="hidden"></button>
+        <button id="rail-trash" class="hidden"></button>
+        <button id="nav-rail" class="hidden"></button>
+    </aside>
+
+    <!-- Multi-select toolbar -->
+    <div id="multi-select-toolbar" class="multi-select-toolbar hidden">
+        <span id="multi-select-count">0 selecionados</span>
+        <button id="multi-select-delete-btn" class="icon-btn danger" title="Excluir">
+            <i class="ph ph-trash"></i>
+        </button>
+        <button id="multi-select-cancel-btn" class="icon-btn" title="Cancelar">
+            <i class="ph ph-x"></i>
+        </button>
+    </div>
+
+    <!-- ──────────────────────────────────────────────────────
+         PANE 2: CENTER CHAT AREA
+         ────────────────────────────────────────────────────── -->
+    <main id="main" class="main-area">
+
+        <!-- Topbar -->
+        <header id="topbar" class="topbar">
+            <div class="topbar-left">
+                <div class="topbar-context">
+                    <span class="topbar-project-name" id="topbar-project-name">Stupidex</span>
+                    <span class="topbar-sep">/</span>
+                    <span id="session-title" class="topbar-session-title">Nova conversa</span>
+                </div>
+                <span id="session-time" class="topbar-meta hidden">Pronto</span>
+            </div>
+
+            <div class="topbar-center">
+                <!-- Mode Selector -->
+                <div class="mode-selector">
+                    <button class="mode-btn mode-btn-active" data-mode="agent">Agente</button>
+                    <button class="mode-btn" data-mode="chat">Chat</button>
+                    <button class="mode-btn" data-mode="review">Revisar</button>
+                </div>
+            </div>
+
+            <div class="topbar-right">
+                <!-- Model Selector -->
+                <div id="model-switcher" class="model-switcher">
+                    <button id="model-select-trigger" class="model-select-trigger" type="button"
+                        aria-haspopup="listbox" aria-expanded="false">
+                        <i class="ph-fill ph-sparkle model-select-icon"></i>
+                        <span class="model-select-copy">
+                            <strong id="model-select-label">DeepSeek V4 Pro</strong>
+                            <small id="model-select-detail">NVIDIA NIM</small>
+                        </span>
+                        <i class="ph ph-caret-down model-select-caret"></i>
+                    </button>
+                    <div id="model-select-menu" class="model-select-menu hidden" role="listbox"
+                        aria-label="Modelos disponíveis"></div>
+                </div>
+
+                <!-- Right panel toggle -->
+                <button id="right-panel-toggle" class="topbar-icon-btn" title="Painel direito">
+                    <i class="ph ph-sidebar-simple"></i>
+                </button>
+
+                <button id="theme-toggle" class="topbar-icon-btn" title="Alternar tema" aria-label="Alternar tema">
+                    <i class="ph ph-moon"></i>
+                </button>
+
+                <button id="research-toggle" class="topbar-icon-btn topbar-icon-btn-label" title="Research Mode">
+                    <i class="ph ph-book-open-text"></i>
+                    <span>Research</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Chat Feed -->
+        <section id="messages" class="messages">
+            <div class="messages-loading">Carregando…</div>
+        </section>
+
+        <!-- Composer -->
+        <footer id="composer" class="composer">
+            <form id="form" class="composer-form" autocomplete="off">
+                <div id="composer-input-wrap" class="composer-input-wrap">
+                    <span id="vision-indicator" class="vision-indicator hidden" title="Modelo aceita imagens">
+                        <i class="ph ph-eye"></i> Visão
+                    </span>
+
+                    <!-- Context pill (above textarea) -->
+                    <div class="composer-context-pills">
+                        <span id="web-search-indicator" class="composer-pill hidden">
+                            <i class="ph ph-globe-hemisphere-west"></i> Web
+                        </span>
+                        <span class="composer-pill" id="composer-context-files-pill">
+                            <i class="ph ph-files"></i>
+                            <span id="composer-file-summary">0 arquivos</span>
+                        </span>
+                        <span class="composer-pill" id="composer-context-repo-pill">
                             <i class="ph ph-github-logo"></i>
-                            GitHub Repository
-                        </div>
-                        <button id="clone-btn" class="ws-action primary">
-                            <i class="ph ph-git-branch"></i>
-                            Conectar repositorio
-                        </button>
-                        <div id="repo-connected" class="repo-connected hidden">
-                            <div class="repo-connected-icon">
+                            <span id="composer-repo-summary">sem repo</span>
+                        </span>
+                    </div>
+
+                    <textarea id="input" class="composer-input"
+                        placeholder="Descreva a funcionalidade, cole um erro ou analise um repositório…"
+                        rows="1"></textarea>
+
+                    <div id="composer-image-preview" class="composer-image-preview hidden"></div>
+
+                    <div class="composer-bottom">
+                        <div class="composer-tools-left">
+                            <button type="button" id="composer-attach" class="composer-icon-btn" title="Anexar imagem">
+                                <i class="ph ph-paperclip"></i>
+                            </button>
+                            <button type="button" id="composer-search" class="composer-icon-btn" title="Buscar na web">
+                                <i class="ph ph-globe"></i>
+                            </button>
+                            <button type="button" id="clone-btn-composer" class="composer-icon-btn" title="Repositório Git">
                                 <i class="ph ph-git-branch"></i>
-                            </div>
-                            <div class="repo-connected-copy">
-                                <strong id="repo-connected-name"></strong>
-                                <span id="repo-connected-url"></span>
-                                <small id="repo-connected-branch"></small>
-                            </div>
-                            <button
-                                id="disconnect-repo-btn"
-                                class="repo-disconnect-btn"
-                                title="Desconectar repositório"
-                                aria-label="Desconectar repositório"
-                            >
-                                <i class="ph ph-plugs-connected"></i>
+                            </button>
+                            <button type="button" id="composer-agent" class="composer-agent-btn hidden"
+                                title="Modo agente" aria-pressed="true">
+                                <i class="ph ph-terminal-window"></i>
+                                <span>Agente</span>
+                            </button>
+                            <button type="button" id="composer-view-project" class="composer-view-project">
+                                <i class="ph ph-layout"></i> Projeto
                             </button>
                         </div>
-                        <button id="upload-btn" class="ws-action outline">
-                            <i class="ph ph-upload-simple"></i>
-                            Upload local
-                        </button>
-                        <button id="new-ws-btn" class="ws-action ghost">
-                            <i class="ph ph-plus"></i>
-                            Novo workspace
-                        </button>
-                    </div>
-
-                    <div class="workspace-section">
-                        <div class="workspace-section-title">
-                            <span>
-                                <i class="ph ph-upload-simple"></i>
-                                Workspaces
-                            </span>
-                            <span
-                                id="ws-active-badge"
-                                class="ws-mini-badge"
-                            ></span>
-                        </div>
-                        <div id="workspace-list" class="workspace-list"></div>
-                    </div>
-
-                    <div class="workspace-section">
-                        <div class="workspace-section-title">
-                            <span>
-                                <i class="ph ph-database"></i>
-                                Arquivos do repo
-                            </span>
-                        </div>
-                        <p class="workspace-section-hint">
-                            Clique em um arquivo para abrir e adicionar ao
-                            contexto.
-                        </p>
-                        <div id="tree-container" class="tree-container"></div>
-                    </div>
-
-                    <div class="workspace-section">
-                        <div class="workspace-section-title">
-                            <span>Terminal</span>
-                            <button
-                                id="shell-clear"
-                                class="icon-btn ws-section-btn"
-                                title="Limpar"
-                            >
-                                <i class="ph ph-trash"></i>
+                        <div id="status" class="status hidden"></div>
+                        <div class="composer-bottom-right">
+                            <span class="composer-hint-kbd">Ctrl+Enter</span>
+                            <button id="stop-btn" type="button" class="composer-stop hidden" title="Parar">
+                                <i class="ph ph-stop"></i>
+                            </button>
+                            <button id="send-btn" type="submit" class="composer-send" title="Enviar">
+                                <i class="ph-bold ph-arrow-up"></i>
                             </button>
                         </div>
-                        <div class="shell-wrap">
-                            <div id="shell-output" class="shell-output"></div>
-                            <div class="shell-input-row">
-                                <span class="shell-prompt">$</span>
-                                <input
-                                    id="shell-input"
-                                    type="text"
-                                    class="shell-input"
-                                    placeholder="Run a command..."
-                                    autocomplete="off"
-                                    spellcheck="false"
-                                />
-                                <button
-                                    id="shell-run"
-                                    class="ghost-btn"
-                                    title="Executar"
-                                >
-                                    <i class="ph ph-play"></i>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="workspace-section">
-                        <div
-                            class="workspace-section-title sessions-section-heading"
-                        >
-                            <span id="sessions-section-title"
-                                >Recent Chats</span
-                            >
-                            <span
-                                id="trash-count"
-                                class="ws-mini-badge hidden"
-                            ></span>
-                            <button
-                                id="multi-select-toggle-btn"
-                                class="multi-select-toggle-btn"
-                                title="Selecionar múltiplas conversas"
-                                aria-label="Selecionar múltiplas conversas"
-                            >
-                                <i class="ph ph-check-square"></i>
-                                <span>Selecionar</span>
-                            </button>
-                        </div>
-                        <nav
-                            id="session-list"
-                            class="session-list"
-                            aria-label="Conversas"
-                        ></nav>
                     </div>
                 </div>
-            </aside>
+            </form>
+            <p class="composer-disclaimer">A IA pode cometer erros. Verifique códigos gerados antes de aplicar.</p>
+        </footer>
+    </main>
 
-            <!-- Multi-select toolbar (hidden by default) -->
-            <div id="multi-select-toolbar" class="multi-select-toolbar hidden">
-                <div class="multi-select-info">
-                    <span id="multi-select-count">0 selecionados</span>
-                </div>
-                <div class="multi-select-actions">
-                    <button
-                        id="multi-select-delete-btn"
-                        class="icon-btn danger"
-                        title="Excluir selecionados"
-                    >
-                        <i class="ph ph-trash"></i>
-                    </button>
-                    <button
-                        id="multi-select-cancel-btn"
-                        class="icon-btn"
-                        title="Cancelar"
-                    >
-                        <i class="ph ph-x"></i>
-                    </button>
-                </div>
-            </div>
-
-            <!-- Pane 3: Central Chat Area -->
-            <main id="main" class="main-area">
-                <!-- Top Toolbar -->
-                <header id="topbar" class="topbar">
-                    <div class="topbar-left">
-                        <div class="conversation-heading">
-                            <p class="pane-eyebrow">AI Research Workspace</p>
-                            <h1 id="session-title" class="topbar-title">
-                                Stupidex
-                            </h1>
-                            <span id="session-time" class="topbar-meta"
-                                >Pronto para começar</span
-                            >
-                        </div>
-                    </div>
-
-                    <div class="topbar-center">
-                        <div
-                            id="model-switcher"
-                            class="model-switcher"
-                            title="Modelo"
-                        >
-                            <button
-                                id="model-select-trigger"
-                                class="model-select-trigger"
-                                type="button"
-                                aria-haspopup="listbox"
-                                aria-expanded="false"
-                            >
-                                <i class="ph ph-sparkle model-select-icon"></i>
-                                <span class="model-select-copy">
-                                    <strong id="model-select-label"
-                                        >Carregando modelos...</strong
-                                    >
-                                    <small id="model-select-detail"
-                                        >Aguarde</small
-                                    >
-                                </span>
-                                <i
-                                    class="ph ph-caret-down model-select-caret"
-                                ></i>
-                            </button>
-                            <div
-                                id="model-select-menu"
-                                class="model-select-menu hidden"
-                                role="listbox"
-                                aria-label="Modelos disponíveis"
-                            ></div>
-                        </div>
-                    </div>
-
-                    <div class="topbar-right">
-                        <button
-                            id="theme-toggle"
-                            class="topbar-action topbar-icon-action"
-                            title="Alternar tema"
-                            aria-label="Alternar tema"
-                        >
-                            <i class="ph ph-moon"></i>
-                        </button>
-                        <button
-                            id="research-toggle"
-                            class="topbar-action research-toggle"
-                            title="Research Mode"
-                        >
-                            <i class="ph ph-book-open-text"></i>
-                            <span>Research</span>
-                        </button>
-                    </div>
-                </header>
-
-                <!-- Conversation Feed -->
-                <section id="messages" class="messages">
-                    <div class="messages-loading">Carregando…</div>
-                </section>
-
-                <!-- Floating Input Bar -->
-                <footer id="composer" class="composer">
-                    <form id="form" class="composer-form" autocomplete="off">
-                        <div
-                            id="composer-input-wrap"
-                            class="composer-input-wrap"
-                        >
-                            <span
-                                id="vision-indicator"
-                                class="vision-indicator vision-indicator-corner hidden"
-                                title="O modelo atual aceita imagens"
-                            >
-                                <i class="ph ph-eye"></i>
-                                Visão
-                            </span>
-                            <textarea
-                                id="input"
-                                class="composer-input"
-                                placeholder="Pergunte, analise arquivos, gere código ou revise um repositório…"
-                                rows="1"
-                            ></textarea>
-                            <div
-                                id="composer-image-preview"
-                                class="composer-image-preview hidden"
-                            ></div>
-                            <div class="composer-bottom">
-                                <div class="composer-tools-left">
-                                    <button
-                                        type="button"
-                                        id="composer-attach"
-                                        class="composer-icon-btn"
-                                        title="Anexar imagem ao chat"
-                                    >
-                                        <i class="ph ph-paperclip"></i>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        id="composer-search"
-                                        class="composer-icon-btn"
-                                        title="Buscar na web"
-                                    >
-                                        <i class="ph ph-globe"></i>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        id="composer-agent"
-                                        class="composer-agent-btn hidden"
-                                        title="Permitir que o modelo edite, teste e versione o repositorio ativo"
-                                        aria-pressed="true"
-                                    >
-                                        <i class="ph ph-terminal-window"></i>
-                                        <span>Agente</span>
-                                    </button>
-                                    <div class="composer-attach-divider"></div>
-                                    <button
-                                        type="button"
-                                        id="composer-view-project"
-                                        class="composer-view-project"
-                                    >
-                                        <i class="ph ph-layout"></i>
-                                        Projeto
-                                    </button>
-                                    <span class="composer-context-stat">
-                                        <i class="ph ph-files"></i>
-                                        <span id="composer-file-summary"
-                                            >0 arquivos</span
-                                        >
-                                    </span>
-                                    <span class="composer-context-stat">
-                                        <i class="ph ph-github-logo"></i>
-                                        <span id="composer-repo-summary"
-                                            >sem repo</span
-                                        >
-                                    </span>
-                                    <span
-                                        id="web-search-indicator"
-                                        class="web-search-indicator hidden"
-                                        title="Pesquisa web ativa para esta mensagem"
-                                    >
-                                        <i
-                                            class="ph ph-globe-hemisphere-west"
-                                        ></i>
-                                        Web
-                                    </span>
-                                </div>
-                                <div id="status" class="status hidden"></div>
-                                <div class="composer-bottom-right">
-                                    <button
-                                        id="stop-btn"
-                                        type="button"
-                                        class="composer-stop hidden"
-                                        title="Parar"
-                                    >
-                                        <i class="ph ph-stop"></i>
-                                    </button>
-                                    <button
-                                        id="send-btn"
-                                        type="submit"
-                                        class="composer-send"
-                                        title="Enviar"
-                                    >
-                                        <i class="ph-bold ph-arrow-up"></i>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </form>
-                    <p class="composer-hint">
-                        Stupidex pode cometer erros. Verifique informações
-                        importantes.
-                    </p>
-                </footer>
-            </main>
-
-            <!-- Pane 4: Research Panel (collapsible right sidebar) -->
-            <aside id="research-panel" class="research-panel research-hidden">
-                <div class="research-header">
-                    <div class="research-title-wrap">
-                        <i class="ph-fill ph-book-open-text research-icon"></i>
-                        <h2 class="research-title">Research Mode</h2>
-                    </div>
-                    <button id="close-research" class="icon-btn" title="Fechar">
-                        <i class="ph ph-x"></i>
-                    </button>
-                </div>
-
-                <div class="research-tabs" role="tablist">
-                    <button
-                        class="research-tab research-tab-active"
-                        data-tab="sources"
-                    >
-                        Sources <span class="research-tab-count">0</span>
-                    </button>
-                    <button class="research-tab" data-tab="notes">Notes</button>
-                    <button class="research-tab" data-tab="graph">
-                        Entity Graph
-                    </button>
-                </div>
-
-                <div class="research-content">
-                    <div id="research-tab-sources" class="research-tab-pane">
-                        <div class="research-insight-card">
-                            <i class="ph ph-info"></i>
-                            <span>
-                                Chat conectado ao backend Stupidex. Arquivos,
-                                ferramentas e GitHub permanecem disponíveis ao
-                                agente.
-                            </span>
-                        </div>
-                        <div class="research-metrics">
-                            <div class="research-metric">
-                                <strong id="research-active-count">0</strong>
-                                <span>arquivos ativos</span>
-                            </div>
-                            <div class="research-metric">
-                                <strong id="research-github-state">OFF</strong>
-                                <span>GitHub</span>
-                            </div>
-                        </div>
-                        <div class="research-model-card">
-                            <i class="ph ph-code"></i>
-                            <span>
-                                <strong>Modelo</strong>
-                                <small id="research-model-name"
-                                    >deepseek-v4-flash</small
-                                >
-                            </span>
-                        </div>
-                        <div id="research-sources-list">
-                            <p class="research-empty">
-                                Nenhuma fonte ainda. As fontes que o agente
-                                consultar aparecerão aqui.
-                            </p>
-                        </div>
-                    </div>
-                    <div
-                        id="research-tab-notes"
-                        class="research-tab-pane hidden"
-                    >
-                        <p class="research-empty">
-                            Suas anotações ficarão aqui. (em breve)
-                        </p>
-                    </div>
-                    <div
-                        id="research-tab-graph"
-                        class="research-tab-pane hidden"
-                    >
-                        <p class="research-empty">
-                            Grafo de entidades em breve.
-                        </p>
-                    </div>
-                </div>
-            </aside>
-
-            <!-- Hidden inputs (preserved) -->
-            <input
-                id="file-input"
-                type="file"
-                multiple
-                webkitdirectory
-                style="display: none"
-            />
-            <input
-                id="composer-image-input"
-                type="file"
-                accept="image/png,image/jpeg,image/webp,image/gif"
-                multiple
-                style="display: none"
-            />
-            <input
-                id="search-input"
-                type="text"
-                placeholder="Buscar conversas…"
-                class="hidden"
-            />
+    <!-- ──────────────────────────────────────────────────────
+         PANE 3: RIGHT PANEL — Files / Terminal / Git
+         ────────────────────────────────────────────────────── -->
+    <aside id="right-panel" class="right-panel">
+        <!-- Tabs -->
+        <div class="right-panel-tabs">
+            <button class="rp-tab" data-rp-tab="files">
+                <i class="ph ph-files"></i> Arquivos
+            </button>
+            <button class="rp-tab rp-tab-active" data-rp-tab="terminal">
+                <i class="ph ph-terminal-window"></i> Terminal
+            </button>
+            <button class="rp-tab" data-rp-tab="git">
+                <i class="ph ph-git-diff"></i> Diff
+                <span id="git-diff-badge" class="rp-tab-badge hidden">0</span>
+            </button>
         </div>
-        <!-- /#main-app -->
 
-        <!-- Drop overlay (preserved) -->
-        <div id="drop-overlay" class="drop-overlay hidden">
-            <div class="drop-box">
-                <div class="drop-icon"><i class="ph ph-folder-open"></i></div>
-                <div class="drop-text">Solte arquivos ou pastas aqui</div>
+        <!-- Files Tab -->
+        <div class="rp-pane" id="rp-pane-files">
+            <div class="rp-section-header">
+                <span>Arquivos do repo</span>
+            </div>
+            <p class="rp-hint">Clique em um arquivo para abrir e adicionar ao contexto.</p>
+            <div id="tree-container" class="tree-container"></div>
+        </div>
+
+        <!-- Terminal Tab -->
+        <div class="rp-pane rp-pane-active" id="rp-pane-terminal">
+            <div class="rp-terminal-header">
+                <div class="rp-terminal-status">
+                    <div class="rp-terminal-dot"></div>
+                    <span class="rp-terminal-title">bash — workspace</span>
+                </div>
+                <button id="shell-clear" class="sidebar-icon-btn" title="Limpar">
+                    <i class="ph ph-trash"></i>
+                </button>
+            </div>
+            <div class="rp-terminal-body">
+                <div id="shell-output" class="shell-output"></div>
+            </div>
+            <div class="shell-input-row">
+                <span class="shell-prompt">$</span>
+                <input id="shell-input" type="text" class="shell-input"
+                    placeholder="Run a command…" autocomplete="off" spellcheck="false" />
+                <button id="shell-run" class="ghost-btn" title="Executar">
+                    <i class="ph ph-play"></i>
+                </button>
             </div>
         </div>
 
-        <!-- File viewer modal (preserved) -->
-        <div
-            id="file-modal"
-            class="modal hidden"
-            role="dialog"
-            aria-modal="true"
-        >
-            <div class="modal-content" style="max-width: 900px">
-                <div class="modal-header">
-                    <h2 id="file-modal-title">file.txt</h2>
-                    <button
-                        id="close-file"
-                        class="icon-btn"
-                        aria-label="Fechar"
-                    >
-                        <i class="ph ph-x"></i>
-                    </button>
-                </div>
-                <div class="modal-body" style="max-height: 70vh">
-                    <pre><code id="file-modal-content"></code></pre>
-                </div>
+        <!-- Git Diff Tab -->
+        <div class="rp-pane" id="rp-pane-git">
+            <div class="rp-section-header">
+                <span>Alterações</span>
+            </div>
+            <div id="git-diff-list" class="git-diff-list">
+                <p class="rp-hint">Nenhuma alteração pendente.</p>
+            </div>
+            <div class="rp-git-footer">
+                <button id="rp-git-commit-btn" class="rp-ghost-action-btn" disabled>
+                    Criar Commit
+                </button>
             </div>
         </div>
 
-        <!-- Git clone modal (preserved) -->
-        <div
-            id="clone-modal"
-            class="modal hidden"
-            role="dialog"
-            aria-modal="true"
-        >
-            <div class="modal-content" style="max-width: 520px">
-                <div class="modal-header">
-                    <h2>Clonar repositório Git</h2>
-                    <button
-                        id="close-clone"
-                        class="icon-btn"
-                        aria-label="Fechar"
-                    >
-                        <i class="ph ph-x"></i>
-                    </button>
+        <!-- Research Panel (reuse existing) - hidden by default, shows on toggle -->
+        <div id="research-panel" class="research-panel research-hidden">
+            <div class="research-header">
+                <div class="research-title-wrap">
+                    <i class="ph-fill ph-book-open-text research-icon"></i>
+                    <h2 class="research-title">Research Mode</h2>
                 </div>
-                <div class="modal-body">
-                    <div
-                        id="clone-github-card"
-                        class="github-integration-card github-integration-compact"
-                    >
-                        <div class="github-integration-icon" aria-hidden="true">
-                            <i class="ph ph-github-logo"></i>
-                        </div>
-                        <div class="github-integration-copy">
-                            <strong id="clone-github-title"
-                                >Verificando GitHub…</strong
-                            >
-                            <span id="clone-github-description"
-                                >Repositórios públicos continuam
-                                disponíveis.</span
-                            >
-                        </div>
-                        <button
-                            id="clone-github-action"
-                            type="button"
-                            class="ghost-btn github-integration-action"
-                        >
-                            Conectar
-                        </button>
+                <button id="close-research" class="icon-btn" title="Fechar">
+                    <i class="ph ph-x"></i>
+                </button>
+            </div>
+            <div class="research-tabs" role="tablist">
+                <button class="research-tab research-tab-active" data-tab="sources">
+                    Sources <span class="research-tab-count">0</span>
+                </button>
+                <button class="research-tab" data-tab="notes">Notes</button>
+                <button class="research-tab" data-tab="graph">Entity Graph</button>
+            </div>
+            <div class="research-content">
+                <div id="research-tab-sources" class="research-tab-pane">
+                    <div class="research-insight-card">
+                        <i class="ph ph-info"></i>
+                        <span>Chat conectado ao backend Stupidex. Ferramentas e GitHub disponíveis.</span>
                     </div>
-                    <p class="section-hint">
-                        Cole a URL HTTPS do repositório. Exemplo:
-                        <code>https://github.com/usuario/projeto.git</code>
-                    </p>
-                    <label class="field">
-                        <span class="field-label">URL</span>
-                        <input
-                            id="clone-url"
-                            type="text"
-                            placeholder="https://github.com/usuario/projeto.git"
-                        />
-                    </label>
-                    <label class="field">
-                        <span class="field-label"
-                            >Branch <span class="hint">(opcional)</span></span
-                        >
-                        <input
-                            id="clone-branch"
-                            type="text"
-                            placeholder="main"
-                        />
-                    </label>
-                    <label class="field">
-                        <span class="field-label"
-                            >Nome do workspace
-                            <span class="hint">(opcional)</span></span
-                        >
-                        <input
-                            id="clone-name"
-                            type="text"
-                            placeholder="meu-projeto"
-                        />
-                    </label>
-                    <div id="clone-status" class="field-hint"></div>
+                    <div class="research-metrics">
+                        <div class="research-metric">
+                            <strong id="research-active-count">0</strong>
+                            <span>arquivos ativos</span>
+                        </div>
+                        <div class="research-metric">
+                            <strong id="research-github-state">OFF</strong>
+                            <span>GitHub</span>
+                        </div>
+                    </div>
+                    <div class="research-model-card">
+                        <i class="ph ph-cpu"></i>
+                        <span>
+                            <strong>Modelo</strong>
+                            <small id="research-model-name">deepseek-v4-pro</small>
+                        </span>
+                    </div>
+                    <div id="research-sources-list">
+                        <p class="research-empty">Nenhuma fonte ainda.</p>
+                    </div>
                 </div>
-                <div class="modal-footer">
-                    <button id="cancel-clone" class="ghost-btn">
-                        Cancelar
-                    </button>
-                    <button id="confirm-clone" class="primary-btn">
-                        Clonar
-                    </button>
+                <div id="research-tab-notes" class="research-tab-pane hidden">
+                    <p class="research-empty">Anotações em breve.</p>
+                </div>
+                <div id="research-tab-graph" class="research-tab-pane hidden">
+                    <p class="research-empty">Grafo de entidades em breve.</p>
                 </div>
             </div>
         </div>
+    </aside>
 
-        <div
-            id="github-connect-modal"
-            class="modal hidden"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="github-connect-title"
-        >
-            <div class="modal-content" style="max-width: 520px">
-                <div class="modal-header">
-                    <h2 id="github-connect-title">Conectar GitHub</h2>
-                    <button
-                        id="close-github-connect"
-                        class="icon-btn"
-                        aria-label="Fechar"
-                    >
-                        <i class="ph ph-x"></i>
-                    </button>
+    <!-- Hidden inputs -->
+    <input id="file-input" type="file" multiple webkitdirectory style="display:none" />
+    <input id="composer-image-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple style="display:none" />
+    <input id="search-input" type="text" placeholder="Buscar conversas…" class="hidden" />
+    <!-- Legacy IDs for JS compatibility -->
+    <div id="composer-modes" class="hidden"></div>
+
+</div><!-- /#main-app -->
+
+<!-- ============================================================
+     DROP OVERLAY
+     ============================================================ -->
+<div id="drop-overlay" class="drop-overlay hidden">
+    <div class="drop-box">
+        <div class="drop-icon"><i class="ph ph-folder-open"></i></div>
+        <div class="drop-text">Solte arquivos ou pastas aqui</div>
+    </div>
+</div>
+
+<!-- ============================================================
+     MODAL: File Viewer
+     ============================================================ -->
+<div id="file-modal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-content" style="max-width:900px">
+        <div class="modal-header">
+            <h2 id="file-modal-title">file.txt</h2>
+            <button id="close-file" class="icon-btn" aria-label="Fechar"><i class="ph ph-x"></i></button>
+        </div>
+        <div class="modal-body" style="max-height:70vh">
+            <pre><code id="file-modal-content"></code></pre>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================
+     MODAL: Git Clone
+     ============================================================ -->
+<div id="clone-modal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-content" style="max-width:520px">
+        <div class="modal-header">
+            <h2>Clonar repositório Git</h2>
+            <button id="close-clone" class="icon-btn" aria-label="Fechar"><i class="ph ph-x"></i></button>
+        </div>
+        <div class="modal-body">
+            <div id="clone-github-card" class="github-integration-card github-integration-compact">
+                <div class="github-integration-icon" aria-hidden="true"><i class="ph ph-github-logo"></i></div>
+                <div class="github-integration-copy">
+                    <strong id="clone-github-title">Verificando GitHub…</strong>
+                    <span id="clone-github-description">Repositórios públicos disponíveis.</span>
                 </div>
-                <div class="modal-body github-connect-options">
-                    <section id="github-oauth-option" class="github-connect-option">
-                        <strong>Autorizar com GitHub</strong>
-                        <p>
-                            Autorize o Stupidex a acessar repositórios públicos e
-                            privados pela sua conta.
-                        </p>
-                        <button id="github-oauth-connect" class="primary-btn">
-                            <i class="ph ph-github-logo"></i>
-                            Continuar com GitHub
-                        </button>
-                    </section>
-                    <div id="github-connect-divider" class="github-connect-divider">
-                        ou conecte com token pessoal
+                <button id="clone-github-action" type="button" class="ghost-btn github-integration-action">Conectar</button>
+            </div>
+            <p class="section-hint">Cole a URL HTTPS do repositório. Ex: <code>https://github.com/user/project.git</code></p>
+            <label class="field">
+                <span class="field-label">URL</span>
+                <input id="clone-url" type="text" placeholder="https://github.com/usuario/projeto.git" />
+            </label>
+            <label class="field">
+                <span class="field-label">Branch <span class="hint">(opcional)</span></span>
+                <input id="clone-branch" type="text" placeholder="main" />
+            </label>
+            <label class="field">
+                <span class="field-label">Nome do workspace <span class="hint">(opcional)</span></span>
+                <input id="clone-name" type="text" placeholder="meu-projeto" />
+            </label>
+            <div id="clone-status" class="field-hint"></div>
+        </div>
+        <div class="modal-footer">
+            <button id="cancel-clone" class="ghost-btn">Cancelar</button>
+            <button id="confirm-clone" class="primary-btn">Clonar</button>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================
+     MODAL: GitHub Connect
+     ============================================================ -->
+<div id="github-connect-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="github-connect-title">
+    <div class="modal-content" style="max-width:520px">
+        <div class="modal-header">
+            <h2 id="github-connect-title">Conectar GitHub</h2>
+            <button id="close-github-connect" class="icon-btn" aria-label="Fechar"><i class="ph ph-x"></i></button>
+        </div>
+        <div class="modal-body github-connect-options">
+            <section id="github-oauth-option" class="github-connect-option">
+                <strong>Autorizar com GitHub</strong>
+                <p>Autorize o Stupidex a acessar repositórios públicos e privados pela sua conta.</p>
+                <button id="github-oauth-connect" class="primary-btn">
+                    <i class="ph ph-github-logo"></i> Continuar com GitHub
+                </button>
+            </section>
+            <div id="github-connect-divider" class="github-connect-divider">ou conecte com token pessoal</div>
+            <section class="github-connect-option">
+                <strong>Token pessoal</strong>
+                <p>Use um token de acesso refinado com permissão <code>Contents: Read and write</code>.</p>
+                <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener noreferrer" class="github-token-link">Criar token no GitHub</a>
+                <label class="field">
+                    <span class="field-label">Token</span>
+                    <div class="api-key-row">
+                        <input id="github-token-input" type="password" placeholder="github_pat_… ou ghp_…" autocomplete="new-password" spellcheck="false" />
+                        <button id="toggle-github-token" type="button" class="ghost-btn">mostrar</button>
                     </div>
-                    <section class="github-connect-option">
-                        <strong>Token pessoal</strong>
-                        <p>
-                            Use um token de acesso refinado com acesso aos
-                            repositórios desejados e permissão
-                            <code>Contents: Read and write</code>.
-                        </p>
-                        <a
-                            href="https://github.com/settings/personal-access-tokens/new"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            class="github-token-link"
-                            >Criar token no GitHub</a
-                        >
-                        <label class="field">
-                            <span class="field-label">Token</span>
-                            <div class="api-key-row">
-                                <input
-                                    id="github-token-input"
-                                    type="password"
-                                    placeholder="github_pat_... ou ghp_..."
-                                    autocomplete="new-password"
-                                    spellcheck="false"
-                                />
-                                <button
-                                    id="toggle-github-token"
-                                    type="button"
-                                    class="ghost-btn"
-                                >
-                                    mostrar
-                                </button>
-                            </div>
-                        </label>
-                        <div id="github-token-status" class="field-hint"></div>
-                    </section>
-                    <p class="integration-privacy-note">
-                        O token é validado no GitHub, armazenado cifrado e nunca é
-                        incluído na URL do repositório ou enviado aos modelos.
-                    </p>
+                </label>
+                <div id="github-token-status" class="field-hint"></div>
+            </section>
+            <p class="integration-privacy-note">O token é validado no GitHub, armazenado cifrado e nunca incluído na URL ou enviado aos modelos.</p>
+        </div>
+        <div class="modal-footer">
+            <button id="cancel-github-connect" class="ghost-btn">Cancelar</button>
+            <button id="confirm-github-token" class="primary-btn">Conectar token</button>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================
+     MODAL: Settings
+     ============================================================ -->
+<div id="settings-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="settings-title">Configurações</h2>
+            <button id="close-settings" class="icon-btn" aria-label="Fechar"><i class="ph ph-x"></i></button>
+        </div>
+        <div class="modal-body">
+            <section class="settings-section">
+                <h3 class="section-title">Modelo</h3>
+                <label class="field">
+                    <span class="field-label">Provedor</span>
+                    <select id="provider-select"></select>
+                </label>
+                <label class="field" id="api-key-field">
+                    <span class="field-label">
+                        API Key <span class="hint" id="api-key-hint"></span>
+                    </span>
+                    <div class="api-key-row">
+                        <input id="api-key-input" type="password" placeholder="sk-…" autocomplete="off" />
+                        <button type="button" id="toggle-key-visibility" class="ghost-btn">mostrar</button>
+                    </div>
+                    <span class="field-hint" id="api-key-status"></span>
+                </label>
+                <label class="field">
+                    <span class="field-label">Modelo customizado <span class="hint">(opcional)</span></span>
+                    <input id="model-input" type="text" placeholder="ex.: deepseek-ai/deepseek-v4-pro" autocomplete="off" />
+                </label>
+            </section>
+
+            <section class="settings-section settings-section-divider">
+                <h3 class="section-title">Integrações</h3>
+                <div id="settings-github-card" class="github-integration-card">
+                    <div id="settings-github-avatar" class="github-integration-icon" aria-hidden="true">
+                        <i class="ph ph-github-logo"></i>
+                    </div>
+                    <div class="github-integration-copy">
+                        <strong id="settings-github-title">Verificando GitHub…</strong>
+                        <span id="settings-github-description">Conecte sua conta para clonar projetos privados.</span>
+                    </div>
+                    <button id="settings-github-action" type="button" class="ghost-btn github-integration-action">Conectar</button>
                 </div>
-                <div class="modal-footer">
-                    <button id="cancel-github-connect" class="ghost-btn">
-                        Cancelar
-                    </button>
-                    <button id="confirm-github-token" class="primary-btn">
-                        Conectar token
+            </section>
+
+            <section class="settings-section settings-section-divider">
+                <h3 class="section-title">Segurança</h3>
+                <div class="settings-appearance-row">
+                    <div>
+                        <strong>Aprovação de comandos</strong>
+                        <br/><span class="hint">Confirmação manual ou execução automática no terminal</span>
+                    </div>
+                    <button id="shell-approval-toggle" type="button" class="ghost-btn">
+                        <span id="shell-approval-label">Automático</span>
                     </button>
                 </div>
+            </section>
+
+            <section class="settings-section settings-section-divider">
+                <h3 class="section-title">Aparência</h3>
+                <div class="settings-appearance-row">
+                    <span>Tema</span>
+                    <button id="settings-theme-toggle" type="button" class="ghost-btn">
+                        <i class="ph ph-moon"></i> Escuro
+                    </button>
+                </div>
+            </section>
+        </div>
+        <div class="modal-footer">
+            <button id="cancel-settings" class="ghost-btn">Cancelar</button>
+            <button id="save-settings" class="primary-btn">Salvar</button>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================
+     MODAL: Confirm / Delete
+     ============================================================ -->
+<div id="confirm-modal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-content" style="max-width:400px">
+        <div class="modal-header">
+            <span id="confirm-icon" class="confirm-icon"></span>
+            <h2 id="confirm-title">Confirmar</h2>
+            <button id="close-confirm" class="icon-btn" aria-label="Fechar"><i class="ph ph-x"></i></button>
+        </div>
+        <div class="modal-body">
+            <p id="confirm-message"></p>
+            <p id="confirm-detail" class="field-hint"></p>
+        </div>
+        <div class="modal-footer">
+            <button id="cancel-confirm" class="ghost-btn">Cancelar</button>
+            <button id="confirm-delete" class="danger-btn">Confirmar</button>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================
+     MODAL: Profile (legacy IDs preserved)
+     ============================================================ -->
+<div id="profile-modal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-content" style="max-width:420px">
+        <div class="modal-header">
+            <h2>Perfil</h2>
+            <button id="close-profile" class="icon-btn" aria-label="Fechar"><i class="ph ph-x"></i></button>
+        </div>
+        <div class="modal-body">
+            <div class="profile-avatar-wrap">
+                <img id="profile-modal-avatar" src="" alt="Avatar" class="profile-modal-avatar" />
+            </div>
+            <div class="profile-info">
+                <div class="profile-field"><span class="field-label">Nome</span><span id="profile-username"></span></div>
+                <div class="profile-field"><span class="field-label">Email</span><span id="profile-email"></span></div>
+                <div class="profile-field"><span class="field-label">Provedor</span><span id="profile-provider"></span></div>
+                <div class="profile-field"><span class="field-label">OAuth</span><span id="profile-oauth-badge"></span></div>
+                <div class="profile-field"><span class="field-label">Membro desde</span><span id="profile-member-since"></span></div>
+                <div class="profile-field"><span class="field-label">Workspaces</span><span id="profile-ws-count"></span></div>
             </div>
         </div>
-
-        <!-- Settings modal (preserved) -->
-        <div
-            id="settings-modal"
-            class="modal hidden"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="settings-title"
-        >
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h2 id="settings-title">Configurações</h2>
-                    <button
-                        id="close-settings"
-                        class="icon-btn"
-                        aria-label="Fechar"
-                    >
-                        <i class="ph ph-x"></i>
-                    </button>
-                </div>
-                <div class="modal-body">
-                    <section class="settings-section">
-                        <h3 class="section-title">Modelo</h3>
-                        <label class="field">
-                            <span class="field-label">Provedor</span>
-                            <select id="provider-select"></select>
-                        </label>
-                        <label class="field" id="api-key-field">
-                            <span class="field-label">
-                                API Key
-                                <span class="hint" id="api-key-hint"></span>
-                            </span>
-                            <div class="api-key-row">
-                                <input
-                                    id="api-key-input"
-                                    type="password"
-                                    placeholder="sk-..."
-                                    autocomplete="off"
-                                />
-                                <button
-                                    type="button"
-                                    id="toggle-key-visibility"
-                                    class="ghost-btn"
-                                >
-                                    mostrar
-                                </button>
-                            </div>
-                            <span class="field-hint" id="api-key-status"></span>
-                        </label>
-                        <label class="field">
-                            <span class="field-label"
-                                >Modelo customizado
-                                <span class="hint">(opcional)</span></span
-                            >
-                            <input
-                                id="model-input"
-                                type="text"
-                                placeholder="ex.: deepseek-v4-pro"
-                                autocomplete="off"
-                            />
-                        </label>
-                    </section>
-                    <section class="settings-section settings-section-divider">
-                        <h3 class="section-title">Integrações</h3>
-                        <div
-                            id="settings-github-card"
-                            class="github-integration-card"
-                        >
-                            <div
-                                id="settings-github-avatar"
-                                class="github-integration-icon"
-                                aria-hidden="true"
-                            >
-                                <i class="ph ph-github-logo"></i>
-                            </div>
-                            <div class="github-integration-copy">
-                                <strong id="settings-github-title"
-                                    >Verificando GitHub…</strong
-                                >
-                                <span id="settings-github-description"
-                                    >Conecte sua conta para clonar projetos
-                                    privados.</span
-                                >
-                            </div>
-                            <button
-                                id="settings-github-action"
-                                type="button"
-                                class="ghost-btn github-integration-action"
-                            >
-                                Conectar
-                            </button>
-                        </div>
-                        <p class="integration-privacy-note">
-                            O token é armazenado cifrado no servidor e nunca é
-                            enviado ao navegador ou incluído na URL do
-                            repositório.
-                        </p>
-                    </section>
-                </div>
-                <div class="modal-footer">
-                    <button id="cancel-settings" class="ghost-btn">
-                        Fechar
-                    </button>
-                    <button id="save-settings" class="primary-btn">
-                        Salvar
-                    </button>
-                </div>
-            </div>
+        <div class="modal-footer">
+            <button id="close-profile-btn" class="primary-btn">Fechar</button>
         </div>
+    </div>
+</div>
 
-        <!-- Profile modal -->
-        <div
-            id="profile-modal"
-            class="modal hidden"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="profile-title"
-        >
-            <div class="modal-content profile-modal-content">
-                <div class="profile-header">
-                    <img
-                        id="profile-modal-avatar"
-                        class="profile-modal-avatar"
-                        src=""
-                        alt="Avatar"
-                    />
-                    <div class="profile-header-info">
-                        <h2 id="profile-title">Perfil</h2>
-                        <span
-                            id="profile-oauth-badge"
-                            class="profile-oauth-badge"
-                        ></span>
-                    </div>
-                    <button
-                        id="close-profile"
-                        class="icon-btn"
-                        aria-label="Fechar"
-                    >
-                        <i class="ph ph-x"></i>
-                    </button>
-                </div>
-                <div class="modal-body">
-                    <div class="profile-details">
-                        <div class="profile-field">
-                            <span class="profile-field-label">Usuário</span>
-                            <span
-                                id="profile-username"
-                                class="profile-field-value"
-                                >—</span
-                            >
-                        </div>
-                        <div class="profile-field">
-                            <span class="profile-field-label">Email</span>
-                            <span id="profile-email" class="profile-field-value"
-                                >—</span
-                            >
-                        </div>
-                        <div class="profile-field">
-                            <span class="profile-field-label">Provedor</span>
-                            <span
-                                id="profile-provider"
-                                class="profile-field-value"
-                                >—</span
-                            >
-                        </div>
-                        <div class="profile-field">
-                            <span class="profile-field-label"
-                                >Membro desde</span
-                            >
-                            <span
-                                id="profile-member-since"
-                                class="profile-field-value"
-                                >—</span
-                            >
-                        </div>
-                        <div class="profile-field">
-                            <span class="profile-field-label"
-                                >Workspaces ativos</span
-                            >
-                            <span
-                                id="profile-ws-count"
-                                class="profile-field-value"
-                                >0</span
-                            >
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button id="close-profile-btn" class="ghost-btn">
-                        Fechar
-                    </button>
-                </div>
-            </div>
+<!-- ============================================================
+     AGENT OVERLAY (walkthrough)
+     ============================================================ -->
+<div id="agent-overlay" class="agent-overlay hidden">
+    <header class="agent-overlay-header">
+        <div class="agent-overlay-title">
+            <i class="ph ph-cpu"></i>
+            <span id="agent-overlay-label">Agente executando...</span>
         </div>
+        <button onclick="document.getElementById('agent-overlay').classList.add('hidden')" class="icon-btn">
+            <i class="ph ph-x"></i>
+        </button>
+    </header>
+    <div class="agent-overlay-body">
+        <div id="agent-overlay-logs" class="agent-overlay-logs font-mono text-xs"></div>
+    </div>
+</div>
 
-        <!-- Confirmation modal for delete actions -->
-        <div
-            id="confirm-modal"
-            class="modal confirm-modal hidden"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="confirm-title"
-        >
-            <div class="modal-content confirm-dialog">
-                <div class="modal-header">
-                    <h2 id="confirm-title">Confirmar</h2>
-                    <button
-                        id="close-confirm"
-                        class="icon-btn"
-                        aria-label="Fechar"
-                    >
-                        <i class="ph ph-x"></i>
-                    </button>
-                </div>
-                <div class="modal-body">
-                    <div
-                        id="confirm-icon"
-                        class="confirm-icon"
-                        aria-hidden="true"
-                    >
-                        <i class="ph ph-trash"></i>
-                    </div>
-                    <div class="confirm-copy">
-                        <p id="confirm-message">
-                            Tem certeza que deseja excluir este item?
-                        </p>
-                        <p id="confirm-detail" class="confirm-detail"></p>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button id="cancel-confirm" class="ghost-btn">
-                        Cancelar
-                    </button>
-                    <button id="confirm-delete" class="danger-btn">
-                        Excluir
-                    </button>
-                </div>
-            </div>
-        </div>
+<script src="/static/app.js?v=30"></script>
 
-        <script src="https://js.puter.com/v2/"></script>
-        <script src="/static/app.js?v=25"></script>
-    </body>
+<!-- Right panel tab switcher (inline, lightweight) -->
+<script>
+(function(){
+    document.querySelectorAll('.rp-tab').forEach(function(btn){
+        btn.addEventListener('click', function(){
+            var tab = btn.dataset.rpTab;
+            document.querySelectorAll('.rp-tab').forEach(function(b){ b.classList.remove('rp-tab-active'); });
+            document.querySelectorAll('.rp-pane').forEach(function(p){ p.classList.remove('rp-pane-active'); });
+            btn.classList.add('rp-tab-active');
+            var pane = document.getElementById('rp-pane-' + tab);
+            if(pane) pane.classList.add('rp-pane-active');
+        });
+    });
+
+    // Clone btn composer → open clone modal
+    var cloneBtnComposer = document.getElementById('clone-btn-composer');
+    if(cloneBtnComposer){
+        cloneBtnComposer.addEventListener('click', function(){
+            var cloneModal = document.getElementById('clone-modal');
+            if(cloneModal) cloneModal.classList.remove('hidden');
+        });
+    }
+
+    // Right panel toggle
+    var rpToggle = document.getElementById('right-panel-toggle');
+    var rpPanel = document.getElementById('right-panel');
+    if(rpToggle && rpPanel){
+        rpToggle.addEventListener('click', function(){
+            rpPanel.classList.toggle('right-panel-hidden');
+        });
+    }
+
+    // Mode selector in topbar
+    document.querySelectorAll('.mode-btn').forEach(function(btn){
+        btn.addEventListener('click', function(){
+            document.querySelectorAll('.mode-btn').forEach(function(b){ b.classList.remove('mode-btn-active'); });
+            btn.classList.add('mode-btn-active');
+            // Expose selected mode for app.js (reads data-mode attribute)
+            window.__selectedMode = btn.dataset.mode;
+        });
+    });
+    window.__selectedMode = 'agent';
+})();
+</script>
+</body>
 </html>

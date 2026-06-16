@@ -11,56 +11,19 @@ MAX_SHELL_OUTPUT_BYTES = 64 * 1024
 MAX_SHELL_TIMEOUT = 120
 DEFAULT_SHELL_TIMEOUT = 30
 
+# Shell executor with structured policies (imported lazily to avoid circular)
+_shell_executor = None
+
+def _get_shell_executor():
+    global _shell_executor
+    if _shell_executor is None:
+        from stupidex.shell_executor import run_command as _run_cmd
+        _shell_executor = _run_cmd
+    return _shell_executor
+
 # Commands that can escape the sandbox, exfiltrate data, or destroy the host.
 # Even though the LLM is told not to run them, we enforce this in code as a
 # defense in depth.
-_SHELL_BLOCKED_PATTERNS = [
-    r"\brm\s+-rf?\s+/(?!tmp/|workspace)",
-    r"\bsudo\b",
-    r"\bsu\b",
-    r"\bchmod\s+777\b",
-    r"\bchown\s+-R\b",
-    r"\bcurl\s+",
-    r"\bwget\s+",
-    r"\bnc\s+",
-    r"\bnetcat\b",
-    r"\bssh\s+",
-    r"\bscp\s+",
-    r"\brsync\s+",
-    r"\bdd\s+if=",
-    r"\bmkfs\b",
-    r"\bformat\s+",
-    r":\(\)\s*\{",  # fork bomb
-    r"&&\s*rm\b",
-    r"\|\s*sh\b",
-    r"\|\s*bash\b",
-    r"\beval\b",
-    r"\bbase64\s+-d\b",
-    r"\bpython\s+-c\b",
-    r"\bnode\s+-e\b",
-    r"\bperl\s+-e\b",
-    r"/etc/(?:passwd|shadow|hosts|fstab|hostname)",
-    r"/proc/",
-    r"/sys/",
-    r"~/?\.stupidex",
-    r"~/?\.ssh",
-    r"~/?\.aws",
-    r"~/?\.env",
-    r"~/?\.config",
-    r"\benv\b",
-    r"\bprintenv\b",
-    r"\bwhoami\b",
-    r"\buname\b",
-    r"\bhostname\b",
-    r"\bifconfig\b",
-    r"\bip\s+addr\b",
-    r"\bcat\s+/var/",
-    r"\bcrontab\b",
-    r"\bsystemctl\b",
-    r"\bservice\s+",
-]
-
-_SHELL_BLOCKED_RX = [re.compile(p) for p in _SHELL_BLOCKED_PATTERNS]
 
 
 def _is_path_within(child: Path, parent: Path) -> bool:
@@ -93,7 +56,9 @@ def _sandbox_guard(resolved: Path, workspace_dir: Path) -> str | None:
 
 def _wd(w: str | None) -> Path:
     w = (w or "").strip()
-    return Path(w).resolve() if w else Path.cwd()
+    if w:
+        return Path(w).resolve()
+    raise RuntimeError("working_dir is required — no workspace is active")
 
 
 def read_file(path: str, working_dir: str = ".") -> str:
@@ -246,16 +211,10 @@ def run_shell(
     workspace_root: str | None = None,
     github_token: str = "",
 ) -> str:
-    """Run a shell command inside the workspace.
-
-    Defense-in-depth: enforce that the working directory is the workspace, and
-    block dangerous command patterns that could escape the sandbox even with a
-    contained cwd.
-    """
+    """Run a shell command inside the workspace using structured executor."""
     if os.environ.get("STUPIDEX_ENABLE_SHELL", "1").lower() in {"0", "false", "no"}:
         return "SECURITY: shell execution is disabled by the server"
 
-    # 1. The forced cwd is the sandbox root; no process-global state is used.
     work = Path(cwd).resolve() if cwd else Path.cwd()
     root = Path(workspace_root).resolve() if workspace_root else work
     if not work.is_dir():
@@ -263,89 +222,46 @@ def run_shell(
     if not _is_path_within(work, root):
         return "SECURITY: shell cwd is outside the workspace"
 
-    # 2. Reject shell syntax and parse an argv without invoking a command shell.
-    cmd_lc = command.lower()
-    for rx in _SHELL_BLOCKED_RX:
-        if rx.search(cmd_lc):
-            return "SECURITY: command blocked by sandbox policy"
-    if any(
-        token in command for token in ("|", "&", ";", "<", ">", "`", "$(", "\n", "\r")
-    ):
+    # Reject shell operators
+    if any(token in command for token in ("|", "&", ";", "<", ">", "`", "$(", "\n", "\r")):
         return "SECURITY: shell operators are not allowed"
+
+    # Parse argv
     try:
         argv = shlex.split(command, posix=os.name != "nt")
     except ValueError:
         return "ERROR: invalid command quoting"
     if os.name == "nt":
-        argv = [
-            arg[1:-1]
-            if len(arg) >= 2 and arg[0] == arg[-1] and arg[0] in {'"', "'"}
-            else arg
-            for arg in argv
-        ]
+        argv = [arg[1:-1] if len(arg) >= 2 and arg[0] == arg[-1] and arg[0] in {'"', "'"} else arg for arg in argv]
     if not argv:
         return "ERROR: empty command"
-    allowed = {
-        item.strip().lower()
-        for item in os.environ.get(
-            "STUPIDEX_SHELL_COMMANDS",
-            "python,python3,pytest,node,npm,npx,pnpm,yarn,cargo,go,dotnet,make,cmake,git",
-        ).split(",")
-        if item.strip()
-    }
+
     executable = Path(argv[0]).name.lower()
-    if executable not in allowed:
-        return f"SECURITY: executable '{executable}' is not allowed"
+
+    # Git commands delegated to git()
     if executable in {"git", "git.exe"}:
-        git_args = (
-            subprocess.list2cmdline(argv[1:])
-            if os.name == "nt"
-            else shlex.join(argv[1:])
-        )
-        return git(
-            git_args,
-            cwd=str(work),
-            github_token=github_token,
-            workspace_root=str(root),
-        )
+        git_args = subprocess.list2cmdline(argv[1:]) if os.name == "nt" else shlex.join(argv[1:])
+        return git(git_args, cwd=str(work), github_token=github_token, workspace_root=str(root))
 
-    # 3. Clamp timeout
-    timeout = max(1, min(int(timeout or DEFAULT_SHELL_TIMEOUT), MAX_SHELL_TIMEOUT))
-
-    # 4. Use a minimal environment. OS-level container isolation is still
-    # required when this opt-in capability is enabled on a shared server.
-    env = {
-        "PATH": os.environ.get("PATH", os.defpath),
-        "HOME": str(work),
-        "LANG": "C.UTF-8",
-        "NO_COLOR": "1",
-        "GIT_AUTHOR_NAME": "Stupidex Agent",
-        "GIT_AUTHOR_EMAIL": "agent@stupidex.local",
-        "GIT_COMMITTER_NAME": "Stupidex Agent",
-        "GIT_COMMITTER_EMAIL": "agent@stupidex.local",
-        "GIT_TERMINAL_PROMPT": "0",
-    }
+    # Use structured shell executor
     try:
-        result = subprocess.run(
-            argv,
-            shell=False,
-            cwd=str(work),
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            env=env,
-        )
-    except subprocess.TimeoutExpired:
-        return f"ERROR: command timed out after {timeout}s"
-    stdout = (result.stdout or "")[:MAX_SHELL_OUTPUT_BYTES]
-    stderr = (result.stderr or "")[:MAX_SHELL_OUTPUT_BYTES]
-    parts = []
-    if stdout.strip():
-        parts.append(f"stdout:\n{stdout.rstrip()}")
-    if stderr.strip():
-        parts.append(f"stderr:\n{stderr.rstrip()}")
-    parts.append(f"[exit {result.returncode}]")
-    return "\n".join(parts) or f"[exit {result.returncode}] (no output)"
+        from stupidex.shell_executor import run_command as _exec_cmd
+        result = _exec_cmd(raw=command, cwd=work, user_id="agent", workspace_id=work.name, timeout=timeout, approved=True)
+    except ValueError as exc:
+        return f"SECURITY: {exc}"
+    except Exception as exc:
+        return f"ERROR: {exc}"
+
+    lines = []
+    if result.stdout.strip():
+        lines.append(f"stdout:\n{result.stdout.rstrip()}")
+    if result.stderr.strip():
+        lines.append(f"stderr:\n{result.stderr.rstrip()}")
+    if result.timed_out:
+        lines.append("ERROR: command timed out after {}s [exit {}]".format(round(result.duration), result.exit_code))
+    else:
+        lines.append(f"[exit {result.exit_code}]")
+    return "\n".join(lines) or f"[exit {result.exit_code}] (no output)"
 
 
 def git(
@@ -397,7 +313,7 @@ def git(
     cmd = [
         "git",
         "-c",
-        "core.hooksPath=/dev/null",
+        f"core.hooksPath={os.devnull}",
         "-c",
         "core.fsmonitor=false",
         "-c",
@@ -405,19 +321,23 @@ def git(
         "--no-pager",
         *parsed,
     ]
-    env = {
-        "PATH": os.environ.get("PATH", os.defpath),
-        "HOME": str(work),
-        "GIT_CONFIG_GLOBAL": os.devnull,
-        "GIT_CONFIG_NOSYSTEM": "1",
-        "GIT_PAGER": "cat",
-        "GIT_TERMINAL_PROMPT": "0",
-        "GIT_AUTHOR_NAME": "Stupidex Agent",
-        "GIT_AUTHOR_EMAIL": "agent@stupidex.local",
-        "GIT_COMMITTER_NAME": "Stupidex Agent",
-        "GIT_COMMITTER_EMAIL": "agent@stupidex.local",
-        "LANG": "C.UTF-8",
-    }
+    env = dict(os.environ)
+    env.update(
+        {
+            "HOME": str(work),
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_PAGER": "cat",
+            "GIT_TERMINAL_PROMPT": "0",
+            "GIT_AUTHOR_NAME": "Stupidex Agent",
+            "GIT_AUTHOR_EMAIL": "agent@stupidex.local",
+            "GIT_COMMITTER_NAME": "Stupidex Agent",
+            "GIT_COMMITTER_EMAIL": "agent@stupidex.local",
+            "LANG": env.get("LANG", "C.UTF-8"),
+        }
+    )
+    env.pop("GIT_ASKPASS", None)
+    env.pop("SSH_ASKPASS", None)
     if github_token and parsed[0] in {"push", "pull", "fetch"}:
         credentials = base64.b64encode(
             f"x-access-token:{github_token}".encode("utf-8")
@@ -429,6 +349,10 @@ def git(
                 "GIT_CONFIG_VALUE_0": f"Authorization: Basic {credentials}",
             }
         )
+    else:
+        env.pop("GIT_CONFIG_COUNT", None)
+        env.pop("GIT_CONFIG_KEY_0", None)
+        env.pop("GIT_CONFIG_VALUE_0", None)
     try:
         result = subprocess.run(
             cmd,
@@ -644,29 +568,29 @@ def _web_search(args: dict) -> str:
 
 
 def _dispatch(name: str, args: dict) -> str:
-    wd = args.get("working_dir")
+    wd = args.get("working_dir", "")
     if name == "read_file":
-        return read_file(args["path"], wd or ".")
+        return read_file(args["path"], wd)
     if name == "write_file":
-        return write_file(args["path"], args["content"], wd or ".")
+        return write_file(args["path"], args["content"], wd)
     if name == "edit_file":
         return edit_file(
             args["path"],
             args["old_text"],
             args["new_text"],
             args.get("replace_all", False),
-            wd or ".",
+            wd,
         )
     if name == "list_dir":
-        return list_dir(args.get("path", "."), wd or ".")
+        return list_dir(args.get("path", "."), wd)
     if name == "search_files":
         return search_files(
-            args["path"], args["pattern"], args.get("recursive", True), wd or "."
+            args["path"], args["pattern"], args.get("recursive", True), wd
         )
     if name == "mkdir":
-        return mkdir(args["path"], wd or ".")
+        return mkdir(args["path"], wd)
     if name == "delete":
-        return delete(args["path"], wd or ".")
+        return delete(args["path"], wd)
     if name == "run_shell":
         return run_shell(args["command"], args.get("cwd"), args.get("timeout", 60))
     if name == "git":

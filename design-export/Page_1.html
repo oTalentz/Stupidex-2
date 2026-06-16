@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<!--
+  aesthetic_dna: Tech-Noir, Minimalist Dev Tool, Liquid Glass, Electric Violet Accent
+  ui_paradigm: Collapsible Tri-Pane Workspace (Bento 2.0 Micro-architecture)
+  palette: Zinc 950 Base, Zinc 900 Surfaces, Electric Violet Accent, Emerald Success
+-->
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Stupidex | Intelligence Platform</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    
+    <!-- Tailwind -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Outfit', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        zinc: {
+                            900: '#18181b',
+                            950: '#0a0a0a',
+                        },
+                        violet: {
+                            400: '#a78bfa',
+                            500: '#8b5cf6',
+                            600: '#7c3aed',
+                        }
+                    },
+                    boxShadow: {
+                        'glass': 'inset 0 1px 0 0 rgba(255, 255, 255, 0.05)',
+                        'glow': '0 0 20px -5px rgba(124, 58, 237, 0.4)',
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'slide-up': 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+                        'fade-in': 'fadeIn 0.3s ease-out forwards',
+                    },
+                    keyframes: {
+                        slideUp: {
+                            '0%': { transform: 'translateY(10px)', opacity: '0' },
+                            '100%': { transform: 'translateY(0)', opacity: '1' },
+                        },
+                        fadeIn: {
+                            '0%': { opacity: '0' },
+                            '100%': { opacity: '1' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #27272a; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
+
+        /* Utilities */
+        .glass-panel {
+            background: rgba(24, 24, 27, 0.6);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.02);
+        }
+
+        .text-glow {
+            text-shadow: 0 0 10px rgba(124, 58, 237, 0.5);
+        }
+
+        .stripe-bg {
+            background-image: repeating-linear-gradient(
+                -45deg,
+                transparent,
+                transparent 10px,
+                rgba(255,255,255,0.02) 10px,
+                rgba(255,255,255,0.02) 20px
+            );
+        }
+
+        /* Staggered lists */
+        .stagger-1 { animation-delay: 50ms; }
+        .stagger-2 { animation-delay: 100ms; }
+        .stagger-3 { animation-delay: 150ms; }
+        .stagger-4 { animation-delay: 200ms; }
+
+        /* Typography tweaks */
+        h1, h2, h3 { letter-spacing: -0.02em; }
+        
+        /* Shimmer Loading */
+        .shimmer {
+            background: linear-gradient(90deg, #18181b 0%, #27272a 50%, #18181b 100%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+        }
+        @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+
+        /* Terminal Cursor */
+        .cursor-blink { animation: blink 1s step-end infinite; }
+        @keyframes blink { 50% { opacity: 0; } }
+    </style>
+</head>
+<body class="bg-zinc-950 text-zinc-50 h-[100dvh] w-full overflow-hidden flex selection:bg-violet-600/30 selection:text-white">
+
+    <!-- OVERLAY: Agent Action Walkthrough (Scroll Sequence Canvas) -->
+    <!-- Triggered via UI, absolute positioned. Hidden by default for main UI -->
+    <div id="agent-overlay" class="fixed inset-0 z-50 bg-zinc-950/90 backdrop-blur-md hidden flex-col">
+        <header class="flex items-center justify-between px-6 py-4 border-b border-white/5 bg-zinc-950/50">
+            <div class="flex items-center gap-3">
+                <i class="ph ph-cpu text-violet-500 text-xl"></i>
+                <span class="font-medium">Agente: Refatoração Auth System</span>
+            </div>
+            <button onclick="document.getElementById('agent-overlay').classList.add('hidden')" class="p-2 hover:bg-zinc-800 rounded-lg transition-colors">
+                <i class="ph ph-x"></i>
+            </button>
+        </header>
+        <div class="flex-1 flex overflow-hidden">
+            <!-- Left: Logs (Scrollable) -->
+            <div id="overlay-scroll-container" class="w-1/3 border-r border-white/5 overflow-y-auto p-6 font-mono text-sm text-zinc-400 space-y-4 relative">
+                <!-- Spacer for scrolling effect -->
+                <div class="h-[200vh] absolute inset-x-0 top-0 pointer-events-none"></div>
+                
+                <div class="sticky top-0 space-y-4">
+                    <div class="flex items-start gap-3 text-zinc-300">
+                        <span class="text-violet-500">▶</span>
+                        <div>
+                            <div class="text-white">Iniciando análise do repositório...</div>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3">
+                        <span class="text-emerald-500">✓</span> <div>Lido `src/auth/login.ts` (1.2kb)</div>
+                    </div>
+                    <div class="flex items-start gap-3">
+                        <span class="text-emerald-500">✓</span> <div>Lido `src/auth/jwt.ts` (3.4kb)</div>
+                    </div>
+                    <div class="flex items-start gap-3 text-zinc-300 mt-8">
+                        <span class="text-violet-500 animate-pulse">⚙</span>
+                        <div>
+                            <div class="text-white">Gerando nova implementação...</div>
+                            <div class="text-xs text-zinc-500 mt-1">Utilizando context window: 12,403 tokens.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Right: Visualizer (Canvas) -->
+            <div class="w-2/3 relative bg-black flex items-center justify-center">
+                <canvas id="sequence-canvas" class="max-w-full max-h-full object-contain opacity-80 mix-blend-screen"></canvas>
+                <div class="absolute bottom-6 left-6 flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-900/50 border border-white/10 backdrop-blur-sm text-xs font-mono">
+                    <span class="w-2 h-2 rounded-full bg-violet-500 animate-pulse"></span>
+                    Otimizando rotina neural
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- ========================================== -->
+    <!-- MACRO-ARCHITECTURE: THREE-PANEL LAYOUT     -->
+    <!-- ========================================== -->
+
+    <!-- LEFT SIDEBAR -->
+    <aside class="w-[260px] flex-shrink-0 flex flex-col border-r border-white/5 bg-zinc-950/80 hidden md:flex transition-all duration-300 z-20">
+        <!-- Brand & Actions -->
+        <div class="p-4 flex flex-col gap-4">
+            <div class="flex items-center gap-2 px-2 text-xl font-bold tracking-tight">
+                <div class="w-6 h-6 rounded bg-violet-600 text-white flex items-center justify-center text-sm shadow-glow pulse-slow">
+                    <i class="ph-bold ph-lightning"></i>
+                </div>
+                Stupidex
+            </div>
+            
+            <div class="grid grid-cols-2 gap-2">
+                <button class="col-span-2 flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-medium text-sm transition-all transform active:scale-[0.98] shadow-glow">
+                    <i class="ph ph-chat-teardrop-text"></i> Nova conversa
+                </button>
+                <button class="flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-zinc-900 border border-white/5 hover:border-white/10 text-xs font-medium transition-colors">
+                    <i class="ph ph-folder-plus"></i> Projeto
+                </button>
+                <button class="flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-zinc-900 border border-white/5 hover:border-white/10 text-xs font-medium transition-colors">
+                    <i class="ph ph-robot"></i> Agente
+                </button>
+            </div>
+        </div>
+
+        <!-- Navigation Lists -->
+        <div class="flex-1 overflow-y-auto px-3 py-2 space-y-6">
+            
+            <!-- Projects -->
+            <div>
+                <div class="text-xs font-semibold text-zinc-500 mb-2 px-3 uppercase tracking-wider">Workspace</div>
+                <div class="space-y-1">
+                    <button class="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-zinc-900 text-sm group">
+                        <div class="flex items-center gap-2 truncate">
+                            <i class="ph ph-github-logo text-zinc-400"></i>
+                            <span class="truncate">core-api-v2</span>
+                        </div>
+                        <div class="flex items-center gap-1.5 opacity-60">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                            <span class="text-[10px] font-mono">main</span>
+                        </div>
+                    </button>
+                    <button class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-zinc-400 hover:bg-zinc-900/50 hover:text-zinc-200 text-sm group transition-colors">
+                        <div class="flex items-center gap-2 truncate">
+                            <i class="ph ph-folder text-zinc-500"></i>
+                            <span class="truncate">frontend-portal</span>
+                        </div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Recent Conversations -->
+            <div>
+                <div class="text-xs font-semibold text-zinc-500 mb-2 px-3 uppercase tracking-wider">Recentes</div>
+                <div class="space-y-1">
+                    <button class="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-zinc-900/50 text-zinc-300 text-sm group transition-colors">
+                        <div class="flex items-center gap-2 truncate">
+                            <i class="ph ph-terminal-window text-zinc-500"></i>
+                            <span class="truncate">Debug Redis connection</span>
+                        </div>
+                    </button>
+                    <button class="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-zinc-900/50 text-zinc-300 text-sm group transition-colors">
+                        <div class="flex items-center gap-2 truncate">
+                            <i class="ph ph-magic-wand text-violet-400"></i>
+                            <span class="truncate">Refactor components</span>
+                        </div>
+                    </button>
+                    <button class="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-zinc-900/50 text-zinc-400 text-sm group transition-colors">
+                        <div class="flex items-center gap-2 truncate">
+                            <i class="ph ph-chat-teardrop text-zinc-500"></i>
+                            <span class="truncate">Explain OAuth2 flow</span>
+                        </div>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- User / Settings -->
+        <div class="p-4 border-t border-white/5 space-y-3">
+            <!-- Usage mini-stat -->
+            <div class="px-2 pb-2">
+                <div class="flex justify-between text-xs text-zinc-500 mb-1">
+                    <span>Claude 3.5 Uso</span>
+                    <span>45k / 100k</span>
+                </div>
+                <div class="h-1 bg-zinc-900 rounded-full overflow-hidden">
+                    <div class="h-full bg-violet-600/80 w-[45%] rounded-full shadow-glow"></div>
+                </div>
+            </div>
+            
+            <button class="w-full flex items-center gap-3 px-2 py-1.5 hover:bg-zinc-900 rounded-lg transition-colors text-sm">
+                <div class="w-7 h-7 rounded-full bg-zinc-800 flex items-center justify-center overflow-hidden">
+                    <img src="https://ui-avatars.com/api/?name=Dev+Admin&background=27272a&color=fff" alt="Avatar" class="w-full h-full object-cover">
+                </div>
+                <div class="flex flex-col items-start flex-1">
+                    <span class="font-medium text-zinc-200">Dev Admin</span>
+                    <span class="text-[10px] text-zinc-500">Pro Plan</span>
+                </div>
+                <i class="ph ph-gear text-zinc-500"></i>
+            </button>
+        </div>
+    </aside>
+
+    <!-- CENTER AREA (Chat) -->
+    <main class="flex-1 flex flex-col min-w-0 bg-zinc-950 relative">
+        
+        <!-- TOPBAR -->
+        <header class="h-14 flex-shrink-0 flex items-center justify-between px-4 border-b border-white/5 bg-zinc-950/80 backdrop-blur-md z-10">
+            <!-- Mobile Toggle & Context -->
+            <div class="flex items-center gap-3">
+                <button class="md:hidden p-1.5 text-zinc-400 hover:text-white">
+                    <i class="ph ph-list text-xl"></i>
+                </button>
+                <div class="flex items-center gap-2 text-sm">
+                    <span class="text-zinc-400">core-api-v2</span>
+                    <span class="text-zinc-600">/</span>
+                    <span class="text-zinc-200 font-medium">Refactor components</span>
+                </div>
+            </div>
+
+            <!-- Controls -->
+            <div class="flex items-center gap-2">
+                <!-- Selectors -->
+                <div class="hidden sm:flex items-center rounded-lg bg-zinc-900 border border-white/5 p-0.5 text-xs">
+                    <button class="px-3 py-1.5 rounded-md bg-zinc-800 text-zinc-100 shadow-sm transition-colors">Agente</button>
+                    <button class="px-3 py-1.5 rounded-md text-zinc-400 hover:text-zinc-200 transition-colors">Chat</button>
+                    <button class="px-3 py-1.5 rounded-md text-zinc-400 hover:text-zinc-200 transition-colors">Revisar</button>
+                </div>
+                
+                <div class="h-4 w-[1px] bg-white/10 mx-1"></div>
+
+                <!-- Model Selector Trigger -->
+                <button class="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-zinc-900 text-xs text-zinc-300 transition-colors border border-transparent hover:border-white/5">
+                    <i class="ph-fill ph-sparkle text-violet-400"></i>
+                    Claude 3.5 Sonnet
+                    <i class="ph ph-caret-down text-zinc-600"></i>
+                </button>
+
+                <!-- Panel Toggle -->
+                <button class="p-2 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900 transition-colors hidden lg:block" title="Toggle Context Panel">
+                    <i class="ph ph-sidebar-simple text-lg"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- CHAT FEED -->
+        <div class="flex-1 overflow-y-auto px-4 md:px-0 py-8 scroll-smooth" id="chat-feed">
+            <div class="max-w-[850px] mx-auto space-y-8 pb-32">
+                
+                <!-- Welcome/Home State (Hidden currently, showing chat flow) -->
+                <!-- 
+                <div class="flex flex-col items-center justify-center h-[50vh] text-center space-y-6">
+                    <div class="w-16 h-16 rounded-2xl bg-zinc-900 border border-white/10 shadow-glow flex items-center justify-center">
+                        <i class="ph-bold ph-lightning text-3xl text-violet-500"></i>
+                    </div>
+                    <h1 class="text-3xl font-medium tracking-tight">Como posso ajudar você hoje?</h1>
+                    <div class="grid grid-cols-2 gap-3 w-full max-w-lg">
+                        ... quick actions
+                    </div>
+                </div> 
+                -->
+
+                <!-- User Message -->
+                <div class="flex justify-end animate-slide-up stagger-1">
+                    <div class="max-w-[80%] bg-zinc-900 border border-white/5 rounded-2xl rounded-tr-sm px-5 py-4 text-sm text-zinc-200 float-right">
+                        Refatore o arquivo <code class="bg-black/50 px-1.5 py-0.5 rounded text-violet-300 font-mono text-xs">src/components/Header.tsx</code> para usar Hooks do React ao invés de classes, e adicione tipagem estrita no TypeScript.
+                    </div>
+                </div>
+
+                <!-- Agent Status Block (Tool Call) -->
+                <div class="flex gap-4 animate-slide-up stagger-2">
+                    <div class="w-8 h-8 rounded-full bg-violet-600/10 border border-violet-500/20 flex flex-shrink-0 items-center justify-center mt-1">
+                        <i class="ph-bold ph-robot text-violet-500"></i>
+                    </div>
+                    <div class="flex-1 max-w-[80%]">
+                        <div class="glass-panel rounded-xl overflow-hidden text-sm">
+                            <!-- Toggle Header -->
+                            <button class="w-full flex items-center justify-between px-4 py-3 bg-white/5 hover:bg-white/10 transition-colors" onclick="document.getElementById('agent-overlay').classList.remove('hidden')">
+                                <div class="flex items-center gap-3 font-medium text-zinc-300">
+                                    <i class="ph-duotone ph-hammer text-lg"></i>
+                                    Executando modificações no repositório...
+                                </div>
+                                <div class="flex items-center gap-3 text-xs">
+                                    <span class="text-zinc-500 font-mono">1.2s</span>
+                                    <i class="ph ph-caret-right text-zinc-500"></i>
+                                </div>
+                            </button>
+                            <!-- Inner Logs Preview -->
+                            <div class="px-4 pb-3 pt-1 border-t border-white/5 font-mono text-xs text-zinc-400 space-y-1.5">
+                                <div class="flex items-center gap-2"><span class="text-emerald-500">✔</span> Lendo Header.tsx</div>
+                                <div class="flex items-center gap-2"><span class="text-violet-500 animate-pulse">●</span> Reescrevendo lógica de estado...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Agent Written Response -->
+                <div class="flex gap-4 animate-slide-up stagger-3">
+                    <div class="w-8 h-8 rounded-full bg-transparent flex flex-shrink-0 justify-center mt-1">
+                        <i class="ph-bold ph-lightning text-violet-500 text-xl"></i>
+                    </div>
+                    <div class="flex-1 space-y-4">
+                        <div class="text-sm text-zinc-300 leading-relaxed">
+                            A refatoração foi concluída. Substituí os componentes de classe por <code>React.FC</code> e adicionei a interface <code>HeaderProps</code> para garantir a tipagem estrita das propriedades recebidas.
+                        </div>
+
+                        <!-- Code Block -->
+                        <div class="rounded-xl border border-white/10 bg-[#0d0d0f] overflow-hidden group">
+                            <!-- Code Header -->
+                            <div class="flex items-center justify-between px-4 py-2 border-b border-white/5 bg-zinc-900/50">
+                                <div class="flex items-center gap-2 text-xs font-mono text-zinc-400">
+                                    <i class="ph ph-file-ts text-blue-400 text-base"></i>
+                                    src/components/Header.tsx
+                                </div>
+                                <div class="flex gap-2">
+                                    <button class="text-xs flex items-center gap-1.5 px-2 py-1 rounded hover:bg-white/10 transition-colors text-zinc-400">
+                                        <i class="ph ph-copy"></i> Copiar
+                                    </button>
+                                    <button class="text-xs flex items-center gap-1.5 px-2 py-1 rounded bg-violet-600/20 text-violet-400 hover:bg-violet-600/30 transition-colors font-medium border border-violet-500/30">
+                                        Aplicar
+                                    </button>
+                                </div>
+                            </div>
+                            <!-- Code Content -->
+                            <div class="p-4 overflow-x-auto text-sm font-mono leading-relaxed text-zinc-300">
+<pre><code><span class="text-pink-400">import</span> React, { useState } <span class="text-pink-400">from</span> <span class="text-green-300">'react'</span>;
+
+<span class="text-pink-400">interface</span> <span class="text-blue-300">HeaderProps</span> {
+  title: <span class="text-violet-300">string</span>;
+  onLogout?: () <span class="text-pink-400">=&gt;</span> <span class="text-violet-300">void</span>;
+}
+
+<span class="text-pink-400">export const</span> <span class="text-blue-300">Header</span>: React.<span class="text-blue-300">FC</span>&lt;<span class="text-blue-300">HeaderProps</span>&gt; = ({ title, onLogout }) <span class="text-pink-400">=&gt;</span> {
+  <span class="text-pink-400">const</span> [isOpen, setIsOpen] = <span class="text-blue-300">useState</span>(<span class="text-violet-400">false</span>);
+
+  <span class="text-pink-400">return</span> (
+    &lt;<span class="text-blue-300">header</span> <span class="text-zinc-400">className="flex justify-between"</span>&gt;
+      &lt;<span class="text-blue-300">h1</span>&gt;{title}&lt;/<span class="text-blue-300">h1</span>&gt;
+      <span class="text-zinc-500">{/* Actions */}</span>
+    &lt;/<span class="text-blue-300">header</span>&gt;
+  );
+};</code></pre>
+                            </div>
+                        </div>
+
+                        <!-- Action Bar below agent message -->
+                        <div class="flex items-center gap-2 pt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button class="p-1.5 text-zinc-500 hover:text-zinc-200 rounded hover:bg-zinc-800 transition"><i class="ph ph-thumbs-up"></i></button>
+                            <button class="p-1.5 text-zinc-500 hover:text-zinc-200 rounded hover:bg-zinc-800 transition"><i class="ph ph-thumbs-down"></i></button>
+                            <button class="p-1.5 text-zinc-500 hover:text-zinc-200 rounded hover:bg-zinc-800 transition"><i class="ph ph-arrows-clockwise"></i></button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Approval Request Modal/Block -->
+                <div class="flex gap-4 animate-slide-up stagger-4">
+                    <div class="w-8 h-8 rounded-full bg-yellow-500/10 border border-yellow-500/20 flex flex-shrink-0 items-center justify-center mt-1">
+                        <i class="ph-bold ph-shield-warning text-yellow-500"></i>
+                    </div>
+                    <div class="flex-1 max-w-[80%]">
+                        <div class="glass-panel border-yellow-500/30 rounded-xl overflow-hidden text-sm">
+                            <div class="px-5 py-4 bg-yellow-500/5 border-b border-yellow-500/10">
+                                <h4 class="font-medium text-yellow-500 mb-1">Aprovação Necessária: Executar Comando</h4>
+                                <p class="text-zinc-300 text-xs mb-3">O agente solicitou permissão para instalar novas dependências.</p>
+                                
+                                <div class="bg-black/50 p-2 rounded border border-white/5 font-mono text-xs text-zinc-300 mb-4">
+                                    <span class="text-violet-400">$</span> npm install express @types/express cors
+                                </div>
+                                
+                                <div class="flex gap-2">
+                                    <button class="px-3 py-1.5 rounded-lg bg-yellow-500 text-yellow-950 font-medium text-xs hover:bg-yellow-400 transition-colors">Aprovar Instalação</button>
+                                    <button class="px-3 py-1.5 rounded-lg bg-zinc-800 text-zinc-300 font-medium text-xs hover:bg-zinc-700 transition-colors">Recusar</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- COMPOSER (Bottom Docked) -->
+        <div class="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-zinc-950 via-zinc-950 to-transparent">
+            <div class="max-w-[850px] mx-auto bg-zinc-900/90 backdrop-blur-xl border border-white/10 rounded-[1.5rem] p-2 shadow-2xl relative">
+                
+                <!-- Context Pill -->
+                <div class="absolute -top-10 left-4 flex gap-2">
+                    <div class="bg-zinc-900 border border-white/10 rounded-full px-3 py-1 flex items-center gap-1.5 text-xs text-zinc-400 shadow-lg">
+                        <i class="ph-fill ph-files text-zinc-500"></i>
+                        <span>3 arquivos detectados</span>
+                        <button class="hover:text-white ml-1"><i class="ph ph-x"></i></button>
+                    </div>
+                </div>
+
+                <div class="flex flex-col gap-2">
+                    <!-- Textarea -->
+                    <textarea class="w-full bg-transparent resize-none outline-none text-sm px-3 py-2 text-zinc-100 placeholder-zinc-500 max-h-min" rows="2" placeholder="Descreva a funcionalidade ou cole um erro aqui..."></textarea>
+                    
+                    <!-- Bottom Controls -->
+                    <div class="flex items-center justify-between px-1">
+                        <div class="flex items-center gap-1">
+                            <button class="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors" title="Anexar"><i class="ph ph-paperclip text-lg"></i></button>
+                            <button class="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors" title="Web Search"><i class="ph ph-globe text-lg"></i></button>
+                            <button class="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors" title="Selecionar Repositório"><i class="ph ph-git-branch text-lg"></i></button>
+                        </div>
+                        
+                        <div class="flex items-center gap-3">
+                            <span class="text-[10px] text-zinc-600 font-mono hidden sm:block">Ctrl + Enter para enviar</span>
+                            <button class="h-9 w-9 rounded-xl bg-violet-600 text-white flex items-center justify-center hover:bg-violet-500 transition-all shadow-glow hover:-translate-y-[1px] active:scale-95">
+                                <i class="ph-fill ph-arrow-up"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="text-center mt-2">
+                 <span class="text-[10px] text-zinc-600">A IA pode cometer erros. Verifique códigos gerados antes de aplicar.</span>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- RIGHT PANEL (Context / Terminal / Diff) -->
+    <aside class="w-[380px] flex-shrink-0 flex flex-col border-l border-white/5 bg-[#0a0a0c] hidden lg:flex z-20">
+        <!-- Tabs -->
+        <div class="flex items-center justify-between px-2 pt-2 border-b border-white/5">
+            <div class="flex items-center gap-1">
+                <button class="px-3 py-2 text-xs font-medium text-zinc-400 hover:text-zinc-200 border-b-2 border-transparent transition-colors">Arquivos</button>
+                <button class="px-3 py-2 text-xs font-medium text-white border-b-2 border-violet-500 transition-colors">Terminal</button>
+                <button class="px-3 py-2 text-xs font-medium text-zinc-400 hover:text-zinc-200 border-b-2 border-transparent transition-colors flex items-center gap-1">
+                    Diff <span class="bg-violet-600/20 text-violet-400 text-[9px] px-1.5 rounded-full">1</span>
+                </button>
+            </div>
+            <button class="p-1.5 text-zinc-500 hover:text-white rounded"><i class="ph ph-dots-three text-lg"></i></button>
+        </div>
+
+        <!-- Tab Content: Terminal Integrated -->
+        <div class="flex-1 flex flex-col p-3 overflow-hidden bg-black/50">
+            <!-- Terminal Header -->
+            <div class="flex items-center justify-between text-[10px] text-zinc-500 uppercase tracking-widest font-mono mb-2 px-1">
+                <div class="flex items-center gap-1.5">
+                    <div class="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
+                    bash - workspace
+                </div>
+                <div>0m 14s</div>
+            </div>
+
+            <!-- Terminal Window -->
+            <div class="flex-1 bg-black rounded-lg border border-white/5 p-3 overflow-y-auto font-mono text-xs text-zinc-300 shadow-inner relative flex flex-col justify-end">
+                <div class="space-y-1.5 mb-2">
+                    <div><span class="text-violet-400">user@stupidex:~/core-api-v2$</span> npm run test</div>
+                    <div class="text-zinc-500">
+                        > core-api@2.0.0 test<br>
+                        > jest
+                    </div>
+                    <div>
+                        PASS src/auth/<span class="text-white font-medium">login.test.ts</span><br>
+                        PASS src/auth/<span class="text-white font-medium">jwt.test.ts</span><br>
+                    </div>
+                    <div class="text-emerald-400 mt-2">Test Suites: 2 passed, 2 total</div>
+                    <div class="text-emerald-400">Tests:       8 passed, 8 total</div>
+                    <div class="text-zinc-500">Time:        1.24s</div>
+                </div>
+                <div class="flex items-center">
+                    <span class="text-violet-400 mr-2">user@stupidex:~/core-api-v2$</span>
+                    <span class="w-2 h-3.5 bg-zinc-300 cursor-blink inline-block"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mini Git Status Panel (Bottom of right sidebar) -->
+        <div class="h-48 border-t border-white/5 p-4 bg-zinc-950 flex flex-col">
+            <div class="text-xs font-semibold text-zinc-500 mb-3 uppercase tracking-wider">Alterações Solicitadas</div>
+            
+            <div class="flex-1 overflow-y-auto space-y-2 pr-2">
+                <!-- Diff Item -->
+                <div class="flex items-center justify-between p-2 rounded bg-zinc-900 border border-white/5 group">
+                    <div class="flex items-center gap-2 truncate">
+                        <i class="ph ph-file-ts text-blue-400"></i>
+                        <span class="text-xs truncate text-zinc-300">Header.tsx</span>
+                    </div>
+                    <div class="flex items-center gap-2 text-xs">
+                        <span class="text-emerald-400">+12</span>
+                        <span class="text-red-400">-34</span>
+                    </div>
+                </div>
+            </div>
+
+            <button class="w-full mt-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-medium text-zinc-200 transition-colors">
+                Criar Commit
+            </button>
+        </div>
+    </aside>
+
+    <!-- Script for Canvas Sequence (Agent Action Visualizer) -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const canvas = document.getElementById('sequence-canvas');
+            const ctx = canvas?.getContext('2d');
+            const scrollContainer = document.getElementById('overlay-scroll-container');
+            
+            if (!canvas || !ctx || !scrollContainer) return;
+
+            // Setup dimensions
+            canvas.width = 800;
+            canvas.height = 450;
+
+            // Configuration corresponding to Step 2
+            const baseUrl = 'https://cdn.aidesigner.ai/video-frames/365e05ad698e-1781407650963-step2/frame-';
+            const frameCount = 121;
+            const images = [];
+            let loadedCount = 0;
+
+            // Preload function
+            const loadImages = () => {
+                for (let i = 1; i <= frameCount; i++) {
+                    const img = new Image();
+                    // Zero-pad index (001, 002...)
+                    const indexStr = String(i).padStart(3, '0');
+                    img.src = `${baseUrl}${indexStr}.webp`;
+                    
+                    img.onload = () => {
+                        loadedCount++;
+                        // Draw first frame when loaded
+                        if(i === 1) drawFrame(0);
+                    };
+                    images.push(img);
+                }
+            };
+
+            const drawFrame = (index) => {
+                if (images[index] && images[index].complete) {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    // Draw centered maintaining aspect ratio logic can go here, but stretch for simplicity
+                    ctx.drawImage(images[index], 0, 0, canvas.width, canvas.height);
+                }
+            };
+
+            // Scroll implementation bound to the internal container
+            const handleScroll = () => {
+                const maxScroll = scrollContainer.scrollHeight - scrollContainer.clientHeight;
+                if (maxScroll <= 0) return;
+
+                const progress = scrollContainer.scrollTop / maxScroll;
+                const frameIndex = Math.min(Math.floor(progress * frameCount), frameCount - 1);
+                
+                requestAnimationFrame(() => drawFrame(frameIndex));
+            };
+
+            scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
+            loadImages();
+        });
+    </script>
+</body>
+</html>

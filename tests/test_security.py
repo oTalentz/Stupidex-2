@@ -87,7 +87,8 @@ def test_login_lockout():
     db._LOGIN_FAIL.clear()
     db._LOGIN_BLOCKED.clear()
     from stupidex import web
-    web._RL_BUCKETS.clear()
+    from stupidex.services.rate_limit import _RL_BUCKETS
+    _RL_BUCKETS.clear()
 
     db.create_user("dave_lockout", "validpass123")
     # Trigger failures
@@ -209,6 +210,8 @@ def test_archive_redirect_strips_auth_and_blocks_unknown_hosts():
 
 def test_rate_limit_returns_429():
     from stupidex import web
+    from stupidex.services.rate_limit import _RL_BUCKETS
+    _RL_BUCKETS.clear()
     app = web.app
     client = app.test_client()
     # Hit /api/auth/login many times with bad creds
@@ -245,7 +248,7 @@ def test_cwd_endpoint_removed():
 
 
 def test_git_url_validation():
-    from stupidex.web import _validate_git_url
+    from stupidex.services.validation import validate_git_url as _validate_git_url
     # Allowed
     assert _validate_git_url("https://github.com/foo/bar.git") is None
     assert _validate_git_url("https://gitlab.com/foo/bar.git") is None
@@ -548,27 +551,27 @@ def test_user_config_is_isolated():
 
 
 def test_stream_claim_is_exclusive():
-    from stupidex import web
-    first = web._claim_stream("session-test")
+    from stupidex.services.stream_manager import claim_stream, get_stream, pop_stream
+    first = claim_stream("session-test")
     assert first is not None
-    assert web._claim_stream("session-test") is None
-    web._pop_stream("session-test", first)
-    assert web._claim_stream("session-test") is not None
+    assert claim_stream("session-test") is None
+    pop_stream("session-test", first)
+    assert claim_stream("session-test") is not None
 
 
 def test_chat_image_validation_and_limits():
-    from stupidex import web
+    from stupidex.services.validation import validate_chat_images, MAX_CHAT_IMAGES
     png = (
         "data:image/png;base64,"
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Z6wAAAABJRU5ErkJggg=="
     )
-    images, error = web._validate_chat_images([{"name": "shot.png", "data_url": png}])
+    images, error = validate_chat_images([{"name": "shot.png", "data_url": png}])
     assert error is None
     assert images[0]["mime"] == "image/png"
     assert images[0]["size"] > 0
-    _, error = web._validate_chat_images([{"data_url": png}] * (web.MAX_CHAT_IMAGES + 1))
+    _, error = validate_chat_images([{"data_url": png}] * (MAX_CHAT_IMAGES + 1))
     assert "too many" in error
-    _, error = web._validate_chat_images([{"data_url": "data:image/png;base64,ZmFrZQ=="}])
+    _, error = validate_chat_images([{"data_url": "data:image/png;base64,ZmFrZQ=="}])
     assert "does not match" in error
 
 
@@ -718,7 +721,7 @@ def test_puter_agent_bridge_keeps_github_token_server_side(monkeypatch):
         captured.update(name=name, arguments=arguments, token=ctx.github_token)
         return "[exit 0]"
 
-    monkeypatch.setattr(web, "execute_workspace_tool", fake_execute)
+    monkeypatch.setattr("stupidex.routes.sessions.execute_workspace_tool", fake_execute)
     response = web.app.test_client().post(
         f"/api/sessions/{session.id}/agent-tool",
         json={
@@ -904,8 +907,9 @@ def test_trashed_session_cannot_continue_chatting():
 
 def test_auth_enter_creates_and_authenticates_with_bearer_fallback():
     from stupidex import web
+    from stupidex.services.rate_limit import _RL_BUCKETS
 
-    web._RL_BUCKETS.clear()
+    _RL_BUCKETS.clear()
     client = web.app.test_client()
     credentials = {"username": "entry_flow", "password": "validpass123"}
 
@@ -1127,8 +1131,7 @@ def test_github_personal_token_connection_is_validated_and_encrypted(monkeypatch
     user, auth_token = db.create_user("github_pat_connect", "validpass123")
     personal_token = "github_pat_valid_test_token_123456789"
     monkeypatch.setattr(
-        web,
-        "_github_identity",
+        "stupidex.routes.auth._github_identity",
         lambda token: ("octocat", "https://avatars.githubusercontent.com/u/1?v=4")
         if token == personal_token
         else (_ for _ in ()).throw(AssertionError("unexpected token")),
@@ -1153,8 +1156,8 @@ def test_github_status_offers_token_fallback_without_oauth(monkeypatch):
     from stupidex import web
 
     _, auth_token = db.create_user("github_token_fallback", "validpass123")
-    monkeypatch.setattr(web, "GITHUB_CLIENT_ID", "")
-    monkeypatch.setattr(web, "GITHUB_CLIENT_SECRET", "")
+    monkeypatch.setenv("GITHUB_CLIENT_ID", "")
+    monkeypatch.setenv("GITHUB_CLIENT_SECRET", "")
     response = web.app.test_client().get(
         "/api/integrations/github",
         headers={"Authorization": f"Bearer {auth_token}"},
@@ -1192,10 +1195,10 @@ def test_grounded_request_keeps_plain_message_without_workspace():
 
 def test_session_lock_prevents_concurrent_chat():
     """The session lock must serialize concurrent chat requests."""
-    from stupidex import web
-    lock_a = web._session_lock("sess-1")
-    lock_b = web._session_lock("sess-2")
-    lock_c = web._session_lock("sess-1")  # same session as a
+    from stupidex.services.stream_manager import session_lock
+    lock_a = session_lock("sess-1")
+    lock_b = session_lock("sess-2")
+    lock_c = session_lock("sess-1")  # same session as a
     assert lock_a is lock_c, "same session should return same lock"
     assert lock_a is not lock_b, "different sessions should have different locks"
 

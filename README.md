@@ -161,9 +161,23 @@ GOOGLE_REDIRECT_URI=https://seu-dominio.com/api/auth/google/callback
 │           ├── message.py        # Modelos de dados de mensagens
 │           ├── providers.py      # Provedores de IA
 │           └── tools.py          # Ferramentas para o agente
+├── docs/
+│   ├── ARCHITECTURE.md
+│   ├── DEPLOY.md
+│   ├── HOSTING.md
+│   ├── MIGRATION.md
+│   ├── SECURITY.md
+│   └── SQUARECLOUD.md
+├── deploy/
+│   ├── docker-compose.yml
+│   ├── nginx.example.conf
+│   ├── Procfile
+│   ├── runtime.txt
+│   └── squarecloud.app
 ├── pyproject.toml
 ├── requirements.txt
 ├── Dockerfile
+├── gunicorn.conf.py
 └── README.md
 ```
 
@@ -193,10 +207,11 @@ MAX_ARCHIVE_BYTES=50000000    # 50MB
 ## 📦 Deploy
 
 Consulte os arquivos:
-- `DEPLOY.md` - Instruções detalhadas de deploy
-- `HOSTING.md` - Opções de hospedagem
-- `SQUARECLOUD.md` - Deploy no SquareCloud
+- `docs/DEPLOY.md` - Instruções detalhadas de deploy
+- `docs/HOSTING.md` - Opções de hospedagem
+- `docs/SQUARECLOUD.md` - Deploy no SquareCloud
 - `Dockerfile` - Container Docker
+- `deploy/` - Configurações de deploy (docker-compose, nginx, Procfile)
 
 ## 🛠️ Desenvolvimento
 
@@ -206,8 +221,8 @@ Consulte os arquivos:
 python -m pytest tests/
 
 # Testes específicos
-python test_clone.py      # Teste de clonagem
-python test_integration.py # Testes de integração
+python tests/test_security.py  # Testes de segurança
+python tests/test_message_history.py  # Testes de histórico
 ```
 
 ### Estrutura de Mensagens

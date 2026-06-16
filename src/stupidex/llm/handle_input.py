@@ -15,7 +15,7 @@ import shlex
 import threading
 import traceback
 from collections.abc import Generator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -48,7 +48,49 @@ MAX_WORKSPACE_CONTEXT_BYTES = 48_000
 WORKSPACE_CONTEXT_START = "<attached_repository_context>"
 WORKSPACE_CONTEXT_END = "</attached_repository_context>"
 
-AGENT_SYSTEM_PROMPT = """\
+# ===================================================================
+# Agent modes — each mode has its own system prompt and tool set.
+# ===================================================================
+
+MODE_CHAT = "chat"
+MODE_ASK = "ask"
+MODE_PLAN = "plan"
+MODE_AGENT = "agent"
+MODE_REVIEW = "review"
+MODE_DEBUG = "debug"
+
+ALL_MODES = [MODE_CHAT, MODE_ASK, MODE_PLAN, MODE_AGENT, MODE_REVIEW, MODE_DEBUG]
+
+MODE_SYSTEM_PROMPTS: dict[str, str] = {}
+
+MODE_SYSTEM_PROMPTS[MODE_CHAT] = """\
+You are Stupidex, a coding assistant. You help the user by answering questions,
+explaining code, and providing guidance. You do NOT execute tools or modify files.
+Focus on clear, direct answers. Use Markdown formatting.
+"""
+
+MODE_SYSTEM_PROMPTS[MODE_ASK] = """\
+You are Stupidex in Ask mode. Your job is to answer questions concisely and accurately.
+You may use web_search to find up-to-date information when needed.
+Keep answers focused and avoid unnecessary tool usage.
+"""
+
+MODE_SYSTEM_PROMPTS[MODE_PLAN] = """\
+You are Stupidex in Plan mode. Your job is to ANALYZE architecture and PLAN solutions.
+Before proposing changes, thoroughly explore the codebase:
+1. Use list_dir() to understand the project structure
+2. Use read_file() to read key files (configs, entry points, core modules)
+3. Use git diff/status/log if available to understand recent changes
+4. Synthesize your findings into a clear plan
+
+DO NOT make changes — only analyze and plan. Present your plan with:
+- Current architecture overview
+- Specific files that need changes
+- Step-by-step implementation plan
+- Potential risks or considerations
+"""
+
+MODE_SYSTEM_PROMPTS[MODE_AGENT] = """\
 You are Stupidex, a secure coding agent. You operate EXCLUSIVELY inside the user's
 workspace — a sandboxed directory containing only files the user uploaded or cloned.
 You CANNOT access any files outside this workspace. Attempting to do so will fail.
@@ -126,6 +168,43 @@ The file tree above shows the project structure. File previews are truncated —
 Format your final answers in clean Markdown. Use fenced code blocks with the correct language tag.
 """
 
+MODE_SYSTEM_PROMPTS[MODE_REVIEW] = """\
+You are Stupidex in Review mode. Your job is to REVIEW code and provide feedback.
+You have READ-ONLY access to the workspace:
+- read_file(path) — read files for review
+- list_dir(path) — explore structure
+- search_files(path, pattern) — find patterns
+- git(args) — ONLY status, diff, log, show (no destructive git operations)
+
+Do NOT modify any files. Do NOT run shell commands.
+Focus your review on:
+- Code quality, bugs, and anti-patterns
+- Security vulnerabilities
+- Performance issues
+- Architecture and design problems
+- Missing tests or edge cases
+
+Always reference specific line numbers and suggest concrete improvements.
+"""
+
+MODE_SYSTEM_PROMPTS[MODE_DEBUG] = """\
+You are Stupidex in Debug mode. Your mission is to find and fix bugs.
+You have FULL access to tools. Approach debugging systematically:
+1. Understand the bug — read relevant files and error messages
+2. Reproduce — use run_shell to run tests or execute the code
+3. Diagnose — use git diff/log to see recent changes
+4. Fix — edit files to resolve the issue
+5. Verify — run tests again to confirm the fix
+
+Focus on:
+- Root cause analysis, not just symptoms
+- Adding tests that would have caught the bug
+- Minimal, targeted fixes
+- Verifying the fix works
+
+Explain what caused the bug and how your fix resolves it.
+"""
+
 
 @dataclass
 class AgentContext:
@@ -139,13 +218,16 @@ class AgentContext:
     user_id: str = ""  # per-user isolation
     github_token: str = ""
     web_search_enabled: bool = False
+    mode: str = MODE_AGENT  # one of ALL_MODES
 
 
-def _build_system_message(user_id: str) -> ChatMessage:
+def _build_system_message(user_id: str, mode: str = MODE_AGENT) -> ChatMessage:
     workspace_context = _workspace_context_for_llm(user_id)
-    system_content = AGENT_SYSTEM_PROMPT.format(
-        workspace_files=workspace_context
-    )
+    prompt = MODE_SYSTEM_PROMPTS.get(mode, MODE_SYSTEM_PROMPTS[MODE_AGENT])
+    if mode == MODE_AGENT:
+        system_content = prompt.format(workspace_files=workspace_context)
+    else:
+        system_content = prompt
 
     # Log system message info for debugging
     logging.info(f"[DEBUG] System message length: {len(system_content)} chars")
@@ -445,7 +527,7 @@ def _active_workspace_path(user_id: str) -> str | None:
     return str(workspaces_module._user_dir(user_id) / ws.id)
 
 
-def _history_for_llm(session_id: str, user_id: str = "") -> list[ChatMessage]:
+def _history_for_llm(session_id: str, user_id: str = "", mode: str = MODE_AGENT) -> list[ChatMessage]:
     """Load the persisted history for a session and prepend the system message."""
     from .message import filter_valid_tool_messages
 
@@ -453,7 +535,7 @@ def _history_for_llm(session_id: str, user_id: str = "") -> list[ChatMessage]:
     history: list[ChatMessage] = []
     # Always prepend a FRESH system message with current workspace context.
     # The stored system message (if any) is stale and skipped below.
-    history.append(_build_system_message(user_id))
+    history.append(_build_system_message(user_id, mode))
     for r in raw:
         if r.role == MessageRole.SYSTEM:
             continue
@@ -530,6 +612,14 @@ def _resolve_working_dir(args: dict, user_id: str = "") -> None:
         args["working_dir"] = active
 
 
+def _raise_if_no_workspace(name: str, user_id: str) -> str | None:
+    """Return error if no active workspace for a tool that needs one."""
+    active = _active_workspace_path(user_id)
+    if not active:
+        return f"ERROR: no active workspace — create or clone a repository first to use '{name}'"
+    return None
+
+
 def _resolve_cwd(args: dict, user_id: str = "") -> None:
     """Force `cwd` (used by run_shell/git) to the user's active workspace."""
     active = _active_workspace_path(user_id)
@@ -567,8 +657,9 @@ def _execute_tool(name: str, args: dict, ctx: AgentContext) -> str:
 
 def execute_workspace_tool(name: str, args: dict, ctx: AgentContext) -> str:
     """Execute one model-requested tool inside the authenticated user's workspace."""
-    if name not in AGENT_BRIDGE_TOOLS:
-        return f"SECURITY: tool '{name}' is not available to the workspace agent"
+    allowed = _MODE_TOOL_NAMES.get(ctx.mode, _MODE_TOOL_NAMES[MODE_AGENT])
+    if not allowed or name not in allowed:
+        return f"SECURITY: tool '{name}' is not available in {ctx.mode} mode"
     if not isinstance(args, dict):
         return "ERROR: tool arguments must be an object"
     normalized = dict(args)
@@ -583,29 +674,66 @@ def execute_workspace_tool(name: str, args: dict, ctx: AgentContext) -> str:
             )
         except ValueError:
             return "ERROR: invalid git arguments"
-        if not git_args or git_args[0] not in AGENT_BRIDGE_GIT_SUBCOMMANDS:
-            return "SECURITY: git subcommand is not available to the workspace agent"
+        allowed_git = _MODE_GIT_SUBCOMMANDS.get(ctx.mode, _MODE_GIT_SUBCOMMANDS[MODE_AGENT])
+        if not git_args or git_args[0] not in allowed_git:
+            return "SECURITY: git subcommand is not available in this mode"
     if name in _DEFAULT_WD_TOOLS:
+        if err := _raise_if_no_workspace(name, ctx.user_id):
+            return err
         _resolve_working_dir(normalized, ctx.user_id)
-    else:
+    elif name in _CWD_TOOLS:
+        if err := _raise_if_no_workspace(name, ctx.user_id):
+            return err
         _resolve_cwd(normalized, ctx.user_id)
     return _execute_tool(name, normalized, ctx)
 
 
-def _litellm_kwargs(ctx: AgentContext) -> dict:
-    tools = TOOL_DEFINITIONS
-    if ctx.web_search_enabled:
-        tools = [*TOOL_DEFINITIONS, *WEB_TOOL_DEFINITIONS]
+# Mode tool sets — which tools each mode has access to.
+_MODE_TOOL_NAMES: dict[str, set[str]] = {
+    MODE_CHAT: set(),
+    MODE_ASK: {"web_search"},
+    MODE_PLAN: {"read_file", "list_dir", "search_files", "git"},
+    MODE_AGENT: {"read_file", "write_file", "edit_file", "list_dir", "search_files", "mkdir", "delete", "run_shell", "git", "web_search"},
+    MODE_REVIEW: {"read_file", "list_dir", "search_files", "git"},
+    MODE_DEBUG: {"read_file", "write_file", "edit_file", "list_dir", "search_files", "mkdir", "delete", "run_shell", "git", "web_search"},
+}
 
-    # Log tool information for debugging
-    logging.info(f"[DEBUG] Sending {len(tools)} tools to LLM: {[t['function']['name'] for t in tools]}")
+# Git subcommands allowed per mode (only checked when mode restricts git)
+_MODE_GIT_SUBCOMMANDS: dict[str, set[str]] = {
+    MODE_PLAN: {"status", "log", "diff", "show", "rev-parse", "ls-files", "ls-tree", "branch"},
+    MODE_REVIEW: {"status", "log", "diff", "show", "rev-parse", "ls-files", "ls-tree", "branch"},
+    MODE_AGENT: {"status", "log", "diff", "show", "ls-files", "ls-tree", "rev-parse", "add", "commit", "push", "pull", "fetch", "remote", "branch"},
+    MODE_DEBUG: {"status", "log", "diff", "show", "ls-files", "ls-tree", "rev-parse", "add", "commit", "push", "pull", "fetch", "remote", "branch"},
+}
+
+
+def _litellm_kwargs(ctx: AgentContext) -> dict:
+    selected = _MODE_TOOL_NAMES.get(ctx.mode, _MODE_TOOL_NAMES[MODE_AGENT])
+    tools = [t for t in TOOL_DEFINITIONS if t["function"]["name"] in selected]
+    if ctx.web_search_enabled and "web_search" in selected:
+        tools = [*tools, *WEB_TOOL_DEFINITIONS]
+
+    logging.info(f"[DEBUG] Sending {len(tools)} tools ({ctx.mode}) to LLM: {[t['function']['name'] for t in tools]}")
 
     kw: dict = {
         "model": ctx.model,
         "stream": True,
         "stream_options": {"include_usage": True},
-        "tools": tools,
+        "tools": tools if tools else None,
     }
+    
+    # Configurações específicas NVIDIA NIM
+    if ctx.provider_id in ("nvidia-deepseek", "nvidia-minimax"):
+        kw["temperature"] = 1.0
+        kw["top_p"] = 0.95
+        kw["max_tokens"] = 8192
+        # MiniMax M3 não usa reasoning_effort
+        if ctx.provider_id == "nvidia-deepseek":
+            kw["extra_body"] = {
+                "reasoning_effort": "high",
+                "seed": None
+            }
+    
     if ctx.base_url:
         kw["api_base"] = ctx.base_url
     if ctx.api_key:
@@ -655,7 +783,7 @@ def stream_response(
     db.auto_title(session_id, user_text)
     db.touch_session(session_id)
 
-    history = _history_for_llm(session_id, ctx.user_id)
+    history = _history_for_llm(session_id, ctx.user_id, ctx.mode)
     grounded_user_text = _ground_user_request(
         user_text, _workspace_context_for_llm(ctx.user_id)
     )
@@ -905,17 +1033,27 @@ def build_context(
     user_id: str = "",
     model_override: str = "",
     github_token: str = "",
+    mode: str = MODE_AGENT,
 ) -> AgentContext:
     """Build an AgentContext for a request from a session or default config."""
     from ..config import load_config
+    from .providers import _NVIDIA_DEEPSEEK_KEY, _NVIDIA_MINIMAX_KEY, DEFAULT_FALLBACK_ID
 
     cfg = load_config()
     provider = get_provider(provider_id or cfg.provider)
-    model = (model_override or provider.default_model).strip()
-    # Final validation: reject invalid model names before sending to litellm
-    if not model or model.lower() == "model":
+    if getattr(provider, "runtime", None) == "server":
         model = provider.default_model
-    api_key = api_key_override or cfg.api_key
+    else:
+        model = (model_override or provider.default_model).strip()
+        if not model or model.lower() == "model":
+            model = provider.default_model
+    # Cada provider NVIDIA usa sua própria chave
+    if provider.id == "nvidia-deepseek":
+        api_key = _NVIDIA_DEEPSEEK_KEY
+    elif provider.id == "nvidia-minimax":
+        api_key = _NVIDIA_MINIMAX_KEY
+    else:
+        api_key = api_key_override or cfg.api_key
     return AgentContext(
         session_id="",
         provider_id=provider.id,
@@ -924,4 +1062,5 @@ def build_context(
         base_url=provider.base_url,
         user_id=user_id,
         github_token=github_token,
+        mode=mode,
     )

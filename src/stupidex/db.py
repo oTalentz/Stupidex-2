@@ -138,6 +138,7 @@ class User:
     github_login: str = ""
     github_avatar_url: str = ""
     github_connected_at: float = 0.0
+    shell_approval_mode: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -152,6 +153,7 @@ class User:
             "github_connected": bool(self.github_access_token),
             "github_login": self.github_login,
             "github_avatar_url": self.github_avatar_url,
+            "shell_approval_mode": self.shell_approval_mode,
         }
 
 
@@ -315,6 +317,10 @@ _MIGRATIONS: list[str] = [
     ALTER TABLE users ADD COLUMN github_avatar_url TEXT NOT NULL DEFAULT '';
     ALTER TABLE users ADD COLUMN github_connected_at REAL NOT NULL DEFAULT 0;
     """,
+    # v10 — Shell approval mode (auto / ask)
+    """
+    ALTER TABLE users ADD COLUMN shell_approval_mode TEXT NOT NULL DEFAULT '';
+    """,
 ]
 
 
@@ -469,7 +475,7 @@ def find_or_create_oauth_user(
         row = cur.execute(
             "SELECT id, username, password_hash, api_key, email, avatar_url, oauth_provider, "
             "provider, model, custom_model, github_access_token, github_login, "
-            "github_avatar_url, github_connected_at, created_at, last_login "
+            "github_avatar_url, github_connected_at, shell_approval_mode, created_at, last_login "
             "FROM users WHERE email = ? AND oauth_provider = ?",
             (email, provider),
         ).fetchone()
@@ -521,6 +527,7 @@ def find_or_create_oauth_user(
         github_login=(row["github_login"] if row else ""),
         github_avatar_url=(row["github_avatar_url"] if row else ""),
         github_connected_at=(row["github_connected_at"] if row else 0.0),
+        shell_approval_mode=(row["shell_approval_mode"] if row else ""),
     )
     return user, token
 
@@ -534,7 +541,8 @@ def authenticate_user(username: str, password: str) -> tuple[User, str]:
     with db_cursor() as cur:
         row = cur.execute(
             "SELECT id, username, password_hash, api_key, provider, model, custom_model, "
-            "github_access_token, github_login, github_avatar_url, github_connected_at, created_at "
+            "github_access_token, github_login, github_avatar_url, github_connected_at, "
+            "shell_approval_mode, created_at "
             "FROM users WHERE username = ?",
             (username,),
         ).fetchone()
@@ -564,6 +572,7 @@ def authenticate_user(username: str, password: str) -> tuple[User, str]:
         github_login=row["github_login"],
         github_avatar_url=row["github_avatar_url"],
         github_connected_at=row["github_connected_at"],
+        shell_approval_mode=row["shell_approval_mode"],
     )
     return user, token
 
@@ -589,7 +598,7 @@ def validate_token(token: str) -> User | None:
         row = cur.execute(
             "SELECT u.id, u.username, u.api_key, u.email, u.avatar_url, u.oauth_provider, "
             "u.provider, u.model, u.custom_model, u.github_access_token, u.github_login, "
-            "u.github_avatar_url, u.github_connected_at, u.created_at, u.last_login, "
+            "u.github_avatar_url, u.github_connected_at, u.shell_approval_mode, u.created_at, u.last_login, "
             "t.token AS stored_token "
             "FROM auth_tokens t JOIN users u ON u.id = t.user_id "
             "WHERE t.token IN (?, ?) AND t.expires_at > ?",
@@ -618,6 +627,7 @@ def validate_token(token: str) -> User | None:
         github_login=row["github_login"],
         github_avatar_url=row["github_avatar_url"],
         github_connected_at=row["github_connected_at"],
+        shell_approval_mode=row["shell_approval_mode"],
     )
 
 
@@ -675,6 +685,7 @@ def update_user_config(
     custom_model: str,
     api_key: str | None = None,
     clear_api_key: bool = False,
+    shell_approval_mode: str | None = None,
 ) -> None:
     provider = provider.strip()[:100]
     model = model.strip()[:_MAX_MODEL_LEN]
@@ -691,6 +702,11 @@ def update_user_config(
             )
         elif clear_api_key:
             cur.execute("UPDATE users SET api_key = '' WHERE id = ?", (user_id,))
+        if shell_approval_mode is not None:
+            cur.execute(
+                "UPDATE users SET shell_approval_mode = ? WHERE id = ?",
+                (shell_approval_mode, user_id),
+            )
 
 
 def _token_digest(token: str) -> str:

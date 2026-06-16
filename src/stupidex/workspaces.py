@@ -305,7 +305,21 @@ def init_from_git(
     effective_token = github_token or os.environ.get("GITHUB_PAT", "")
 
     if shutil.which("git"):
-        ws_obj, msg = _clone_repository(user_id, ws_id, url, branch, effective_token)
+        try:
+            ws_obj, msg = _clone_repository(user_id, ws_id, url, branch, effective_token)
+        except (RepositoryAccessError, subprocess.TimeoutExpired) as exc:
+            err_msg = str(exc).lower()
+            if any(
+                kw in err_msg
+                for kw in ("dns", "getaddrinfo", "thread failed", "resolve host", "name or service", "network", "connection refused", "connection reset", "timeout")
+            ):
+                ws_obj, msg = _download_archive(
+                    user_id, ws_id, url, branch, effective_token
+                )
+                _ensure_git_repo(ws_path, url, branch)
+                msg = f"git clone failed ({exc}), fell back to archive download"
+            else:
+                raise
     else:
         ws_obj, msg = _download_archive(user_id, ws_id, url, branch, effective_token)
         _ensure_git_repo(ws_path, url, branch)
@@ -324,15 +338,21 @@ def disconnect_repository(user_id: str, ws_id: str) -> bool:
 
 
 def _git_environment(home: Path, github_token: str = "") -> dict[str, str]:
-    env = {
-        "PATH": os.environ.get("PATH", os.defpath),
-        "HOME": str(home),
-        "GIT_CONFIG_GLOBAL": os.devnull,
-        "GIT_CONFIG_NOSYSTEM": "1",
-        "GIT_TERMINAL_PROMPT": "0",
-        "GIT_PAGER": "cat",
-        "LANG": "C.UTF-8",
-    }
+    env = dict(os.environ)
+    env.update(
+        {
+            "HOME": str(home),
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_TERMINAL_PROMPT": "0",
+            "GIT_PAGER": "cat",
+            "LANG": env.get("LANG", "C.UTF-8"),
+            "GIT_SSL_NO_VERIFY": env.get("GIT_SSL_NO_VERIFY", ""),
+            "SSL_CERT_FILE": env.get("SSL_CERT_FILE", ""),
+        }
+    )
+    env.pop("GIT_ASKPASS", None)
+    env.pop("SSH_ASKPASS", None)
     if github_token:
         credentials = base64.b64encode(
             f"x-access-token:{github_token}".encode("utf-8")
@@ -344,6 +364,10 @@ def _git_environment(home: Path, github_token: str = "") -> dict[str, str]:
                 "GIT_CONFIG_VALUE_0": f"Authorization: Basic {credentials}",
             }
         )
+    else:
+        env.pop("GIT_CONFIG_COUNT", None)
+        env.pop("GIT_CONFIG_KEY_0", None)
+        env.pop("GIT_CONFIG_VALUE_0", None)
     return env
 
 
@@ -375,7 +399,7 @@ def _clone_repository(
     cmd = [
         git,
         "-c",
-        "core.hooksPath=/dev/null",
+        f"core.hooksPath={os.devnull}",
         "clone",
         "--no-recurse-submodules",
     ]
@@ -587,9 +611,7 @@ def _archive_url_for(
     ref = urllib.parse.quote(branch or "HEAD", safe="-._/")
     parsed = urlparse(url)
     host = (parsed.netloc or "").lower()
-    path = parsed.path.rstrip("/")
-    if not path.endswith(".git"):
-        path += ".git"
+    path = parsed.path.rstrip("/").removesuffix(".git")
     if host in ("github.com", "www.github.com"):
         slug = _github_repo_slug(url)
         if not slug:
@@ -598,9 +620,9 @@ def _archive_url_for(
             api_ref = urllib.parse.quote(branch or "HEAD", safe="-._~")
             return f"https://api.github.com/repos/{slug}/zipball/{api_ref}"
         suffix = f"refs/heads/{ref}" if branch else "HEAD"
-        return f"https://codeload.github.com{path[:-4]}/zip/{suffix}"
+        return f"https://codeload.github.com{path}/zip/{suffix}"
     if host in ("gitlab.com", "www.gitlab.com"):
-        return f"https://gitlab.com{path[:-4]}/-/archive/{ref}.zip"
+        return f"https://gitlab.com{path}/-/archive/{ref}.zip"
     return None
 
 
@@ -629,7 +651,7 @@ def git_pull(user_id: str, ws_id: str, github_token: str = "") -> tuple[bool, st
                 [
                     git,
                     "-c",
-                    "core.hooksPath=/dev/null",
+                    f"core.hooksPath={os.devnull}",
                     "pull",
                     "--ff-only",
                 ],

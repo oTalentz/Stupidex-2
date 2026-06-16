@@ -38,9 +38,24 @@ New-Interface/
 # Build artifacts
 *.spec
 
+# Node.js (not used by the Python app)
+node_modules/
+package.json
+package-lock.json
+
+# Linter / formatter caches
+.ruff_cache/
+
+# Local AI agent config
+.agents/
+.claude/
+.mcp.json
+
 # Runtime data (should not be in repo)
 *.db
 *.db-wal
 *.db-shm
 .keyvault
 .flask_secret
+.aidesigner/*
+!.aidesigner/.gitkeep

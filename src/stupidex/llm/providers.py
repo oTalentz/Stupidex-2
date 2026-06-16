@@ -1,11 +1,27 @@
-"""Provider registry and resolved provider for a request.
+"""Provider registry — NVIDIA NIM (server) + Anthropic & OpenAI via Puter.js (browser).
 
-Each provider knows its model and how to talk to the LLM via litellm.
+Providers com runtime="server" usam litellm no backend.
+Providers com runtime="puter" são executados inteiramente no browser via window.puter.ai.chat()
+— nenhuma chave de API é necessária no servidor, a autenticação é gerida pelo Puter.
+
+NOTA IMPORTANTE sobre model IDs Puter:
+  Puter.js usa os nomes exatos da API da Anthropic/OpenAI (com versão).
+  Se o modelo não for reconhecido, o Puter cai no padrão dele (claude-sonnet-4-20250514).
+  Por isso TODOS os default_model de providers Puter devem usar os IDs versionados.
 """
 
+import os
 from dataclasses import dataclass
 
-from ..config import DEFAULT_BASE_URL, AppConfig
+from ..config import AppConfig
+
+# ──────────────────────────────────────────────────────────────────────────────
+# NVIDIA NIM — DeepSeek-V4-Pro
+# Ref: https://docs.api.nvidia.com/nim/reference/deepseek-ai-deepseek-v4-pro-infer
+# ──────────────────────────────────────────────────────────────────────────────
+_NVIDIA_BASE_URL     = "https://integrate.api.nvidia.com/v1"
+_NVIDIA_DEEPSEEK_KEY = os.environ.get("NVIDIA_DEEPSEEK_KEY", "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")
+_NVIDIA_MINIMAX_KEY  = os.environ.get("NVIDIA_MINIMAX_KEY", "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")
 
 
 @dataclass
@@ -17,117 +33,153 @@ class ProviderConfig:
     api_key_env: str | None = None
     needs_api_key: bool = False
     supports_vision: bool = False
-    supports_tools: bool = True  # Whether the model supports function/tool calling
+    supports_tools: bool = True
     supports_agent_bridge: bool = False
     runtime: str = "server"
     description: str = ""
 
 
 PROVIDERS: dict[str, ProviderConfig] = {
-    "deepseek-v4-flash": ProviderConfig(
-        id="deepseek-v4-flash",
-        name="DeepSeek V4 Flash",
-        base_url=DEFAULT_BASE_URL,
-        default_model="deepseek-v4-flash",
-        api_key_env="DEEPSEEK_API_KEY",
-        needs_api_key=True,
-        supports_tools=False,  # V4 Flash has limited/no tool calling support
-        description="DeepSeek V4 Flash — rápido, mas SEM suporte a ferramentas",
+
+    # ── Server-side — NVIDIA NIM: DeepSeek V4 Pro ─────────────────────────────
+    "nvidia-deepseek": ProviderConfig(
+        id="nvidia-deepseek",
+        name="DeepSeek V4 Pro (NVIDIA NIM)",
+        base_url=_NVIDIA_BASE_URL,
+        default_model="deepseek-ai/deepseek-v4-pro",
+        api_key_env="NVIDIA_DEEPSEEK_KEY",
+        needs_api_key=False,
+        supports_vision=False,
+        supports_tools=True,
+        supports_agent_bridge=True,
+        runtime="server",
+        description="DeepSeek V4 Pro via NVIDIA NIM — máxima capacidade de raciocínio e coding",
     ),
-    "deepseek-v4-pro": ProviderConfig(
-        id="deepseek-v4-pro",
-        name="DeepSeek V4 Pro",
-        base_url=DEFAULT_BASE_URL,
-        default_model="deepseek-v4-pro",
-        api_key_env="DEEPSEEK_API_KEY",
-        needs_api_key=True,
-        supports_tools=False,  # V4 Pro also has limited tool support
-        description="DeepSeek V4 Pro — mais capaz, mas SEM suporte a ferramentas",
-    ),
-    "deepseek-chat": ProviderConfig(
-        id="deepseek-chat",
-        name="DeepSeek Chat (V3)",
-        base_url=DEFAULT_BASE_URL,
-        default_model="deepseek-chat",
-        api_key_env="DEEPSEEK_API_KEY",
-        needs_api_key=True,
-        supports_tools=True,  # V3 fully supports tool calling
-        description="DeepSeek V3 — suporta ferramentas, recomendado para coding",
-    ),
-    "deepseek-reasoner": ProviderConfig(
-        id="deepseek-reasoner",
-        name="DeepSeek Reasoner (R1)",
-        base_url=DEFAULT_BASE_URL,
-        default_model="deepseek-reasoner",
-        api_key_env="DEEPSEEK_API_KEY",
-        needs_api_key=True,
-        supports_tools=True,  # R1 supports tool calling
-        description="DeepSeek R1 — raciocínio estendido com ferramentas",
-    ),
-    "openai": ProviderConfig(
-        id="openai",
-        name="OpenAI",
-        base_url=None,
-        default_model="gpt-4o-mini",
-        api_key_env="OPENAI_API_KEY",
-        needs_api_key=True,
+
+    # ── Server-side — NVIDIA NIM: MiniMax M3 ──────────────────────────────────
+    "nvidia-minimax": ProviderConfig(
+        id="nvidia-minimax",
+        name="MiniMax M3 (NVIDIA NIM)",
+        base_url=_NVIDIA_BASE_URL,
+        default_model="minimaxai/minimax-m3",
+        api_key_env="NVIDIA_MINIMAX_KEY",
+        needs_api_key=False,
         supports_vision=True,
         supports_tools=True,
+        supports_agent_bridge=True,
+        runtime="server",
+        description="MiniMax M3 via NVIDIA NIM — modelo multimodal com suporte a visão e raciocínio",
     ),
-    "anthropic": ProviderConfig(
-        id="anthropic",
-        name="Anthropic (Claude)",
+
+    # ── Browser-side via Puter.js — Anthropic ─────────────────────────────────
+    # IDs versionados exatos da API Anthropic (Puter rejeita aliases sem versão)
+    "claude-sonnet-4": ProviderConfig(
+        id="claude-sonnet-4",
+        name="Claude Sonnet 4 (Anthropic · Puter)",
+        base_url=None,
+        default_model="claude-sonnet-4-20250514",
+        api_key_env=None,
+        needs_api_key=False,
+        supports_vision=True,
+        supports_tools=True,
+        supports_agent_bridge=True,
+        runtime="puter",
+        description="Claude Sonnet 4 — modelo mais recente da Anthropic disponível no Puter",
+    ),
+
+    "claude-3-7-sonnet": ProviderConfig(
+        id="claude-3-7-sonnet",
+        name="Claude 3.7 Sonnet (Anthropic · Puter)",
+        base_url=None,
+        default_model="claude-3-7-sonnet-20250219",
+        api_key_env=None,
+        needs_api_key=False,
+        supports_vision=True,
+        supports_tools=True,
+        supports_agent_bridge=True,
+        runtime="puter",
+        description="Claude 3.7 Sonnet — raciocínio estendido (extended thinking) da Anthropic",
+    ),
+
+    "claude-3-5-sonnet": ProviderConfig(
+        id="claude-3-5-sonnet",
+        name="Claude 3.5 Sonnet (Anthropic · Puter)",
         base_url=None,
         default_model="claude-3-5-sonnet-20241022",
-        api_key_env="ANTHROPIC_API_KEY",
-        needs_api_key=True,
-        supports_vision=True,
-        supports_tools=True,
-    ),
-    "ollama": ProviderConfig(
-        id="ollama",
-        name="Ollama (local)",
-        base_url="http://localhost:11434/v1",
-        default_model="ollama_chat/llama3.1",
-        needs_api_key=False,
-        supports_tools=True,
-        description="Modelos rodando localmente no Ollama",
-    ),
-    "puter-mistral": ProviderConfig(
-        id="puter-mistral",
-        name="Puter Mistral (Grátis)",
-        base_url="https://api.puter.com/v2",
-        default_model="mistralai/mistral-large-2512",
+        api_key_env=None,
         needs_api_key=False,
         supports_vision=True,
-        supports_tools=False,
+        supports_tools=True,
         supports_agent_bridge=True,
         runtime="puter",
-        description="Mistral via Puter.com — agente de código via workspace seguro",
+        description="Claude 3.5 Sonnet — equilíbrio perfeito entre velocidade e inteligência",
     ),
-    "puter-gpt-5.4-nano": ProviderConfig(
-        id="puter-gpt-5.4-nano",
-        name="GPT-5.4 Nano (Puter)",
+
+    "claude-3-5-haiku": ProviderConfig(
+        id="claude-3-5-haiku",
+        name="Claude 3.5 Haiku (Anthropic · Puter)",
         base_url=None,
-        default_model="gpt-5.4-nano",
+        default_model="claude-3-5-haiku-20241022",
+        api_key_env=None,
         needs_api_key=False,
         supports_vision=True,
-        supports_tools=False,
+        supports_tools=True,
         supports_agent_bridge=True,
         runtime="puter",
-        description="GPT-5.4 Nano com visão e agente de código via Puter.js",
+        description="Claude 3.5 Haiku — o mais rápido e leve da geração 3.5 da Anthropic",
+    ),
+
+    # ── Browser-side via Puter.js — OpenAI ────────────────────────────────────
+    "gpt-4o": ProviderConfig(
+        id="gpt-4o",
+        name="GPT-4o (OpenAI · Puter)",
+        base_url=None,
+        default_model="gpt-4o",
+        api_key_env=None,
+        needs_api_key=False,
+        supports_vision=True,
+        supports_tools=True,
+        supports_agent_bridge=True,
+        runtime="puter",
+        description="GPT-4o — multimodal da OpenAI com suporte a texto, imagem e código",
+    ),
+
+    "gpt-4o-mini": ProviderConfig(
+        id="gpt-4o-mini",
+        name="GPT-4o mini (OpenAI · Puter)",
+        base_url=None,
+        default_model="gpt-4o-mini",
+        api_key_env=None,
+        needs_api_key=False,
+        supports_vision=True,
+        supports_tools=True,
+        supports_agent_bridge=True,
+        runtime="puter",
+        description="GPT-4o mini — rápido e econômico, ótimo para tarefas cotidianas",
+    ),
+
+    "gpt-4-1": ProviderConfig(
+        id="gpt-4-1",
+        name="GPT-4.1 (OpenAI · Puter)",
+        base_url=None,
+        default_model="gpt-4.1",
+        api_key_env=None,
+        needs_api_key=False,
+        supports_vision=True,
+        supports_tools=True,
+        supports_agent_bridge=True,
+        runtime="puter",
+        description="GPT-4.1 — modelo de última geração da OpenAI com raciocínio avançado",
     ),
 }
+
+DEFAULT_FALLBACK_ID = "nvidia-deepseek"
 
 
 def get_provider(provider_id: str) -> ProviderConfig:
     if provider_id in PROVIDERS:
         return PROVIDERS[provider_id]
     return PROVIDERS[DEFAULT_FALLBACK_ID]
-
-
-# Changed from deepseek-v4-flash to deepseek-chat (V3) which supports tools
-DEFAULT_FALLBACK_ID = "deepseek-chat"
 
 
 def list_providers() -> list[dict]:
@@ -151,10 +203,9 @@ def list_providers() -> list[dict]:
 def resolve_request_model(
     provider_id: str, custom_model: str, cfg: AppConfig
 ) -> tuple[ProviderConfig, str]:
-    """Pick the effective provider + model for a request."""
+    """Retorna (ProviderConfig, model_string) para o provider solicitado."""
     p = get_provider(provider_id)
-    if custom_model.strip():
-        return p, custom_model.strip()
-    if cfg.custom_model.strip():
-        return p, cfg.custom_model.strip()
-    return p, p.default_model
+    if p.runtime == "server":
+        return p, p.default_model
+    model = custom_model.strip() if custom_model and custom_model.strip() else p.default_model
+    return p, model

@@ -18,14 +18,12 @@ from pathlib import Path
 # --- Defaults baked into the binary so the app is usable out of the box. ----
 # Override any of these by editing ~/.stupidex/config.json, .env, or env vars.
 
-DEFAULT_PROVIDER = "deepseek-chat"
-DEFAULT_MODEL = "deepseek-chat"
-# API key is intentionally EMPTY in the binary. Users must set it via env
-# (DEEPSEEK_API_KEY / STUPIDEX_API_KEY) or the .env / config.json. This
-# prevents the key from being shipped in compiled binaries and shared with
-# every user. The server will refuse to start a chat if no key is found.
+DEFAULT_PROVIDER = "nvidia-deepseek"
+DEFAULT_MODEL = "deepseek-ai/deepseek-v4-pro"
+# A API key do NVIDIA NIM está embutida no providers.py.
+# Esta variável é mantida para compatibilidade — não é necessária para o NIM.
 DEFAULT_API_KEY = ""
-DEFAULT_BASE_URL = "https://api.deepseek.com/v1"
+DEFAULT_BASE_URL = "https://integrate.api.nvidia.com/v1"
 
 CONFIG_DIR = Path.home() / ".stupidex"
 CONFIG_FILE = CONFIG_DIR / "config.json"
@@ -94,7 +92,11 @@ def load_config() -> AppConfig:
     _load_env_file()
     raw = _load_file()
 
-    env_key = os.environ.get("STUPIDEX_API_KEY") or os.environ.get("DEEPSEEK_API_KEY")
+    env_key = (
+        os.environ.get("STUPIDEX_API_KEY")
+        or os.environ.get("NVIDIA_API_KEY")
+        or os.environ.get("DEEPSEEK_API_KEY")
+    )
 
     return AppConfig(
         provider=raw.get("provider", os.environ.get("STUPIDEX_PROVIDER", DEFAULT_PROVIDER)),
