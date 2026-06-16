@@ -8,7 +8,8 @@ Usage:
 import os
 
 # ── Server socket ──────────────────────────────────────────
-bind = os.environ.get("STUPIDEX_BIND", "0.0.0.0:5000")
+# Square Cloud requires port 80 (HTTP routed to 443/HTTPS)
+bind = os.environ.get("STUPIDEX_BIND", f"0.0.0.0:{os.environ.get('PORT', '80')}")
 proc_name = "stupidex"
 
 # ── Worker processes ───────────────────────────────────────

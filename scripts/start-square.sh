@@ -43,7 +43,8 @@ print(f'[health] DB OK — {cursor.fetchone()[0]} users')
 " 2>&1 || echo "[health] WARN: DB check failed"
 
 # Start Gunicorn with centralized config
+# Square Cloud requires port 80 — it routes HTTP (80) → HTTPS (443)
 exec gunicorn \
   -c gunicorn.conf.py \
-  --bind "0.0.0.0:${PORT:-8080}" \
+  --bind "0.0.0.0:${PORT:-80}" \
   stupidex.web:app
